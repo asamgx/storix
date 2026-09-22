@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/asamgx/storix/internal/mac"
 )
 
 // st_flags bits the walker cares about.
@@ -348,7 +350,7 @@ func (w *walker) processDir(t task) {
 				Mtime:    e.MtimeSec,
 				Flags:    entryFlags(e),
 			}
-			if isBundleName(e.Name) {
+			if mac.IsBundleName(e.Name) {
 				child.Flags |= FlagBundle
 			}
 			children = append(children, child)

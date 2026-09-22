@@ -3,6 +3,8 @@ package walk
 import (
 	"strings"
 	"syscall"
+
+	"github.com/asamgx/storix/internal/mac"
 )
 
 // DefaultSkipNames are directory names never walked, whatever their location.
@@ -17,7 +19,7 @@ var DefaultSkipNames = []string{
 // DefaultSkipPaths are absolute scan paths never walked. Swap is sized from
 // the VM volume's statfs instead.
 var DefaultSkipPaths = []string{
-	dataRoot + "/private/var/vm",
+	mac.DataRoot + "/private/var/vm",
 }
 
 // DefaultExemptPrefixes are path prefixes under which every leaf is retained,
@@ -32,28 +34,6 @@ var DefaultExemptPrefixes = []string{
 	"Library/LaunchAgents",
 	"Library/LaunchDaemons",
 	"private/var/db/receipts",
-}
-
-// bundleExts are the directory extensions macOS presents as a single object.
-// Bundles are sized fully and flagged; the walker still descends into them.
-//
-// TODO(M4): replace with mac.IsBundleName once internal/mac lands.
-var bundleExts = map[string]bool{
-	".app": true, ".framework": true, ".photoslibrary": true, ".musiclibrary": true,
-	".tvlibrary": true, ".xcodeproj": true, ".xcworkspace": true, ".playground": true,
-	".pvm": true, ".utm": true, ".vmwarevm": true, ".sparsebundle": true,
-	".sparseimage": true, ".dmg": true, ".pkg": true, ".savedState": true,
-	".download": true, ".appex": true, ".qlgenerator": true, ".kext": true,
-	".bundle": true, ".plugin": true, ".prefPane": true, ".lproj": true,
-}
-
-// isBundleName reports whether a directory name is a macOS bundle.
-func isBundleName(name string) bool {
-	i := strings.LastIndexByte(name, '.')
-	if i <= 0 {
-		return false
-	}
-	return bundleExts[name[i:]]
 }
 
 // prefixMatcher tests whether a path lies at or under one of a set of

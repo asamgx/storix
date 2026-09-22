@@ -8,7 +8,11 @@
 // enforces the no-open rule mechanically.
 package walk
 
-import "syscall"
+import (
+	"syscall"
+
+	"github.com/asamgx/storix/internal/mac"
+)
 
 // Kind is the type of a filesystem object, as reported by lstat.
 type Kind uint8
@@ -126,25 +130,9 @@ func (n *Node) Path() string {
 	return string(buf)
 }
 
-// dataRoot is the macOS data volume mount point.
-//
-// TODO(M4): replace the local copy with mac.DataRoot / mac.DisplayPath once
-// internal/mac is available; walk must not depend on it before then.
-const dataRoot = "/System/Volumes/Data"
-
-// Display returns the path as a user sees it, with the data volume prefix stripped.
-func (n *Node) Display() string { return DisplayPath(n.Path()) }
-
-// DisplayPath strips the data volume prefix from a scan path.
-func DisplayPath(scanPath string) string {
-	if scanPath == dataRoot {
-		return "/"
-	}
-	if len(scanPath) > len(dataRoot) && scanPath[:len(dataRoot)] == dataRoot && scanPath[len(dataRoot)] == '/' {
-		return scanPath[len(dataRoot):]
-	}
-	return scanPath
-}
+// Display returns the path as a user sees it, with the data volume prefix
+// stripped.
+func (n *Node) Display() string { return mac.DisplayPath(n.Path()) }
 
 // ErrClass groups per-path errors by what the user can do about them.
 type ErrClass uint8

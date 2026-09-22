@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
+	"os"
 	"runtime"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sys/unix"
 
+	"github.com/asamgx/storix/internal/mac"
+	"github.com/asamgx/storix/internal/report"
+	"github.com/asamgx/storix/internal/scan"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/walk"
 )
@@ -22,8 +22,14 @@ type scanOptions struct {
 	roots       []string
 	parallelism int
 	threshold   string
+	minSize     string
 	top         int
+	depth       int
+	full        bool
 	report      bool
+	json        bool
+	system      bool
+	binary      bool
 	debug       bool
 }
 
@@ -34,11 +40,13 @@ func newScanCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "scan",
 		Short: "Walk a volume and report where its bytes are",
-		Long: `scan walks one or more roots and prints allocated sizes.
+		Long: `scan walks the macOS data volume and prints a reconciled ledger: the bytes
+it could see, the purgeable space the system reports, and the residual
+between those and what the volume calls used.
 
-This is the milestone-2 form of the command: it exercises the walker and
-prints raw totals. The reconciled ledger, the cache and JSON output arrive in
-later milestones.`,
+The default output is the text report. --json emits the same scan as a
+versioned document, with the tree limited by --depth and --min-size unless
+--full is given, because the unlimited tree is hundreds of megabytes.`,
 		Args:          cobra.NoArgs,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -47,244 +55,259 @@ later milestones.`,
 		},
 	}
 	f := cmd.Flags()
-	f.StringSliceVar(&o.roots, "roots", []string{dataRoot}, "roots to walk")
+	f.StringSliceVar(&o.roots, "roots", []string{mac.DataRoot}, "roots to walk")
+	f.BoolVar(&o.report, "report", false, "print the text report (the default)")
+	f.BoolVar(&o.json, "json", false, "print the scan as JSON instead")
+	f.BoolVar(&o.system, "system", false, "include root-only system directories (needs sudo)")
+	f.BoolVar(&o.binary, "binary", false, "format sizes in KiB/MiB/GiB instead of Finder's KB/MB/GB")
 	f.IntVar(&o.parallelism, "parallelism", 0, "worker count (default min(2*NumCPU, 16))")
-	f.StringVar(&o.threshold, "threshold", "64KB", "aggregate files smaller than this into their parent")
-	f.IntVar(&o.top, "top", 25, "how many directories to list")
-	f.BoolVar(&o.report, "report", true, "print the text report")
-	f.BoolVar(&o.debug, "debug", false, "print memory statistics, timings and live progress")
+	f.StringVar(&o.threshold, "threshold", "64KB", "fold files smaller than this into their parent directory")
+	f.IntVar(&o.top, "top", report.DefaultTop, "how many directories to list; 0 lists none")
+	f.IntVar(&o.depth, "depth", report.DefaultDepth, "how deep the JSON tree goes; 0 emits the root alone")
+	f.StringVar(&o.minSize, "min-size", "10MB", "smallest node in the JSON tree; 0 includes everything")
+	f.BoolVar(&o.full, "full", false, "drop the JSON tree limits and emit every node")
+	f.BoolVar(&o.debug, "debug", false, "print timings and memory statistics")
 	return cmd
 }
 
-// dataRoot is the macOS data volume, the default scan root.
-//
-// TODO(M4): use mac.DataRoot.
-const dataRoot = "/System/Volumes/Data"
-
 func runScan(ctx context.Context, out, errOut io.Writer, o *scanOptions) error {
-	threshold, err := units.Parse(o.threshold)
-	if err != nil {
-		return &ConfigError{Err: err}
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	if o.top < 0 {
-		return &ConfigError{Err: fmt.Errorf("--top must not be negative")}
-	}
-	mounts, err := readMounts()
+	opts, cfg, err := o.resolve()
 	if err != nil {
-		return fmt.Errorf("reading the mount table: %w", err)
+		return err
+	}
+	if o.system && os.Geteuid() != 0 {
+		_, _ = fmt.Fprintln(errOut, "storix: --system needs root; run `sudo storix scan --system` to include root-only directories")
 	}
 
 	for i, root := range o.roots {
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			return &ConfigError{Err: fmt.Errorf("%s: %w", root, err)}
-		}
-		if i > 0 {
+		if i > 0 && !o.json {
 			_, _ = fmt.Fprintln(out)
 		}
-		if err := scanRoot(ctx, out, errOut, o, abs, threshold, mounts); err != nil {
+		c := cfg
+		c.Roots = []string{root}
+		res, err := runOne(ctx, errOut, c)
+		if err != nil {
 			return err
 		}
+		if err := render(out, res, opts, o); err != nil {
+			return err
+		}
+		reportSoftErrors(errOut, res, o)
 	}
-	return nil
+	// A cancelled scan still printed its partial report; the exit code is
+	// what tells a script the numbers are a lower bound.
+	return ctx.Err()
 }
 
-func scanRoot(ctx context.Context, out, errOut io.Writer, o *scanOptions, root string, threshold int64, mounts mountSet) error {
-	opts := walk.Options{
-		Root:               root,
+// resolve turns the flags into the two option structs, rejecting the
+// combinations that cannot mean anything.
+func (o *scanOptions) resolve() (report.Options, scan.Config, error) {
+	var ro report.Options
+	var cfg scan.Config
+
+	if o.report && o.json {
+		return ro, cfg, &ConfigError{Err: fmt.Errorf("choose either --report or --json, not both")}
+	}
+	threshold, err := units.Parse(o.threshold)
+	if err != nil {
+		return ro, cfg, &ConfigError{Err: fmt.Errorf("invalid --threshold: %w", err)}
+	}
+	minSize, err := units.Parse(o.minSize)
+	if err != nil {
+		return ro, cfg, &ConfigError{Err: fmt.Errorf("invalid --min-size: %w", err)}
+	}
+	if o.top < 0 {
+		return ro, cfg, &ConfigError{Err: fmt.Errorf("the --top count must not be negative")}
+	}
+	if o.depth < 0 {
+		return ro, cfg, &ConfigError{Err: fmt.Errorf("the --depth limit must not be negative")}
+	}
+	if o.parallelism < 0 {
+		return ro, cfg, &ConfigError{Err: fmt.Errorf("the --parallelism worker count must not be negative")}
+	}
+
+	u := units.Decimal
+	if o.binary {
+		u = units.Binary
+	}
+	ro = report.Options{
+		Units:   u,
+		Depth:   sentinel(o.depth),
+		MinSize: sentinel64(minSize),
+		Full:    o.full,
+		Color:   useColor(),
+		Top:     sentinel(o.top),
+		Version: BuildInfo(),
+	}
+	cfg = scan.Config{
+		Roots:              o.roots,
 		Parallelism:        o.parallelism,
 		SmallFileThreshold: threshold,
-		Mounts:             mounts,
+		System:             o.system,
+		Units:              u,
+		Debug:              o.debug,
 	}
+	return ro, cfg, nil
+}
 
+// sentinel maps the flag value zero, which the user means as "none", onto the
+// negative value the report package reads as "none"; the report reads zero as
+// "use the default", which is what an unset field must mean.
+func sentinel(n int) int {
+	if n == 0 {
+		return -1
+	}
+	return n
+}
+
+// sentinel64 is sentinel for a byte count.
+func sentinel64(n int64) int64 {
+	if n == 0 {
+		return -1
+	}
+	return n
+}
+
+// runOne scans a single root, showing progress on the terminal while it runs.
+func runOne(ctx context.Context, errOut io.Writer, cfg scan.Config) (*scan.Result, error) {
 	var events chan walk.Event
-	consumed := make(chan struct{})
-	if o.debug {
+	done := make(chan struct{})
+	if isTerminal(errOut) {
 		events = make(chan walk.Event, 1)
-		opts.Events = events
-		opts.ProgressInterval = 250 * time.Millisecond
-		go func() {
-			defer close(consumed)
-			for e := range events {
-				switch ev := e.(type) {
-				case walk.ProgressEvent:
-					_, _ = fmt.Fprintf(errOut, "\r%-100.100s",
-						fmt.Sprintf("%6.1fs  %8d dirs  %9d files  %10s  %s",
-							ev.Elapsed.Seconds(), ev.Dirs, ev.Files,
-							units.Decimal.Bytes(int64(ev.Bytes)), walk.DisplayPath(ev.Current)))
-				case walk.DoneEvent:
-					_, _ = fmt.Fprintf(errOut, "\r%-100.100s\r", "")
-					return
-				}
-			}
-		}()
+		cfg.Events = events
+		go func() { defer close(done); showProgress(errOut, events) }()
 	} else {
-		close(consumed)
+		close(done)
 	}
 
-	started := time.Now()
-	tree, err := walk.Walk(ctx, opts)
-	elapsed := time.Since(started)
+	res, err := scan.Run(ctx, cfg)
 	if events != nil {
-		// Walk sends DoneEvent when it succeeds and nothing when it fails, so
-		// closing the channel is what ends the consumer in both cases.
+		// Walk sends its DoneEvent only when it succeeds, so closing the
+		// channel is what ends the consumer either way.
 		close(events)
 	}
-	<-consumed
+	<-done
 	if err != nil {
-		return &ConfigError{Err: err}
+		return nil, &ConfigError{Err: err}
 	}
-	if !o.report {
-		return nil
+	return res, nil
+}
+
+// progressWidth is how much of the terminal the progress line may use.
+const progressWidth = 110
+
+// showProgress draws the walk's counters over one line of the terminal and
+// erases it when the walk ends.
+func showProgress(w io.Writer, events <-chan walk.Event) {
+	u := units.Decimal
+	drawn := false
+	for e := range events {
+		ev, ok := e.(walk.ProgressEvent)
+		if !ok {
+			continue
+		}
+		drawn = true
+		line := fmt.Sprintf("%6.1fs  %9s dirs  %10s files  %11s  %s",
+			ev.Elapsed.Seconds(), fmtCount(ev.Dirs), fmtCount(ev.Files),
+			u.Bytes(int64(ev.Bytes)), mac.DisplayPath(ev.Current))
+		_, _ = fmt.Fprintf(w, "\r%-*.*s", progressWidth, progressWidth, line)
 	}
-	printReport(out, tree, elapsed, o)
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if drawn {
+		_, _ = fmt.Fprintf(w, "\r%*s\r", progressWidth, "")
+	}
+}
+
+// fmtCount groups digits so a seven-figure file count is readable while it
+// is still moving.
+func fmtCount(n uint64) string {
+	s := fmt.Sprintf("%d", n)
+	var out []byte
+	for i := 0; i < len(s); i++ {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			out = append(out, ',')
+		}
+		out = append(out, s[i])
+	}
+	return string(out)
+}
+
+// render writes the report in the requested form.
+func render(out io.Writer, res *scan.Result, ro report.Options, o *scanOptions) error {
+	if o.json {
+		return report.JSON(out, res, ro)
+	}
+	if err := report.Text(out, res, ro); err != nil {
+		return err
+	}
+	if o.debug {
+		printDebug(out, res)
 	}
 	return nil
 }
 
-func printReport(out io.Writer, tree *walk.Tree, elapsed time.Duration, o *scanOptions) {
+// printDebug adds the stage timings and the heap profile the memory budget
+// is judged against.
+func printDebug(out io.Writer, res *scan.Result) {
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
 	u := units.Decimal
-	root := tree.Root
-	_, _ = fmt.Fprintf(out, "root       %s\n", walk.DisplayPath(root.Path()))
-	_, _ = fmt.Fprintf(out, "allocated  %s (%d bytes)\n", u.Bytes(root.Bytes), root.Bytes)
-	_, _ = fmt.Fprintf(out, "apparent   %s\n", u.Bytes(root.Apparent))
-	_, _ = fmt.Fprintf(out, "files      %d in %d directories (%d nodes retained)\n", root.Files, root.Dirs, len(tree.Nodes))
-	fmt.Fprintf(out, "hard links %d groups, %s not double counted\n", tree.LinkGroups, u.Bytes(int64(tree.LinkBytesSaved)))
-	fmt.Fprintf(out, "errors     %d unreadable paths, %d vanished\n", len(tree.Errors), tree.Vanished)
-	if tree.Incomplete {
-		_, _ = fmt.Fprintln(out, "status     INCOMPLETE (cancelled)")
-	}
-
-	if len(tree.SkippedMounts) > 0 {
-		fmt.Fprintf(out, "\nskipped mounts (%d)\n", len(tree.SkippedMounts))
-		for _, m := range tree.SkippedMounts {
-			fmt.Fprintf(out, "  %-52s %-8s %s\n", walk.DisplayPath(m.Path), m.FSType, m.From)
-		}
-	}
-	if len(tree.SkipListed) > 0 {
-		fmt.Fprintf(out, "\nskip-listed (%d)\n", len(tree.SkipListed))
-		for _, p := range tree.SkipListed {
-			fmt.Fprintf(out, "  %s\n", walk.DisplayPath(p))
-		}
-	}
-
-	if o.top > 0 {
-		dirs := topDirs(tree.Root, 2, o.top)
-		fmt.Fprintf(out, "\ntop %d directories at depth <= 2\n", len(dirs))
-		for _, n := range dirs {
-			fmt.Fprintf(out, "  %10s  %6s  %s\n",
-				u.Bytes(n.Bytes), units.Percent(n.Bytes, root.Bytes), walk.DisplayPath(n.Path()))
-		}
-	}
-
-	if len(tree.Errors) > 0 {
-		shown := min(len(tree.Errors), 20)
-		fmt.Fprintf(out, "\nunreadable (first %d of %d)\n", shown, len(tree.Errors))
-		for _, e := range tree.Errors[:shown] {
-			fmt.Fprintf(out, "  %-10s %-6s %s\n", e.Class, e.Op, walk.DisplayPath(e.Path))
-		}
-	}
-
-	fmt.Fprintf(out, "\nelapsed    %s\n", elapsed.Round(time.Millisecond))
-	if o.debug {
-		var ms runtime.MemStats
-		runtime.ReadMemStats(&ms)
-		fmt.Fprintf(out, "heap       %s alloc, %s sys, %d GCs\n",
-			u.Bytes(int64(ms.HeapAlloc)), u.Bytes(int64(ms.Sys)), ms.NumGC)
-		fmt.Fprintf(out, "workers    %d\n", tree.Opts.Parallelism)
+	_, _ = fmt.Fprintln(out, "\nDEBUG")
+	_, _ = fmt.Fprintf(out, "  timing   facts %s, walk %s, finish %s, ledger %s, persist %s, total %s\n",
+		dur(res.Timing.Facts), dur(res.Timing.Walk), dur(res.Timing.Finish),
+		dur(res.Timing.Ledger), dur(res.Timing.Persist), dur(res.Timing.Total))
+	_, _ = fmt.Fprintf(out, "  memory   %s heap, %s total allocated, %s from the OS, %d GCs\n",
+		u.Bytes(int64(ms.HeapAlloc)), u.Bytes(int64(ms.TotalAlloc)), u.Bytes(int64(ms.Sys)), ms.NumGC)
+	_, _ = fmt.Fprintf(out, "  workers  %d\n", res.Tree.Opts.Parallelism)
+	if res.CachePath != "" {
+		_, _ = fmt.Fprintf(out, "  cache    %s\n", res.CachePath)
 	}
 }
 
-// topDirs returns the largest directories no deeper than maxDepth below root.
-func topDirs(root *walk.Node, maxDepth, n int) []*walk.Node {
-	var found []*walk.Node
-	var visit func(*walk.Node, int)
-	visit = func(nd *walk.Node, depth int) {
-		if depth > 0 {
-			found = append(found, nd)
-		}
-		if depth == maxDepth {
-			return
-		}
-		for _, c := range nd.Children {
-			if c.IsDir() {
-				visit(c, depth+1)
-			}
-		}
+// dur formats a stage timing.
+func dur(d time.Duration) string {
+	if d >= time.Second {
+		return d.Round(10 * time.Millisecond).String()
 	}
-	visit(root, 0)
-	sort.Slice(found, func(i, j int) bool {
-		if found[i].Bytes != found[j].Bytes {
-			return found[i].Bytes > found[j].Bytes
-		}
-		return found[i].Path() < found[j].Path()
-	})
-	if len(found) > n {
-		found = found[:n]
-	}
-	return found
+	return d.Round(time.Millisecond).String()
 }
 
-// mountSet is the set of mount points, used as the walker's mount guard.
-//
-// TODO(M4): replace with volume.ReadMountTable, which also carries per-volume
-// statfs numbers and container grouping.
-type mountSet map[string]mountEntry
-
-type mountEntry struct{ fsType, from string }
-
-// IsMountPoint implements walk.MountChecker.
-func (m mountSet) IsMountPoint(path string) bool { _, ok := m[path]; return ok }
-
-// MountInfo implements walk.MountDescriber.
-func (m mountSet) MountInfo(path string) (string, string, bool) {
-	e, ok := m[path]
-	return e.fsType, e.from, ok
+// reportSoftErrors names the best-effort steps that failed. They never stop a
+// scan, but a silent failure would leave the ledger quietly less trustworthy
+// than it looks.
+func reportSoftErrors(errOut io.Writer, res *scan.Result, o *scanOptions) {
+	if res.FinishErr != nil {
+		_, _ = fmt.Fprintf(errOut, "storix: no closing space reading (%v); the drift tolerance is zero\n", res.FinishErr)
+	}
+	if res.PersistErr != nil {
+		_, _ = fmt.Fprintf(errOut, "storix: the scan was not cached (%v)\n", res.PersistErr)
+	}
+	if o.debug && res.DatalessErr != nil {
+		_, _ = fmt.Fprintf(errOut, "storix: dataless materialization stays at its default (%v)\n", res.DatalessErr)
+	}
 }
 
-// readMounts reads the mount table. Every mount point other than the scan root
-// is a different volume, and st_dev cannot tell them apart on an APFS volume
-// group, so this list is the only thing that stops the walk double counting a
-// nested mount such as the autofs /home or an NFS export inside the home
-// directory.
-func readMounts() (mountSet, error) {
-	n, err := unix.Getfsstat(nil, unix.MNT_NOWAIT)
+// useColor reports whether the text report should be styled: a terminal on
+// standard output, and NO_COLOR unset.
+func useColor() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	return isTerminal(os.Stdout)
+}
+
+// isTerminal reports whether w is a character device, which is the
+// dependency-free way to ask whether a human is reading.
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	fi, err := f.Stat()
 	if err != nil {
-		return nil, err
+		return false
 	}
-	buf := make([]unix.Statfs_t, n)
-	n, err = unix.Getfsstat(buf, unix.MNT_NOWAIT)
-	if err != nil {
-		return nil, err
-	}
-	set := make(mountSet, n)
-	for i := range buf[:n] {
-		on := cstr(buf[i].Mntonname[:])
-		e := mountEntry{
-			fsType: cstr(buf[i].Fstypename[:]),
-			from:   cstr(buf[i].Mntfromname[:]),
-		}
-		set[on] = e
-		// The mount table names data-volume mount points through their
-		// firmlink ("/Users/x/OrbStack"), but a walk of the data volume sees
-		// them as "/System/Volumes/Data/Users/x/OrbStack". Without both forms
-		// the guard misses the nested NFS and autofs mounts and counts their
-		// bytes twice.
-		if on != "/" && !strings.HasPrefix(on, dataRoot) {
-			set[dataRoot+on] = e
-		}
-	}
-	return set, nil
-}
-
-// cstr trims a NUL-terminated C string out of a fixed-size byte array.
-func cstr(b []byte) string {
-	for i, c := range b {
-		if c == 0 {
-			return string(b[:i])
-		}
-	}
-	return string(b)
+	return fi.Mode()&os.ModeCharDevice != 0
 }
