@@ -108,12 +108,12 @@ func scanRoot(ctx context.Context, out, errOut io.Writer, o *scanOptions, root s
 			for e := range events {
 				switch ev := e.(type) {
 				case walk.ProgressEvent:
-					fmt.Fprintf(errOut, "\r%-100.100s",
+					_, _ = fmt.Fprintf(errOut, "\r%-100.100s",
 						fmt.Sprintf("%6.1fs  %8d dirs  %9d files  %10s  %s",
 							ev.Elapsed.Seconds(), ev.Dirs, ev.Files,
 							units.Decimal.Bytes(int64(ev.Bytes)), walk.DisplayPath(ev.Current)))
 				case walk.DoneEvent:
-					fmt.Fprintf(errOut, "\r%-100.100s\r", "")
+					_, _ = fmt.Fprintf(errOut, "\r%-100.100s\r", "")
 					return
 				}
 			}
@@ -147,10 +147,10 @@ func scanRoot(ctx context.Context, out, errOut io.Writer, o *scanOptions, root s
 func printReport(out io.Writer, tree *walk.Tree, elapsed time.Duration, o *scanOptions) {
 	u := units.Decimal
 	root := tree.Root
-	fmt.Fprintf(out, "root       %s\n", walk.DisplayPath(root.Path()))
-	fmt.Fprintf(out, "allocated  %s (%d bytes)\n", u.Bytes(root.Bytes), root.Bytes)
-	fmt.Fprintf(out, "apparent   %s\n", u.Bytes(root.Apparent))
-	fmt.Fprintf(out, "files      %d in %d directories (%d nodes retained)\n", root.Files, root.Dirs, len(tree.Nodes))
+	_, _ = fmt.Fprintf(out, "root       %s\n", walk.DisplayPath(root.Path()))
+	_, _ = fmt.Fprintf(out, "allocated  %s (%d bytes)\n", u.Bytes(root.Bytes), root.Bytes)
+	_, _ = fmt.Fprintf(out, "apparent   %s\n", u.Bytes(root.Apparent))
+	_, _ = fmt.Fprintf(out, "files      %d in %d directories (%d nodes retained)\n", root.Files, root.Dirs, len(tree.Nodes))
 	fmt.Fprintf(out, "hard links %d groups, %s not double counted\n", tree.LinkGroups, u.Bytes(int64(tree.LinkBytesSaved)))
 	fmt.Fprintf(out, "errors     %d unreadable paths, %d vanished\n", len(tree.Errors), tree.Vanished)
 	if tree.Incomplete {
