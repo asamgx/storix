@@ -181,3 +181,72 @@ func TestFmtCountGroupsDigits(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveRejectsBothCacheFlags(t *testing.T) {
+	o := scanOptions{threshold: "64KB", minSize: "10MB", noCache: true, fromCache: true}
+	_, _, err := o.resolve()
+	var ce *ConfigError
+	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "not both") {
+		t.Fatalf("resolve accepted --no-cache with --from-cache: %v", err)
+	}
+}
+
+func TestResolveCarriesTheCacheFlagsAndVersion(t *testing.T) {
+	o := scanOptions{threshold: "64KB", minSize: "10MB", noCache: true}
+	_, cfg, err := o.resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.NoCache || cfg.FromCache {
+		t.Errorf("cache flags = %+v", cfg)
+	}
+	if cfg.Version != BuildInfo() {
+		t.Errorf("version = %q, want %q: the cache is keyed on the build", cfg.Version, BuildInfo())
+	}
+}
+
+func TestFromCacheFailsWhenNothingIsStored(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	f := testutil.New(t)
+	f.File("a.bin", 1024)
+	o := &scanOptions{
+		threshold: "64KB", minSize: "10MB", top: report.DefaultTop, depth: report.DefaultDepth,
+		report: true, fromCache: true, roots: []string{f.Root},
+	}
+	var out, errOut bytes.Buffer
+	err := runScan(context.Background(), &out, &errOut, o)
+	var ce *ConfigError
+	if !errors.As(err, &ce) || !strings.Contains(err.Error(), "no stored scan") {
+		t.Fatalf("--from-cache on an empty store = %v, want a config error", err)
+	}
+}
+
+func TestScanCachesAndThenRendersFromTheCache(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	f := testutil.New(t)
+	f.File("big.bin", 200_000)
+	base := func() *scanOptions {
+		return &scanOptions{
+			threshold: "64KB", minSize: "10MB", top: report.DefaultTop, depth: report.DefaultDepth,
+			report: true, roots: []string{f.Root},
+		}
+	}
+
+	var out, errOut bytes.Buffer
+	if err := runScan(context.Background(), &out, &errOut, base()); err != nil {
+		t.Fatalf("the first scan: %v (stderr %s)", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "source") || !strings.Contains(out.String(), "live") {
+		t.Errorf("the report of a fresh scan does not call itself live:\n%s", out.String())
+	}
+
+	o := base()
+	o.fromCache = true
+	out.Reset()
+	if err := runScan(context.Background(), &out, &errOut, o); err != nil {
+		t.Fatalf("--from-cache: %v (stderr %s)", err, errOut.String())
+	}
+	if !strings.Contains(out.String(), "cache,") || !strings.Contains(out.String(), "old") {
+		t.Errorf("the report does not say it came from the cache:\n%s", out.String())
+	}
+}

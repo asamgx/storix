@@ -105,6 +105,30 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 	return nil
 }
 
+// Unaccounted writes the sections that say what the scan could not see: the
+// two ledger identities and then the skipped mounts, unreadable paths, cloud
+// files, snapshots, hints and walk counters.
+//
+// It is Text without the header and the directory listing, and it exists for
+// the TUI's Unaccounted view, which renders the same sections into a
+// viewport rather than reimplementing them.
+func Unaccounted(w io.Writer, r *scan.Result, o Options) error {
+	if r == nil || r.Tree == nil || r.Ledger == nil {
+		return fmt.Errorf("report: nothing to render")
+	}
+	o = o.withDefaults()
+	t := &textReport{w: w, r: r, l: r.Ledger, o: o, st: newStyles(o.Color), u: o.Units}
+	t.volume()
+	t.container()
+	t.skipped()
+	t.unreadable()
+	t.dataless()
+	t.snapshots()
+	t.hints()
+	t.counters()
+	return nil
+}
+
 // textReport carries the state every section needs.
 type textReport struct {
 	w  io.Writer

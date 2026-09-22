@@ -35,6 +35,15 @@ type Config struct {
 	// SmallFileThreshold is the size below which a leaf is folded into its
 	// parent; zero selects the walker's default.
 	SmallFileThreshold int64
+	// NoCache asks for a scan that leaves no trace: WithCache wires no
+	// Persist hook, and Run skips the one it was given.
+	NoCache bool
+	// FromCache asks LoadLatest for the stored scan whatever its age. It
+	// changes nothing about Run.
+	FromCache bool
+	// Version is the storix build. It is recorded in the cache file and
+	// compared against it: a scan written by another build is not reused.
+	Version string
 	// System records that the user asked for root-only directories. In
 	// phase 1a it changes no path: those directories are attempted either
 	// way and land in the unreadable list when they are denied.
@@ -149,7 +158,7 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 	res.Ledger = ledger.Build(facts, tree, cfg.Units)
 	res.Timing.Ledger = time.Since(t0)
 
-	if cfg.Persist != nil {
+	if cfg.Persist != nil && !cfg.NoCache {
 		t0 = time.Now()
 		path, err := cfg.Persist(ctx, res)
 		res.Timing.Persist = time.Since(t0)

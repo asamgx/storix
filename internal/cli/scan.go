@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/report"
 	"github.com/asamgx/storix/internal/scan"
+	"github.com/asamgx/storix/internal/tui"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/walk"
 )
@@ -31,7 +33,12 @@ type scanOptions struct {
 	system      bool
 	binary      bool
 	debug       bool
+	noCache     bool
+	fromCache   bool
 }
+
+// defaultMinSize is the smallest node the JSON tree carries by default.
+const defaultMinSize = "10MB"
 
 func init() { register(newScanCmd()) }
 
@@ -64,9 +71,11 @@ versioned document, with the tree limited by --depth and --min-size unless
 	f.StringVar(&o.threshold, "threshold", "64KB", "fold files smaller than this into their parent directory")
 	f.IntVar(&o.top, "top", report.DefaultTop, "how many directories to list; 0 lists none")
 	f.IntVar(&o.depth, "depth", report.DefaultDepth, "how deep the JSON tree goes; 0 emits the root alone")
-	f.StringVar(&o.minSize, "min-size", "10MB", "smallest node in the JSON tree; 0 includes everything")
+	f.StringVar(&o.minSize, "min-size", defaultMinSize, "smallest node in the JSON tree; 0 includes everything")
 	f.BoolVar(&o.full, "full", false, "drop the JSON tree limits and emit every node")
 	f.BoolVar(&o.debug, "debug", false, "print timings and memory statistics")
+	f.BoolVar(&o.noCache, "no-cache", false, "walk the disk and store nothing")
+	f.BoolVar(&o.fromCache, "from-cache", false, "render the stored scan instead of walking the disk")
 	return cmd
 }
 
@@ -80,6 +89,13 @@ func runScan(ctx context.Context, out, errOut io.Writer, o *scanOptions) error {
 	}
 	if o.system && os.Geteuid() != 0 {
 		_, _ = fmt.Fprintln(errOut, "storix: --system needs root; run `sudo storix scan --system` to include root-only directories")
+	}
+
+	// With no output chosen and a terminal to draw on, `storix scan` is the
+	// interactive interface; a pipe or a redirect still gets the report,
+	// which is what a script asked for.
+	if o.interactive(out) {
+		return runTUI(ctx, errOut, cfg)
 	}
 
 	for i, root := range o.roots {
@@ -110,6 +126,9 @@ func (o *scanOptions) resolve() (report.Options, scan.Config, error) {
 
 	if o.report && o.json {
 		return ro, cfg, &ConfigError{Err: fmt.Errorf("choose either --report or --json, not both")}
+	}
+	if o.noCache && o.fromCache {
+		return ro, cfg, &ConfigError{Err: fmt.Errorf("choose either --no-cache or --from-cache, not both")}
 	}
 	threshold, err := units.Parse(o.threshold)
 	if err != nil {
@@ -149,8 +168,17 @@ func (o *scanOptions) resolve() (report.Options, scan.Config, error) {
 		System:             o.system,
 		Units:              u,
 		Debug:              o.debug,
+		NoCache:            o.noCache,
+		FromCache:          o.fromCache,
+		Version:            BuildInfo(),
 	}
 	return ro, cfg, nil
+}
+
+// interactive reports whether this invocation should open the TUI: no output
+// format was asked for, one root was named, and a person is watching.
+func (o *scanOptions) interactive(out io.Writer) bool {
+	return !o.report && !o.json && len(o.roots) == 1 && isTerminal(out)
 }
 
 // sentinel maps the flag value zero, which the user means as "none", onto the
@@ -171,8 +199,72 @@ func sentinel64(n int64) int64 {
 	return n
 }
 
+// runTUI opens the interactive interface over a fresh cached scan when there
+// is one, and over a scan it starts when there is not.
+func runTUI(ctx context.Context, errOut io.Writer, cfg scan.Config) error {
+	initial, err := cachedScan(cfg, errOut)
+	if err != nil {
+		return err
+	}
+	return tui.Run(ctx, withCache(cfg, errOut), initial)
+}
+
+// cachedScan returns the stored scan to render instead of walking the disk,
+// or nil to walk.
+//
+// A stale cache is not an error: bare storix reuses a scan under an hour old
+// from the same build over the same roots (D25) and rescans otherwise, and
+// --debug says which rule sent it back to the disk. --from-cache asks for
+// the stored scan whatever its age, so an empty store is then a failure.
+func cachedScan(cfg scan.Config, errOut io.Writer) (*scan.Result, error) {
+	if cfg.NoCache {
+		return nil, nil
+	}
+	res, ok, err := scan.LoadLatest(cfg)
+	switch {
+	case ok:
+		return res, nil
+	case err == nil:
+		return nil, nil
+	case cfg.FromCache:
+		return nil, &ConfigError{Err: err}
+	}
+	var stale *scan.StaleError
+	if errors.As(err, &stale) {
+		if cfg.Debug {
+			_, _ = fmt.Fprintf(errOut, "storix: scanning: %s\n", stale.Reason)
+		}
+		return nil, nil
+	}
+	_, _ = fmt.Fprintf(errOut, "storix: the stored scan could not be read (%v); scanning\n", err)
+	return nil, nil
+}
+
+// withCache points the scan at the store. A store that cannot be located
+// costs the cache, not the scan: a machine whose home directory is not
+// readable can still be told where its bytes went.
+func withCache(cfg scan.Config, errOut io.Writer) scan.Config {
+	out, err := scan.WithCache(cfg)
+	if err != nil {
+		_, _ = fmt.Fprintf(errOut, "storix: this scan will not be cached (%v)\n", err)
+		return cfg
+	}
+	return out
+}
+
 // runOne scans a single root, showing progress on the terminal while it runs.
 func runOne(ctx context.Context, errOut io.Writer, cfg scan.Config) (*scan.Result, error) {
+	if cfg.FromCache {
+		res, err := cachedScan(cfg, errOut)
+		if err != nil {
+			return nil, err
+		}
+		if res != nil {
+			return res, nil
+		}
+	}
+	cfg = withCache(cfg, errOut)
+
 	var events chan walk.Event
 	done := make(chan struct{})
 	if isTerminal(errOut) {
