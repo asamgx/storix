@@ -2,10 +2,17 @@
 package cli
 
 import (
-	"fmt"
+	"sort"
 
 	"github.com/spf13/cobra"
 )
+
+// subcommands is populated by register calls from each command's file so that
+// files can be added without editing Root.
+var subcommands []*cobra.Command
+
+// register adds a subcommand to the root command tree.
+func register(cmd *cobra.Command) { subcommands = append(subcommands, cmd) }
 
 // Root builds the storix command tree.
 func Root() *cobra.Command {
@@ -19,18 +26,8 @@ reports as used. Phase one is strictly read-only.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
-	root.AddCommand(newVersionCmd())
+	cmds := append([]*cobra.Command(nil), subcommands...)
+	sort.Slice(cmds, func(i, j int) bool { return cmds[i].Name() < cmds[j].Name() })
+	root.AddCommand(cmds...)
 	return root
-}
-
-func newVersionCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "version",
-		Short: "Print the storix version",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			_, err := fmt.Fprintln(cmd.OutOrStdout(), "storix "+BuildInfo())
-			return err
-		},
-	}
 }

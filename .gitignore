@@ -15,4 +15,4 @@ coverage.*
 # Editors
 .idea/
 .vscode/
-storix storix-nocgo
+/storix-nocgo

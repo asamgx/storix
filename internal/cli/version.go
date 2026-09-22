@@ -1,6 +1,11 @@
 package cli
 
-import "runtime/debug"
+import (
+	"fmt"
+	"runtime/debug"
+
+	"github.com/spf13/cobra"
+)
 
 // Version is set at build time via
 // -ldflags "-X github.com/asamgx/storix/internal/cli.Version=v0.1.0".
@@ -38,4 +43,18 @@ func BuildInfo() string {
 		return Version + " (" + c + ")"
 	}
 	return Version
+}
+
+func init() { register(newVersionCmd()) }
+
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the storix version",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			_, err := fmt.Fprintln(cmd.OutOrStdout(), "storix "+BuildInfo())
+			return err
+		},
+	}
 }
