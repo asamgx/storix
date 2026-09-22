@@ -1,0 +1,77 @@
+storix scan
+  root     /
+  started  2026-09-22T10:00:00Z
+  elapsed  19.7s
+  source   live
+
+VOLUME  /System/Volumes/Data
+  scanned    allocated bytes, hard links counted once                  22.9 GB
+  purgeable  freed when space runs short; may overlap scanned bytes    1.57 GB
+  residual                                                           156.57 GB
+  ────────────────────────────────────────────────────────────────────────────
+  used       reported by the volume after the walk                   181.05 GB
+  identity  scanned + purgeable + residual = used
+  residual  filesystem metadata, content of 4 unreadable directories, and unaccounted
+  drift     180.91 GB before the walk, 181.05 GB after; tolerance 132 MB
+  verdict   does not reconcile — the 156.57 GB residual exceeds the 132 MB of drift; APFS
+            directory inodes report zero blocks, so several gigabytes of filesystem metadata are
+            invisible to any lstat-based sum and land here
+
+CONTAINER  disk3
+  /System/Volumes/Data                                             181.05 GB
+  /                        /dev/disk3s1s1                           12.64 GB
+  /System/Volumes/Preboot  /dev/disk3s2                              9.04 GB
+  /System/Volumes/Update   /dev/disk3s4                               2.9 MB
+  /System/Volumes/VM       /dev/disk3s6                              6.44 GB
+  container overhead       container structure outside any volume    1.44 GB
+  ──────────────────────────────────────────────────────────────────────────
+  used                                                             210.61 GB
+  free                     available to an unprivileged writer      34.49 GB
+  ──────────────────────────────────────────────────────────────────────────
+  total                                                            245.11 GB
+  identity  data + macOS volumes + overhead = used, and used + free = total
+
+  volumes on other containers, listed but part of no sum
+  /System/Volumes/xarts  container disk1, not part of the sums above  6.3 MB
+
+TOP 4 DIRECTORIES  (depth ≤ 2, allocated bytes)
+  ██████████████  22.9 GB  100.0%  15 files  /Users
+  ██████████████  22.9 GB  100.0%  15 files  /Users/u
+  ░░░░░░░░░░░░░░  0 bytes    0.0%   0 files  /private
+  ░░░░░░░░░░░░░░  0 bytes    0.0%   0 files  /private/var
+
+MOUNTS SKIPPED  (2, their bytes belong to another volume)
+  /home              autofs  map auto_home
+  /Users/u/OrbStack  nfs     OrbStack:/OrbStack
+
+UNREADABLE  (4 paths; their content is in the residual above)
+  permission  2 paths — owned by another user or by root; readable with sudo
+    /private/var/db
+    /private/var/folders/zz
+  tcc  1 path — privacy protected; readable with Full Disk Access
+    /Users/u/Library/Mail
+  protected  1 path — data vaults; not readable even with Full Disk Access
+    /Users/u/Library/Caches/com.apple.ap.adprivacyd
+
+IN THE CLOUD, NOT ON DISK
+  ~/Library/Mobile Documents   1 file     2 GB
+  ~/Desktop                   5 files  0 bytes
+  ────────────────────────────────────────────
+  total                       6 files     2 GB
+  sizes are apparent bytes and cover retained files only; these files occupy no local blocks
+
+LOCAL SNAPSHOTS  (1; their blocks are used space no file accounts for)
+  com.apple.TimeMachine.2026-09-22-084500.local
+
+HINTS
+  • grant Full Disk Access to Ghostty in System Settings → Privacy & Security
+  • run `sudo storix scan --system` to include the root-only system directories
+  • 1 path is protected by the system (data vaults); not even Full Disk Access opens it
+
+WALK
+  files              15  in 10 directories
+  nodes retained     14  the rest are folded into their parent
+  hard links      1,284  groups, 2.3 GB not double counted
+  unreadable          4  paths
+  vanished            3  entries deleted mid-walk
+  timing                 facts 310ms, walk 19s, finish 12ms, ledger 4ms, total 19.7s

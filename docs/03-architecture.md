@@ -70,6 +70,9 @@ missing `docker` never stalls the scan.
 - Output: an in-memory tree of `Node{Name, Bytes, Apparent, Files, Dirs, Mtime, Flags, Children}`
   plus a flat index for path lookup. Files below a configurable threshold (default **64 KB**)
   are aggregated into their parent to bound memory; the aggregate keeps count and bytes.
+  The comparison is against `max(allocated, apparent)`, not allocated alone, so an in-cloud
+  file (0 allocated blocks but a large logical size) or a compressed file (small allocated,
+  large apparent) stays visible as its own node rather than disappearing into the aggregate.
   Directories are always kept. **Aggregation must not destroy classifier evidence:** small
   per-app files (preference plists, ByHost plists, `.binarycookies`, LaunchAgent plists, pkg
   receipts) are exactly what the app detector keys on. Two safeguards: (1) an exemption list
@@ -77,7 +80,9 @@ missing `docker` never stalls the scan.
   `~/Library/LaunchAgents`, `/Library/LaunchAgents`, `/Library/LaunchDaemons`,
   `~/Library/Saved Application State`, `/private/var/db/receipts`); (2) classification rules
   that match file names run **during the walk**, before aggregation, and record their claim on
-  the parent aggregate.
+  the parent aggregate. Note this is stricter than D19's hard-link rule: an aggregated
+  hard-link alias keeps only its count in the parent's small-file bucket, not its path — only
+  a retained node (above the threshold, or exempt) keeps a path for its alias flag.
 - Baseline measured 2026-09-22 on the planning machine (~3.5 M files, Apple silicon):
   single-threaded `du -sk /System/Volumes/Data` takes **106 s warm** and reports 191 GB
   against 177.6 GB used per `statfs` (the excess is APFS clone inflation; see bucket 12).
@@ -102,7 +107,12 @@ Collected once per scan, independent of the walk:
 - Dataless IO policy: `golang.org/x/sys/unix` exposes `SYS_IOPOLICYSYS` (322) but no
   `Setiopolicy` wrapper, so `setiopolicy_np(IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES,
   IOPOL_SCOPE_PROCESS, IOPOL_MATERIALIZE_DATALESS_FILES_OFF)` is a one-line cgo call or a raw
-  syscall. It is a safety net only; the walker never opens files.
+  syscall. It is defense in depth, not the primary control: for dataless *files* the walker
+  never opens anything, so the policy is the only thing standing between a stray read and an
+  iCloud download; for dataless *directories* `ReadDir` itself is the trigger, so the walker
+  rule is stronger than the policy — **never list a directory flagged `SF_DATALESS`** (checked
+  before `ReadDir`, not after), which holds even in a `CGO_ENABLED=0` build where the policy
+  call is unavailable.
 
 ## Classifier
 
@@ -239,7 +249,7 @@ units = "decimal"            # or "binary"
 code_roots = ["~/code"]      # scanned for project build artifacts
 extra_roots = []             # additional volumes to walk (opt-in)
 keep_scans = 10
-small_file_threshold = "1MB" # files below this are aggregated into their parent
+small_file_threshold = "64KB" # files below this are aggregated into their parent
 [detectors]
 disabled = []                # e.g. ["vms"]
 ```

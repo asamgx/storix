@@ -20,6 +20,7 @@ not delete anything.
 | [06-roadmap.md](06-roadmap.md) | Phases, milestones, acceptance criteria |
 | [07-decisions.md](07-decisions.md) | Decisions taken, assumptions, open questions |
 | [08-validation-round-1.md](08-validation-round-1.md) | What was verified on the machine, what was wrong, what changed |
+| [09-bench-1a.md](09-bench-1a.md) | Phase 1a benchmark numbers: `du` vs. the parallel walker, memory, cache, reconciliation, and the manual acceptance checklists |
 
 ## Status
 
@@ -28,6 +29,17 @@ not delete anything.
   the planning machine). Verdict GO-WITH-FIXES; all blocking fixes applied to these docs.
   Evidence in [08-validation-round-1.md](08-validation-round-1.md). Three new open
   questions (Q8–Q10) in 07 for review round 2, none blocking phase 1a.
+- 2026-09-22: phase 1a implementation plan written (`asamgx/phase-1a-walker`); Q8/Q9
+  resolved as predicted, Q11 added (07-decisions.md), D29–D33 recorded.
+- 2026-09-22: phase 1a milestones M0–M5 shipped (scaffold, `mac`/`volume` facts and
+  `doctor`, the parallel walker, ledger reconciliation and `--report`/`--json`, the flat
+  scan cache) — see [06-roadmap.md](06-roadmap.md) for evidence per milestone. The
+  `getattrlistbulk` experiment is deferred (D31): the walker already beats the performance
+  target by roughly 2× without it. The TUI (M6) is in progress on the same branch. Bench
+  numbers and the acceptance checklist are in
+  [09-bench-1a.md](09-bench-1a.md).
+
+- 2026-09-23: **Phase 1a implemented** on branch `asamgx/phase-1a-walker` (M0–M6 shipped; M7 acceptance evidence in [09-bench-1a.md](09-bench-1a.md); manual dataless and Finder sampling checks left as checklists). Next: review, merge, then phase 1b.
 
 ## Machine snapshot used while planning
 

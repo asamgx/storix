@@ -30,6 +30,9 @@ storix/
   cmd/storix/main.go            entrypoint, cobra root
   internal/
     cli/                        cobra commands (scan, explain, apps, dev, cache, doctor)
+    scan/                       orchestrator: Collect -> Walk -> Finish -> Build -> Persist,
+                                shared by the CLI and the TUI so `r` rescan does not
+                                duplicate CLI logic (added in the phase 1a implementation plan)
     walk/                       walker, node tree, hard-link dedupe, skip list, IO policy
     volume/                     statfs, diskutil, tmutil facts
     classify/                   rule model, catalog, engine, conflict resolution, provenance
@@ -43,7 +46,11 @@ storix/
     tui/                        bubbletea app: models per view, styles, keymap
     units/                      byte formatting (decimal/binary)
     mac/                        macOS helpers: bundle Info.plist, team id via codesign, lsregister, TCC probe, terminal identity
+    testutil/                   fixture builder (t.TempDir() trees: files, sparse files,
+                                hard links, symlinks, deep/wide trees, unreadable dirs;
+                                added in the phase 1a implementation plan)
   docs/                         these documents
+  scripts/                      bench.sh (du vs storix harness) and other maintenance scripts
   testdata/                     fixture trees and captured probe outputs
 ```
 

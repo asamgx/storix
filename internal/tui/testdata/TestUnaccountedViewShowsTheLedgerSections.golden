@@ -1,0 +1,40 @@
+VOLUME  —                                                                                                               
+  scanned   allocated bytes                         4.3 MB                                                              
+                                                   unknown                                                              
+  residual                                         0 bytes                                                              
+  ────────────────────────────────────────────────────────                                                              
+  used      reported by the volume after the walk  0 bytes                                                              
+  identity  scanned + purgeable + residual = used                                                                       
+  residual                                                                                                              
+  drift     0 bytes before the walk, 0 bytes after; tolerance 0 bytes                                                   
+  verdict   does not reconcile — no volume facts were collected, so there is nothing to reconcile                       
+            against                                                                                                     
+                                                                                                                        
+WALK                                                                                                                    
+  files           11  in 9 directories                                                                                  
+  nodes retained  15  the rest are folded into their parent                                                             
+  hard links       0  groups, 0 bytes not double counted                                                                
+  unreadable       0  paths                                                                                             
+  vanished         0  entries deleted mid-walk                                                                          
+  timing              facts 0s, walk 0s, finish 0s, ledger 0s, total 0s                                                 
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+
+
+↑/k up • ↓/j down • enter/l open • bksp/h parent • s sort by size • / filter • tab switch view • ? help • q quit

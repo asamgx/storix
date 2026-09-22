@@ -1,0 +1,520 @@
+{
+  "schema": 1,
+  "storix": "v0.0.0-test",
+  "root": "/",
+  "units": "decimal",
+  "incomplete": false,
+  "started": "2026-09-22T10:00:00Z",
+  "finished": "2026-09-22T10:00:19Z",
+  "from_cache": false,
+  "timing": {
+    "facts_ns": 310000000,
+    "walk_ns": 19000000000,
+    "finish_ns": 12000000,
+    "ledger_ns": 4000000,
+    "persist_ns": 0,
+    "total_ns": 19700000000
+  },
+  "ledger": {
+    "root": "/",
+    "partial_root": false,
+    "reason": "the 156.57 GB residual exceeds the 132 MB of drift; APFS directory inodes report zero blocks, so several gigabytes of filesystem metadata are invisible to any lstat-based sum and land here",
+    "volume": {
+      "mount_point": "/System/Volumes/Data",
+      "used_before": 180914386688,
+      "used_after": 181046386688,
+      "drift": 132000000,
+      "tolerance": 132000000,
+      "known": true
+    },
+    "container": {
+      "id": "disk3",
+      "total": 245107195904,
+      "free": 34493267968,
+      "used": 210613927936,
+      "overhead": 1439940608,
+      "known": true
+    },
+    "scanned": {
+      "id": "scanned",
+      "label": "scanned",
+      "bytes": 22900049152,
+      "known": true,
+      "note": "allocated bytes, hard links counted once"
+    },
+    "purgeable": {
+      "id": "purgeable",
+      "label": "purgeable",
+      "bytes": 1573741824,
+      "known": true,
+      "note": "freed when space runs short; may overlap scanned bytes"
+    },
+    "residual": {
+      "id": "residual",
+      "label": "filesystem metadata, content of 4 unreadable directories, and unaccounted",
+      "bytes": 156572595712,
+      "known": true
+    },
+    "overhead": {
+      "id": "overhead",
+      "label": "container overhead",
+      "bytes": 1439940608,
+      "known": true,
+      "note": "container structure outside any volume"
+    },
+    "data": {
+      "id": "data",
+      "label": "/System/Volumes/Data",
+      "bytes": 181046386688,
+      "known": true
+    },
+    "macos": [
+      {
+        "id": "/",
+        "label": "/",
+        "bytes": 12639330304,
+        "known": true,
+        "note": "/dev/disk3s1s1"
+      },
+      {
+        "id": "/System/Volumes/Preboot",
+        "label": "/System/Volumes/Preboot",
+        "bytes": 9042919424,
+        "known": true,
+        "note": "/dev/disk3s2"
+      },
+      {
+        "id": "/System/Volumes/Update",
+        "label": "/System/Volumes/Update",
+        "bytes": 2899968,
+        "known": true,
+        "note": "/dev/disk3s4"
+      },
+      {
+        "id": "/System/Volumes/VM",
+        "label": "/System/Volumes/VM",
+        "bytes": 6442450944,
+        "known": true,
+        "note": "/dev/disk3s6"
+      }
+    ],
+    "other_containers": [
+      {
+        "id": "/System/Volumes/xarts",
+        "label": "/System/Volumes/xarts",
+        "bytes": 6299648,
+        "known": true,
+        "note": "container disk1, not part of the sums above"
+      }
+    ],
+    "reconciles": false,
+    "unreadable": [
+      {
+        "class": "permission",
+        "count": 2,
+        "paths": [
+          "/private/var/db",
+          "/private/var/folders/zz"
+        ]
+      },
+      {
+        "class": "tcc",
+        "count": 1,
+        "paths": [
+          "/Users/u/Library/Mail"
+        ]
+      },
+      {
+        "class": "protected",
+        "count": 1,
+        "paths": [
+          "/Users/u/Library/Caches/com.apple.ap.adprivacyd"
+        ]
+      }
+    ],
+    "skipped_mounts": [
+      {
+        "path": "/home",
+        "fstype": "autofs",
+        "from": "map auto_home",
+        "reason": "mount point"
+      },
+      {
+        "path": "/Users/u/OrbStack",
+        "fstype": "nfs",
+        "from": "OrbStack:/OrbStack",
+        "reason": "mount point"
+      }
+    ],
+    "skip_listed": [
+      "/private/var/vm"
+    ],
+    "dataless": {
+      "files": 6,
+      "apparent": 2000000000,
+      "by_location": [
+        {
+          "id": "~/Library/Mobile Documents",
+          "label": "~/Library/Mobile Documents",
+          "bytes": 2000000000,
+          "known": true,
+          "count": 1,
+          "note": "in the cloud, not on disk"
+        },
+        {
+          "id": "~/Desktop",
+          "label": "~/Desktop",
+          "bytes": 0,
+          "known": true,
+          "count": 5,
+          "note": "in the cloud, not on disk"
+        }
+      ]
+    },
+    "snapshots": {
+      "names": [
+        "com.apple.TimeMachine.2026-09-22-084500.local"
+      ],
+      "known": true
+    },
+    "hints": [
+      {
+        "kind": "full-disk-access",
+        "text": "grant Full Disk Access to Ghostty in System Settings → Privacy \u0026 Security"
+      },
+      {
+        "kind": "sudo",
+        "text": "run `sudo storix scan --system` to include the root-only system directories"
+      },
+      {
+        "kind": "protected",
+        "text": "1 path is protected by the system (data vaults); not even Full Disk Access opens it"
+      }
+    ],
+    "counters": {
+      "files": 15,
+      "dirs": 10,
+      "nodes": 14,
+      "link_groups": 1284,
+      "link_bytes_saved": 2300000000,
+      "errors": 4,
+      "vanished": 3,
+      "skipped_mounts": 2,
+      "incomplete": false,
+      "started": "2026-09-22T10:00:00Z",
+      "finished": "2026-09-22T10:00:19.7Z",
+      "elapsed_ns": 19700000000
+    }
+  },
+  "facts": {
+    "root": "/",
+    "euid": 501,
+    "terminal": {
+      "program": "ghostty",
+      "bundle_id": "com.mitchellh.ghostty",
+      "app_name": "Ghostty",
+      "via_tmux": false,
+      "pid": 4242
+    },
+    "full_disk_access": {
+      "path": "/Users/u/Library/Mail",
+      "granted": false,
+      "error": "operation not permitted"
+    },
+    "dataless_policy": "off",
+    "purgeable": {
+      "bytes": 1573741824,
+      "known": true,
+      "source": "foundation",
+      "important_usage": 36067009792,
+      "statfs_avail": 34493267968
+    },
+    "snapshots": {
+      "names": [
+        "com.apple.TimeMachine.2026-09-22-084500.local"
+      ],
+      "known": true
+    },
+    "before": {
+      "at": "2026-09-22T10:00:00Z",
+      "volumes": [
+        {
+          "mount_point": "/",
+          "device": "/dev/disk3s1s1",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 12639330304,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/Data",
+          "device": "/dev/disk3s5",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 180914386688,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/Preboot",
+          "device": "/dev/disk3s2",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 9042919424,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/Update",
+          "device": "/dev/disk3s4",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 2899968,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/VM",
+          "device": "/dev/disk3s6",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 6442450944,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/xarts",
+          "device": "/dev/disk1s2",
+          "fstype": "apfs",
+          "container": "disk1",
+          "total": 524288000,
+          "free": 517988352,
+          "avail": 517988352,
+          "used": 6299648,
+          "used_statfs": 0,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        }
+      ]
+    },
+    "after": {
+      "at": "2026-09-22T10:00:19.7Z",
+      "volumes": [
+        {
+          "mount_point": "/",
+          "device": "/dev/disk3s1s1",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 12639330304,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/Data",
+          "device": "/dev/disk3s5",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 181046386688,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/Preboot",
+          "device": "/dev/disk3s2",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 9042919424,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/Update",
+          "device": "/dev/disk3s4",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 2899968,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/VM",
+          "device": "/dev/disk3s6",
+          "fstype": "apfs",
+          "container": "disk3",
+          "total": 245107195904,
+          "free": 34493267968,
+          "avail": 34493267968,
+          "used": 6442450944,
+          "used_statfs": 210613927936,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        },
+        {
+          "mount_point": "/System/Volumes/xarts",
+          "device": "/dev/disk1s2",
+          "fstype": "apfs",
+          "container": "disk1",
+          "total": 524288000,
+          "free": 517988352,
+          "avail": 517988352,
+          "used": 6299648,
+          "used_statfs": 0,
+          "used_source": "getattrlist",
+          "local": true,
+          "read_only": false
+        }
+      ]
+    }
+  },
+  "counters": {
+    "files": 15,
+    "dirs": 10,
+    "nodes": 14,
+    "link_groups": 1284,
+    "link_bytes_saved": 2300000000,
+    "errors": 4,
+    "vanished": 3,
+    "skipped_mounts": 2,
+    "incomplete": false,
+    "started": "2026-09-22T10:00:00Z",
+    "finished": "2026-09-22T10:00:19.7Z",
+    "elapsed_ns": 19700000000
+  },
+  "errors": [
+    {
+      "path": "/private/var/db",
+      "op": "readdir",
+      "errno": 13,
+      "error": "permission denied",
+      "class": "permission"
+    },
+    {
+      "path": "/private/var/folders/zz",
+      "op": "readdir",
+      "errno": 13,
+      "error": "permission denied",
+      "class": "permission"
+    },
+    {
+      "path": "/Users/u/Library/Mail",
+      "op": "readdir",
+      "errno": 1,
+      "error": "operation not permitted",
+      "class": "tcc"
+    },
+    {
+      "path": "/Users/u/Library/Caches/com.apple.ap.adprivacyd",
+      "op": "readdir",
+      "errno": 1,
+      "error": "operation not permitted",
+      "class": "protected"
+    }
+  ],
+  "skipped_mounts": [
+    {
+      "path": "/home",
+      "fstype": "autofs",
+      "from": "map auto_home",
+      "reason": "mount point"
+    },
+    {
+      "path": "/Users/u/OrbStack",
+      "fstype": "nfs",
+      "from": "OrbStack:/OrbStack",
+      "reason": "mount point"
+    }
+  ],
+  "tree": {
+    "path": "/",
+    "kind": "dir",
+    "bytes": 22900049152,
+    "apparent": 251200041003,
+    "files": 15,
+    "dirs": 10,
+    "mtime": "2026-09-22T10:00:00Z",
+    "children": [
+      {
+        "path": "/Users",
+        "kind": "dir",
+        "bytes": 22900049152,
+        "apparent": 251200041003,
+        "files": 15,
+        "dirs": 6,
+        "mtime": "2026-09-22T10:00:00Z",
+        "children": [
+          {
+            "path": "/Users/u",
+            "kind": "dir",
+            "bytes": 22900049152,
+            "apparent": 251200041003,
+            "files": 15,
+            "dirs": 5,
+            "mtime": "2026-09-22T10:00:00Z",
+            "children": [
+              {
+                "path": "/Users/u/Library",
+                "kind": "dir",
+                "bytes": 22900000000,
+                "apparent": 251200000000,
+                "files": 3,
+                "dirs": 3,
+                "mtime": "2026-09-22T10:00:00Z",
+                "children_omitted": 3
+              }
+            ],
+            "children_omitted": 1
+          }
+        ]
+      }
+    ],
+    "children_omitted": 1
+  }
+}
