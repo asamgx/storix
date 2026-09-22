@@ -39,6 +39,8 @@ not delete anything.
   numbers and the acceptance checklist are in
   [09-bench-1a.md](09-bench-1a.md).
 
+- 2026-09-23: **Phase 1a implemented** on branch `asamgx/phase-1a-walker` (M0–M6 shipped; M7 acceptance evidence in [09-bench-1a.md](09-bench-1a.md); manual dataless and Finder sampling checks left as checklists). Next: review, merge, then phase 1b.
+
 ## Machine snapshot used while planning
 
 Collected read-only on 2026-09-22 from the development machine this tool is built for.
