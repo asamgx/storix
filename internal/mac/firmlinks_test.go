@@ -31,6 +31,9 @@ func TestDataVolumePath(t *testing.T) {
 		ok   bool
 	}{
 		{"/Users/andrewsam/OrbStack", DataRoot + "/Users/andrewsam/OrbStack", true},
+		{"/home", DataRoot + "/home", true},
+		{"/home/andrewsam", DataRoot + "/home/andrewsam", true},
+		{"/homework", "", false},
 		{"/Users", DataRoot + "/Users", true},
 		{"/private/var/folders", DataRoot + "/private/var/folders", true},
 		{DataRoot, DataRoot, true},

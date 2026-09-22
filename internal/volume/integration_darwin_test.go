@@ -29,7 +29,7 @@ func TestReadMountTableLive(t *testing.T) {
 	if !m.IsMountPoint(mac.DataRoot) {
 		t.Fatalf("%s missing from the mount table", mac.DataRoot)
 	}
-	data, ok := m.Lookup(mac.DataRoot)
+	data, ok := m.Describe(mac.DataRoot)
 	if !ok {
 		t.Fatal("data volume not found")
 	}
@@ -53,7 +53,7 @@ func TestReadMountTableLive(t *testing.T) {
 	if data.Used >= data.UsedStatfs {
 		t.Errorf("per-volume used %d is not below the container used %d", data.Used, data.UsedStatfs)
 	}
-	if _, ok := m.Lookup("/"); !ok {
+	if _, ok := m.Describe("/"); !ok {
 		t.Error("/ missing from the mount table")
 	}
 }

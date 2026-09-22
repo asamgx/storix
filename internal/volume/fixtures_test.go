@@ -88,3 +88,31 @@ func fixtureSnapshot(t *testing.T) Snapshot {
 	t.Helper()
 	return Snapshot{Volumes: fixtureTable(t).Volumes()}
 }
+
+// firmlinkSpelledMounts is a mount table in which the nested data-volume
+// mounts are reported the way getfsstat reports them: by their firmlink or
+// symlink path, not by a path starting with the scan root. /home is the
+// autofs auto_home trigger, which macOS reaches through a symlink on the
+// sealed system volume.
+var firmlinkSpelledMounts = []fixtureVol{
+	{on: "/", from: "/dev/disk3s1s1", fstype: "apfs", blocksKiB: 239362496, usedKiB: 12347036, availKiB: 36442196},
+	{on: "/System/Volumes/Data", from: "/dev/disk3s5", fstype: "apfs", blocksKiB: 239362496, usedKiB: 175087672, availKiB: 36442196},
+	{on: "/home", from: "map auto_home", fstype: "autofs", blocksKiB: 0, usedKiB: 0, availKiB: 0, flags: unix.MNT_AUTOMOUNTED},
+	{on: "/Users/andrewsam/OrbStack", from: "OrbStack:/OrbStack", fstype: "nfs", blocksKiB: 51380224, usedKiB: 18239620, availKiB: 33140604},
+	{on: "/Applications/Vault.app/data", from: "/dev/disk9s1", fstype: "apfs", blocksKiB: 512000, usedKiB: 1024, availKiB: 493292},
+	{on: "/System/Volumes/VM", from: "/dev/disk3s6", fstype: "apfs", blocksKiB: 239362496, usedKiB: 5245132, availKiB: 36442196},
+	{on: "/dev", from: "devfs", fstype: "devfs", blocksKiB: 216, usedKiB: 216, availKiB: 0},
+}
+
+func tableOf(t *testing.T, fixtures []fixtureVol) *MountTable {
+	t.Helper()
+	vols := make([]Volume, 0, len(fixtures))
+	for _, f := range fixtures {
+		st := f.statfs(t)
+		v := VolumeFromStatfs(&st)
+		v.Used = f.usedKiB * 1024
+		v.UsedSource = UsedFromGetattrlist
+		vols = append(vols, v)
+	}
+	return NewMountTable(vols)
+}
