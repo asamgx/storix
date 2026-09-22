@@ -51,7 +51,13 @@ honest unaccounted bucket, data-volume scan root) held up.
   inferred from zero blocks; `setiopolicy_np` must be process-scoped; it is not in
   `x/sys/unix` (only `SYS_IOPOLICYSYS = 322`), so cgo or raw syscall (Q9, R7).
 - `x/sys/unix` v0.48 verified: has `Lstat`, `Fstatat`, `Getdirentries`, `Statfs`, `Getfsstat`,
-  `Clonefile*`, `SF_DATALESS`; lacks `Getattrlistbulk` and any iopolicy wrapper.
+  `Clonefile*`, `SF_DATALESS`; lacks `Getattrlistbulk` and any iopolicy wrapper. It also lacks
+  a `Getattrlist` (get, non-bulk) wrapper — both the single-file and the bulk form of the call
+  are raw syscalls in phase 1a (confirmed again against the pinned v0.47.0, D33). The public
+  `sys/resource.h` constants used for the dataless policy: `IOPOL_TYPE_VFS_MATERIALIZE_DATALESS_FILES = 3`,
+  `IOPOL_SCOPE_PROCESS = 0`, `IOPOL_MATERIALIZE_DATALESS_FILES_OFF = 1`; `setiopolicy_np` is
+  called with those three values via cgo (D9/Q9), never as a raw `iopolicysys` syscall, because
+  `IOPOL_CMD_SET` and `struct _iopol_param_t` appear in no public SDK header.
 - Footprint declared a cross-cutting view, never summed into the ledger (D22).
 - Walker scheduler must not use a bounded channel fed by its own workers (deadlock).
 - Cache format to be benchmarked (gob vs flat encoding) before commitment; JSON output

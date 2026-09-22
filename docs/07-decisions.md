@@ -32,6 +32,11 @@
 | D26 | `codesign` runs only when an unattributed Group Container exists; cached per bundle id + version | Q4 resolved |
 | D27 | JSON schema versioned from release one; version stored in cache files too | Q5 resolved |
 | D28 | Config/cache dir is `storix` under Application Support | Q7 resolved |
+| D29 | Per-volume `used` comes from `getattrlist`'s `ATTR_VOL_SPACEUSED`, not `statfs.Bfree` | `statfs` free/used is container-wide on an APFS volume group: on the planning machine `getattrlist` space-used for the data volume is 181.18 GB while `statfs`-derived used is 210.76 GB (the whole container, all volumes). `getattrlist` restates `statfs`'s size/free/avail fields exactly (verified: 0 or 4 KB difference, alignment-only) but gives the per-volume used figure statfs cannot (M1 finding) |
+| D30 | Mount points are matched under both the firmlink spelling (e.g. `/Users/andrewsam/OrbStack`) and the data-volume spelling (`/System/Volumes/Data/Users/andrewsam/OrbStack`); `/home` is a symlinked special case pointing at the autofs mount `/System/Volumes/Data/home` | A nested mount discovered by `getfsstat` reports one spelling or the other depending on how it was mounted; the walker's scan-path guard must recognize a mount point regardless of which spelling reached it, or a firmlink-vs-data-volume mismatch silently descends into a mount it meant to skip (M1/M2 finding) |
+| D31 | The `getattrlistbulk` raw-syscall reader is deferred past phase 1a, not shipped as an experiment behind a flag | At the measured ≈0.17–0.18× ratio against `du -sk` (see `docs/09-bench-1a.md`), the ReadDir+Lstat walker already beats the 0.35× acceptance target by roughly 2×; a raw-syscall reader with a private-ish record layout and manual buffer parsing is not worth its ABI risk for a bench line that is not the bottleneck. Revisit only if a future workload (many more inodes, slower storage) closes that 2× margin |
+| D32 | Charm stack is `charm.land/lipgloss/v2` and `github.com/charmbracelet/bubbletea/v2` / `bubbles/v2` import paths, not the pre-rename `github.com/charmbracelet/lipgloss` | The v2 releases moved Lip Gloss's module path to `charm.land/lipgloss/v2` (see `go.mod`); Bubble Tea v2 and Bubbles v2 stayed under `github.com/charmbracelet/...` with a `/v2` suffix. 05-tech-stack.md's library table predates this rename |
+| D33 | `golang.org/x/sys` is pinned to v0.47.0, not the newest available | v0.47.0 is the latest release compatible with Go 1.25.5's toolchain constraints at the time these packages were built; it still has every symbol phase 1a needs (`Getfsstat`, `Statfs`, `Lstat`, `Fstatat`, `Setattrlist`, `Attrlist`, the `ATTR_VOL_*`/`SF_DATALESS`/`UF_COMPRESSED` constants) and still lacks `Getattrlist` (get) and `Getattrlistbulk`, so those stay raw syscalls regardless of the pin |
 
 ## Assumptions
 - A1: Single primary user account; other users' homes are reported as unreadable/system.
@@ -51,10 +56,27 @@
 - Q8: Purgeable source. `getattrlist` with `ATTR_VOL_SPACEUSED`/`ATTR_VOL_SPACEAVAIL` versus
   Foundation's `NSURLVolumeAvailableCapacityForImportantUsageKey` via cgo. Proposal: try
   `getattrlist` first (pure Go); use Foundation only if it does not expose purgeable.
+  **Resolved in phase 1a implementation:** `getattrlist`'s volume attributes restate `statfs`
+  (space free/avail agree to within 4 KB alignment) and expose no purgeable attribute at all;
+  Foundation's `NSURLVolumeAvailableCapacityForImportantUsageKey` is the only source, matching
+  the original spike prediction (D21 unchanged).
 - Q9: cgo policy. The dataless IO policy and possibly purgeable each need one cgo call, and
   `getattrlistbulk` needs a raw syscall. Proposal: one small cgo file behind a build tag; the
   pure-Go build reports "dataless protection unavailable" so cross-compilation stays possible.
+  **Resolved:** implemented exactly as proposed (`internal/mac/iopolicy_cgo.go` +
+  `purgeable_cgo.go`/`purgeable_darwin.m`, with `_nocgo.go` twins); `make build-nocgo` compiles
+  and `storix doctor` reports cgo availability and the purgeable source.
 - Q10: `storix explain` accepting a bundle id in addition to a path. Proposal: yes, cheap.
+  Not yet implemented; `storix explain` itself is phase 1b scope (03-architecture.md's CLI
+  surface lists it, but it does not appear in phase 1a's roadmap milestones).
+- Q11: Purgeable may overlap `scanned`. Evictable-but-locally-present iCloud files (and, when
+  present, snapshot-held blocks) can be counted both in the walked tree and in the purgeable
+  figure, so the ledger identity `used = scanned + purgeable + residual` is not "no
+  double-counting", just "every byte assigned to a labeled line". **Observed on the planning
+  machine (`docs/09-bench-1a.md`):** the report itself now carries the label — the purgeable
+  line reads "freed when space runs short; may overlap scanned bytes" — rather than silently
+  reordering the identity or trying to subtract the overlap out (which nothing on macOS
+  exposes cleanly).
 
 ## Risks
 - R1: TCC. Most protected paths fail silently without FDA; Desktop/Documents/Downloads
