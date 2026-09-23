@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/report"
 	"github.com/asamgx/storix/internal/scan"
@@ -36,6 +39,7 @@ type scanOptions struct {
 	noCache     bool
 	fromCache   bool
 	disableDet  []string
+	codeRoots   []string
 }
 
 // defaultMinSize is the smallest node the JSON tree carries by default.
@@ -79,7 +83,36 @@ versioned document, with the tree limited by --depth and --min-size unless
 	f.BoolVar(&o.fromCache, "from-cache", false, "render the stored scan instead of walking the disk")
 	f.StringArrayVar(&o.disableDet, "disable-detector", nil,
 		"switch off one tool detector by name; repeatable (the report still lists it, as disabled)")
+	f.StringSliceVar(&o.codeRoots, "code-roots", codeRootsDefault(),
+		"directories holding your projects, for the Developer bucket (default: the usual ones that exist on this machine)")
 	return cmd
+}
+
+// codeRootsDefault is --code-roots' default: classify.DefaultCodeRoots kept
+// to the entries that exist on this machine, so --help shows real candidates
+// rather than six names a user has to expand by hand. The classifier applies
+// the same existence filter again, against the walked tree rather than the
+// disk, so an entry that has vanished by the time the walk runs costs it
+// nothing either way.
+func codeRootsDefault() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, r := range classify.DefaultCodeRoots {
+		p := r
+		switch {
+		case p == "~":
+			p = home
+		case strings.HasPrefix(p, "~/"):
+			p = filepath.Join(home, p[2:])
+		}
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func runScan(ctx context.Context, out, errOut io.Writer, o *scanOptions) error {
@@ -175,6 +208,7 @@ func (o *scanOptions) resolve() (report.Options, scan.Config, error) {
 		NoCache:            o.noCache,
 		FromCache:          o.fromCache,
 		DisabledDetectors:  o.disableDet,
+		CodeRoots:          o.codeRoots,
 		Version:            BuildInfo(),
 	}
 	return ro, cfg, nil
@@ -364,6 +398,7 @@ func printDebug(out io.Writer, res *scan.Result) {
 	if res.CachePath != "" {
 		_, _ = fmt.Fprintf(out, "  cache    %s\n", res.CachePath)
 	}
+	printClassifyDebug(out, res)
 }
 
 // dur formats a stage timing.
