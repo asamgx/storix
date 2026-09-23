@@ -212,3 +212,33 @@ exercise every path (see `docs/07-decisions.md`):
   *can* see) — the correct answer given what this process can read, not a defect in the
   detector. Confirmed by direct check: `ls -la ~/.Trash` from this same shell also returns
   `Permission denied`.
+
+## Review round (2026-09-23)
+
+An independent code review of the phase 1b diff, with four deep-dive sub-reviews
+(ledger/cache/JSON, classify engine, apps verdicts, concurrency/TUI), found and we fixed:
+
+- **Ledger table denominator.** The twelve rows were measured against the data volume's
+  used space while bucket 1 is the sibling volumes, so percentages summed to 115 %. The
+  denominator is now the container's used space, container overhead joined bucket 12, and
+  the identity line is computed rather than asserted.
+- **Deep scan roots.** `--roots ~/Documents/X` classified as 100 % Other; the engine now
+  inherits the claim the root's unwalked ancestors would give it.
+- **Apps verdict clock.** Verdict ages and the 30-day keep window used wall-clock time at
+  load, so a cached scan changed its answers over time; they now use the scan's own clock.
+- **Vendor folders.** `~/Library/Application Support/Google` was attributed whole to Chrome,
+  Android Studio's data included; vendor folders now key `vendor:<prefix>` and footprints
+  subtract descendant components across owners.
+- **Degraded probes.** A timed-out or unreadable probe could manufacture an orphan verdict;
+  such verdicts are capped at Unknown with the reason, permission errors are never "gone",
+  and the LaunchServices dump (11.6 s here, previously capped at 10 s) is budgeted so it
+  completes: 58 applications listed, was 55.
+- **Concurrency.** The walker now joins its progress reporter (a send-on-closed-channel
+  window), the TUI quits on a second keypress during a scan, leaf-retainer hooks are
+  panic-contained, and detector Wait honours each probe's own budget instead of a 2 s grace.
+- **Safety.** The team-id cache is written via CreateTemp and rename, never through a
+  symlink; the per-scan team resolver no longer lives on the shared detector singleton.
+
+After the fixes: `go test -race ./...` 36 packages green, lint clean, `scripts/accept-1b.sh
+--strict` exits 0 with Other at 0.0 %, no detector panicked, and no conflict where a rule beats
+a detector or the apps inventory.

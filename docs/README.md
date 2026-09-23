@@ -41,6 +41,7 @@ not delete anything.
   numbers and the acceptance checklist are in
   [09-bench-1a.md](09-bench-1a.md).
 
+- 2026-09-23: **Phase 1b implemented** on branch `asamgx/phase-1b-classify` (M8–M13, A1–A6, independent review round applied; see [10-bench-1b.md](10-bench-1b.md) and [11-apps-validation.md](11-apps-validation.md)). PR pending.
 - 2026-09-23: **Phase 1a implemented** on branch `asamgx/phase-1a-walker` (M0–M6 shipped; M7 acceptance evidence in [09-bench-1a.md](09-bench-1a.md); manual dataless and Finder sampling checks left as checklists). Next: review, merge, then phase 1b.
 
 - 2026-09-23: **Phase 1b implemented** on branch `asamgx/phase-1b-classify` (`v0.1.0` tagged on
