@@ -89,7 +89,29 @@ func renderJSON(t *testing.T, r *scan.Result, o report.Options) map[string]json.
 	for _, k := range []string{"from_cache", "cache_age_ns", "cache_path", "timing"} {
 		delete(doc, k)
 	}
+	doc["classification"] = untimed(t, doc["classification"])
 	return doc
+}
+
+// untimed drops the classification's own timing, which is the one number in
+// the section that describes this run rather than the scan: on a live scan it
+// includes the wait for the probes, and on a cached one it is how long the
+// reclassification took.
+func untimed(t *testing.T, section json.RawMessage) json.RawMessage {
+	t.Helper()
+	if len(section) == 0 {
+		return section
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(section, &m); err != nil {
+		t.Fatalf("parse the classification: %v", err)
+	}
+	delete(m, "timing_ns")
+	out, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
 
 func keys(a, b map[string]json.RawMessage) []string {

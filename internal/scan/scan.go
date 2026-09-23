@@ -128,6 +128,13 @@ type Result struct {
 	// issued. It is the detectors table of the report and the evidence
 	// behind a "detector:orbstack" claim.
 	Detectors []detect.Status
+	// probes are the finished probe outcomes, kept only so that Persist
+	// can store each detector's facts: the facts are what a cache load
+	// re-classifies from, and they live nowhere else on the result. They
+	// are unexported because a reader wants Detectors and Summaries; a
+	// result loaded from a cache has none of them, since nothing probed.
+	probes []detect.Outcome
+
 	// Summaries is each detector's typed rows, keyed by detector name. The
 	// containers and developer views render these; nothing here is summed
 	// into the ledger, whose arithmetic stays in internal/ledger.
@@ -225,7 +232,7 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 	t0 = time.Now()
 	outcomes := run.Wait(detect.DefaultGrace)
 	claims, summaries, statuses := detect.Classify(tree, outcomes, classifyContext(tree, cfg))
-	res.Detectors, res.Summaries = statuses, summaries
+	res.Detectors, res.Summaries, res.probes = statuses, summaries, outcomes
 	res.Timing.Probe = slowestProbe(statuses)
 	res.RecordErr = recordProbes(statuses)
 

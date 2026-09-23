@@ -105,6 +105,8 @@ func resultFromCache(cfg Config, meta cache.Meta, tree *walk.Tree, path string) 
 
 	// The tree's own copies come from cache.TreeMeta; the sections are read
 	// so that a file written with one and not the other still restores.
+	// This happens before anything is rebuilt, because the ledger counts
+	// the unreadable paths and the classification is built over the tree.
 	if len(tree.Errors) == 0 {
 		var errs []walk.PathError
 		if err := section(meta, SectionErrors, &errs); err != nil {
@@ -123,12 +125,21 @@ func resultFromCache(cfg Config, meta cache.Meta, tree *walk.Tree, path string) 
 
 	// A cache written before the application inventory existed simply has
 	// no such section, and the field stays nil. Callers ask Apps() rather
-	// than reading the field, and it tells them to rescan.
+	// than reading the field, and it tells them to rescan. The stored
+	// report is the starting point; reclassify replaces it whenever the
+	// file also carries the facts it was built from.
 	var appsReport *apps.Report
 	if err := section(meta, SectionApps, &appsReport); err != nil {
 		return nil, err
 	}
 	res.Apps = appsReport
+
+	if err := reclassify(cfg, res, meta); err != nil {
+		return nil, err
+	}
+	if rebuilt := rebuildLedger(cfg, res, l); rebuilt != nil {
+		res.Ledger = rebuilt
+	}
 	return res, nil
 }
 

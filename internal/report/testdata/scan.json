@@ -527,6 +527,382 @@
       "elapsed_ns": 19700000000
     }
   },
+  "classification": {
+    "detectors": [
+      {
+        "name": "orbstack",
+        "state": "ok",
+        "duration_ns": 1750000000,
+        "verified": true
+      },
+      {
+        "name": "docker",
+        "state": "missing",
+        "reason": "no /Applications/Docker.app and no com.docker.docker container",
+        "duration_ns": 0,
+        "verified": false
+      },
+      {
+        "name": "colima",
+        "state": "missing",
+        "reason": "neither `colima` nor `limactl` is on the path",
+        "duration_ns": 0,
+        "verified": false
+      },
+      {
+        "name": "podman",
+        "state": "missing",
+        "reason": "`podman` is not on the path",
+        "duration_ns": 0,
+        "verified": false
+      },
+      {
+        "name": "vms",
+        "state": "missing",
+        "reason": "no UTM, Parallels, VMware or VirtualBox directory exists",
+        "duration_ns": 0,
+        "verified": true
+      },
+      {
+        "name": "kubernetes",
+        "state": "ok",
+        "duration_ns": 2000000,
+        "verified": true
+      },
+      {
+        "name": "homebrew",
+        "state": "ok",
+        "duration_ns": 900000000,
+        "verified": true
+      },
+      {
+        "name": "node",
+        "state": "ok",
+        "duration_ns": 620000000,
+        "verified": true
+      },
+      {
+        "name": "go",
+        "state": "ok",
+        "duration_ns": 11000000,
+        "verified": true
+      },
+      {
+        "name": "projects",
+        "state": "ok",
+        "duration_ns": 340000000,
+        "verified": true
+      }
+    ],
+    "developer": [
+      {
+        "detector": "orbstack",
+        "tools": [
+          {
+            "name": "data.img.raw",
+            "kind": "image",
+            "path": "/Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data/data.img.raw",
+            "node": 20,
+            "bytes": 18700000000,
+            "reclaim": 1,
+            "note": "245 GB apparent, 18.7 GB allocated"
+          }
+        ]
+      },
+      {
+        "detector": "homebrew",
+        "reclaimable": 148700000,
+        "reclaim_note": "`brew cleanup -n` would free 148.7 MB (148.6 MB across 5 entries)"
+      },
+      {
+        "detector": "go",
+        "tools": [
+          {
+            "name": "build cache",
+            "kind": "cache",
+            "path": "/Users/u/Library/Caches/go-build",
+            "node": 13,
+            "bytes": 4200000000,
+            "reclaim": 0
+          }
+        ]
+      },
+      {
+        "detector": "projects",
+        "projects": [
+          {
+            "root": "/Users/u/code/storix",
+            "node": 27,
+            "artifact_bytes": 480000000,
+            "artifacts": [
+              {
+                "name": "node_modules",
+                "kind": "cache",
+                "path": "/Users/u/code/storix/node_modules",
+                "node": 29,
+                "bytes": 480000000,
+                "reclaim": 0
+              }
+            ],
+            "last_activity": "2026-06-14T00:00:00Z",
+            "vcs": true
+          }
+        ]
+      }
+    ],
+    "containers": [
+      {
+        "detector": "orbstack",
+        "name": "OrbStack",
+        "host_image": [
+          {
+            "name": "data.img.raw",
+            "kind": "image",
+            "path": "/Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data/data.img.raw",
+            "node": 20,
+            "bytes": 18700000000,
+            "reclaim": 1,
+            "note": "245 GB apparent, 18.7 GB allocated"
+          }
+        ],
+        "guest_reported": [
+          {
+            "type": "Images",
+            "size": 9853000000,
+            "reclaimable": 5379000000,
+            "percent": 54,
+            "known": true,
+            "count": 36,
+            "active": 11,
+            "reclaim": 1
+          },
+          {
+            "type": "Containers",
+            "size": 135700000,
+            "reclaimable": 135500000,
+            "percent": 99,
+            "known": true,
+            "count": 12,
+            "active": 2,
+            "reclaim": 1
+          },
+          {
+            "type": "Local Volumes",
+            "size": 4755000000,
+            "reclaimable": 938700000,
+            "percent": 19,
+            "known": true,
+            "count": 23,
+            "active": 3,
+            "reclaim": 3
+          },
+          {
+            "type": "Build Cache",
+            "size": 5085000000,
+            "reclaimable": 4638000000,
+            "count": 72,
+            "active": 0,
+            "reclaim": 1
+          }
+        ],
+        "context": "orbstack",
+        "note": "the daemon accounts for 19.83 GB inside an image the host has given 18.7 GB; the image is sparse and its contents compress, so the guest's figure is the larger one"
+      }
+    ],
+    "conflicts": {
+      "total": 14,
+      "by_kind": [
+        {
+          "kind": "rule-over-rule",
+          "count": 14,
+          "bytes": 95680169152
+        }
+      ],
+      "top": [
+        {
+          "node": 6,
+          "path": "/Users/u/Library",
+          "winner": "rule:appdata.library.root",
+          "loser": "rule:personal.home.other",
+          "bytes": 33000000000
+        },
+        {
+          "node": 17,
+          "path": "/Users/u/Library/Group Containers",
+          "winner": "rule:appdata.groups.root",
+          "loser": "rule:appdata.library.other",
+          "bytes": 18700000000
+        },
+        {
+          "node": 18,
+          "path": "/Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack",
+          "winner": "rule:ctr.orbstack.group",
+          "loser": "rule:appdata.groups.name",
+          "bytes": 18700000000
+        },
+        {
+          "node": 12,
+          "path": "/Users/u/Library/Caches",
+          "winner": "rule:cache.user.root",
+          "loser": "rule:appdata.library.other",
+          "bytes": 11200000000
+        },
+        {
+          "node": 13,
+          "path": "/Users/u/Library/Caches/go-build",
+          "winner": "rule:dev.go.buildcache",
+          "loser": "rule:cache.user.bundle",
+          "bytes": 4200000000
+        },
+        {
+          "node": 7,
+          "path": "/Users/u/Library/Application Support",
+          "winner": "rule:appdata.appsupport.root",
+          "loser": "rule:appdata.library.other",
+          "bytes": 3100000000
+        },
+        {
+          "node": 8,
+          "path": "/Users/u/Library/Application Support/MobileSync",
+          "winner": "rule:bak.mobilesync.root",
+          "loser": "rule:appdata.appsupport.name",
+          "bytes": 3100000000
+        },
+        {
+          "node": 2,
+          "path": "/Applications/Arc.app",
+          "winner": "rule:apps.system.bundle",
+          "loser": "rule:apps.system.vendor",
+          "bytes": 1400000000
+        },
+        {
+          "node": 24,
+          "path": "/Users/u/.Trash",
+          "winner": "rule:trash.user.home",
+          "loser": "rule:personal.home.other",
+          "bytes": 900000000
+        },
+        {
+          "node": 24,
+          "path": "/Users/u/.Trash",
+          "winner": "rule:trash.user.home",
+          "loser": "rule:dev.dotdir.generic",
+          "bytes": 900000000
+        },
+        {
+          "node": 26,
+          "path": "/Users/u/code",
+          "winner": "rule:dev.projects.root.0",
+          "loser": "rule:personal.home.other",
+          "bytes": 480120000
+        },
+        {
+          "node": 23,
+          "path": "/Users/u/Desktop",
+          "winner": "rule:personal.desktop",
+          "loser": "rule:personal.home.other",
+          "bytes": 49152
+        },
+        {
+          "node": 21,
+          "path": "/Users/u/Library/Mobile Documents",
+          "winner": "rule:personal.icloud",
+          "loser": "rule:appdata.library.other",
+          "bytes": 0
+        },
+        {
+          "node": 35,
+          "path": "/private/var/db",
+          "winner": "rule:sys.var.db",
+          "loser": "rule:sys.var.other",
+          "bytes": 0
+        }
+      ]
+    },
+    "owners": [
+      {
+        "label": "OrbStack",
+        "keys": [
+          "app:dev.orbstack.OrbStack",
+          "app:dev.kdrag0n.MacVirt",
+          "team:HUAQ24HBR6"
+        ],
+        "bytes": 18700000000,
+        "by_bucket": {
+          "containers": 18700000000
+        }
+      },
+      {
+        "label": "com.spotify.client",
+        "keys": [
+          "app:com.spotify.client"
+        ],
+        "bytes": 7000000000,
+        "by_bucket": {
+          "app-data": 7000000000
+        }
+      },
+      {
+        "label": "Go",
+        "keys": [
+          "cli:go"
+        ],
+        "bytes": 4200000000,
+        "by_bucket": {
+          "developer": 4200000000
+        }
+      },
+      {
+        "label": "00008110-000C4D2E0A30801E",
+        "bytes": 3100000000,
+        "by_bucket": {
+          "backups": 3100000000
+        }
+      },
+      {
+        "label": "Arc",
+        "keys": [
+          "product:Arc"
+        ],
+        "bytes": 1400000000,
+        "by_bucket": {
+          "apps": 1400000000
+        }
+      },
+      {
+        "label": "Trash",
+        "bytes": 900000000,
+        "by_bucket": {
+          "trash": 900000000
+        }
+      },
+      {
+        "label": "storix",
+        "keys": [
+          "project:storix"
+        ],
+        "bytes": 480120000,
+        "by_bucket": {
+          "developer": 480120000
+        }
+      },
+      {
+        "label": "Desktop",
+        "bytes": 49152,
+        "by_bucket": {
+          "personal": 49152
+        }
+      }
+    ],
+    "unmatched": [
+      {
+        "path": "/weird-vendor-drop",
+        "bytes": 260000000,
+        "node": 31
+      }
+    ],
+    "timing_ns": 180000000
+  },
   "facts": {
     "root": "/",
     "euid": 501,
@@ -810,6 +1186,10 @@
         "files": 1,
         "dirs": 1,
         "mtime": "2026-09-22T10:00:00Z",
+        "bucket": "apps",
+        "owner": "Applications",
+        "reclaim": "user-data",
+        "source": "rule:apps.system.root",
         "children": [
           {
             "path": "/Applications/Arc.app",
@@ -822,6 +1202,10 @@
             "flags": [
               "bundle"
             ],
+            "bucket": "apps",
+            "owner": "Arc",
+            "reclaim": "user-data",
+            "source": "rule:apps.system.bundle",
             "children": [
               {
                 "path": "/Applications/Arc.app/Arc",
@@ -830,7 +1214,12 @@
                 "apparent": 1400000000,
                 "files": 1,
                 "dirs": 0,
-                "mtime": "2026-09-22T10:00:00Z"
+                "mtime": "2026-09-22T10:00:00Z",
+                "bucket": "apps",
+                "owner": "Arc",
+                "reclaim": "user-data",
+                "source": "rule:apps.system.bundle",
+                "inherited": true
               }
             ]
           }
@@ -844,6 +1233,10 @@
         "files": 20,
         "dirs": 18,
         "mtime": "2026-09-22T10:00:00Z",
+        "bucket": "personal",
+        "owner": "Home folders",
+        "reclaim": "user-data",
+        "source": "rule:personal.users.root",
         "children": [
           {
             "path": "/Users/u",
@@ -853,6 +1246,10 @@
             "files": 20,
             "dirs": 17,
             "mtime": "2026-09-22T10:00:00Z",
+            "bucket": "personal",
+            "owner": "Home",
+            "reclaim": "user-data",
+            "source": "rule:personal.home.root",
             "children": [
               {
                 "path": "/Users/u/Library",
@@ -862,6 +1259,10 @@
                 "files": 5,
                 "dirs": 11,
                 "mtime": "2026-09-22T10:00:00Z",
+                "bucket": "app-data",
+                "owner": "Library",
+                "reclaim": "unknown",
+                "source": "rule:appdata.library.root",
                 "children_omitted": 4
               },
               {
@@ -872,6 +1273,10 @@
                 "files": 1,
                 "dirs": 0,
                 "mtime": "2026-09-22T10:00:00Z",
+                "bucket": "trash",
+                "owner": "Trash",
+                "reclaim": "tool-managed",
+                "source": "rule:trash.user.home",
                 "children_omitted": 1
               },
               {
@@ -882,6 +1287,10 @@
                 "files": 2,
                 "dirs": 2,
                 "mtime": "2026-09-22T10:00:00Z",
+                "bucket": "developer",
+                "owner": "Code root",
+                "reclaim": "user-data",
+                "source": "rule:dev.projects.root.0",
                 "children_omitted": 1
               }
             ],

@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# scripts/accept-1b.sh — run a full scan and check the phase 1b acceptance
+# scripts/accept-1b.sh — run one scan and check the phase 1b acceptance
 # numbers: the twelve buckets, how much of each is reclaimable, how large the
-# unclassified "Other" bucket is, and whether the walked buckets still sum to
-# the scanned bytes exactly.
+# unclassified "Other" bucket is, whether the walked buckets still sum to the
+# scanned bytes exactly, what happened to every detector, what the
+# classifier could not place, and the conflicts it logged.
 #
-# Read-only: it builds storix and runs one scan with --no-cache, so it touches
-# nothing but its own output and the build products the Makefile already
-# writes.
+# Read-only: it builds storix and runs one scan with --no-cache, so it
+# touches nothing but its own output and the build products the Makefile
+# already writes.
 #
 # Usage:
 #   scripts/accept-1b.sh [--strict] [--other-max PERCENT] [--root PATH]
@@ -25,6 +26,18 @@ set -euo pipefail
 #   --root PATH          scan root (default: the whole data volume).
 #   --binary PATH        storix binary to run (default: ./storix).
 #   --no-build           use the binary as it is instead of running `make build`.
+#
+# --strict fails the run when: Other is at or over --other-max percent of
+# used space; the twelve walked buckets do not sum to the scanned bytes; any
+# detector's state is panic; or classification.conflicts.by_kind has a rule
+# beating a detector or the application inventory, which the precedence rule
+# in docs/03 says can never happen and so is a bug rather than tuning.
+#
+# Everything below is read from one `storix scan --json --no-cache`
+# document: the bucket totals, the detector table, the conflict tally, the
+# six largest projects and the unmatched listing all come from the
+# classification section of that document; nothing here scrapes the text
+# report.
 
 strict=0
 other_max=5
@@ -39,7 +52,7 @@ while [[ $# -gt 0 ]]; do
     --root) root="$2"; shift 2 ;;
     --binary) binary="$2"; shift 2 ;;
     --no-build) build=0; shift ;;
-    -h|--help) sed -n '3,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '3,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "accept-1b: unknown flag $1" >&2; exit 2 ;;
   esac
 done
@@ -57,23 +70,14 @@ if [[ ! -x "$binary" ]]; then
 fi
 
 json="$(mktemp -t storix-accept-1b)"
-txt="$(mktemp -t storix-accept-1b-txt)"
-trap 'rm -f "$json" "$txt"' EXIT
+trap 'rm -f "$json"' EXIT
 
-args=(scan --no-cache)
+args=(scan --no-cache --json)
 [[ -n "$root" ]] && args+=("$root")
 
-# Two scans: the JSON document carries the numbers the checks read, and the
-# text report carries the unmatched listing, and the two output formats are
-# mutually exclusive on one invocation.
-echo "scanning for the numbers…"
-"$binary" "${args[@]}" --json >"$json"
-echo "scanning for the unmatched listing…"
-"$binary" "${args[@]}" --report --debug >"$txt"
+echo "scanning…"
+"$binary" "${args[@]}" >"$json"
 
-# Everything below reads the JSON document, which carries the same numbers the
-# text report prints; parsing one document rather than scraping a table keeps
-# the checks honest when the report's layout changes.
 set +e
 python3 - "$json" "$other_max" "$strict" <<'PY'
 import json, sys
@@ -86,6 +90,7 @@ led = doc["ledger"]
 buckets = led.get("buckets") or []
 used = led["volume"]["used_after"]
 scanned = led["scanned"]["bytes"]
+cls = doc.get("classification") or {}
 
 def gb(n):
     return f"{n/1e9:8.2f} GB"
@@ -115,7 +120,6 @@ print(f"  reclaimable   {gb(reclaimable)} ({pct(reclaimable, used).strip()} of u
 print(f"  app data      {gb(appdata)}")
 print(f"  developer     {gb(developer)}")
 print(f"  other         {gb(other)} ({pct(other, used).strip()} of used)")
-print()
 
 failures = []
 if len(buckets) != 12:
@@ -132,6 +136,73 @@ if share >= other_max:
 else:
     print(f"  ok   Other is {share:.1f}% of used space, under the {other_max:g}% limit")
 
+# Detector table: name, state, duration, reason, unverified marker (*).
+print()
+print(f"{'detector':<14} {'state':<10} {'duration':>10}  reason")
+dets = cls.get("detectors") or []
+panics = [d for d in dets if d["state"] == "panic"]
+for d in sorted(dets, key=lambda d: d["name"]):
+    dur_ms = d.get("duration_ns", 0) / 1e6
+    dur = f"{dur_ms:7.1f}ms" if dur_ms else ""
+    mark = "" if d.get("verified", True) else " *"
+    print(f"  {d['name']:<12} {d['state']+mark:<10} {dur:>10}  {d.get('reason', '')}")
+if not dets:
+    print("  (classification.detectors is not in this build's JSON)")
+
+if panics:
+    failures.append(f"{len(panics)} detector(s) are in the panic state")
+else:
+    print("  ok   no detector panicked")
+
+# Conflict counts by kind.
+print()
+conf = cls.get("conflicts")
+if conf is None:
+    print("  conflicts: not in JSON yet (M12)")
+else:
+    print(f"  conflicts: {conf.get('total', 0)} total")
+    order = ["rule-over-rule", "detector-over-rule", "apps-over-rule",
+              "detector-over-apps", "detector-over-detector"]
+    by_kind = {k["kind"]: k["count"] for k in conf.get("by_kind", [])}
+    for kind in order:
+        if by_kind.get(kind):
+            print(f"    {kind:<22} {by_kind[kind]}")
+    unexpected = {k: v for k, v in by_kind.items() if k not in order and v}
+    for kind, n in sorted(unexpected.items()):
+        print(f"    {kind:<22} {n}  (unexpected)")
+    rule_wins = by_kind.get("rule-over-detector", 0) + by_kind.get("rule-over-apps", 0)
+    if rule_wins:
+        failures.append(f"{rule_wins} conflict(s) have a rule beating a detector or the apps inventory")
+
+# The six largest projects, across every detector that reports any (in
+# practice, only the projects detector does).
+print()
+print("six largest projects under the code roots:")
+projects = []
+for entry in cls.get("developer") or []:
+    projects.extend(entry.get("projects") or [])
+projects.sort(key=lambda p: p.get("artifact_bytes", 0), reverse=True)
+for p in projects[:6]:
+    print(f"  {gb(p.get('artifact_bytes', 0))}  {p['root']}")
+if not projects:
+    print("  (none found under the configured code roots)")
+
+# The ten largest directories no rule or detector reached.
+print()
+print("top 10 unmatched paths (largest directories no rule reached):")
+unmatched = cls.get("unmatched") or []
+for u in unmatched[:10]:
+    print(f"  {gb(u.get('bytes', 0))}  {u['path']}")
+if not unmatched:
+    print("  none")
+
+print()
+t = doc.get("timing") or {}
+def ms(key):
+    return f"{t.get(key, 0) / 1e6:.0f}ms"
+print(f"  timing   facts {ms('facts_ns')}, walk {ms('walk_ns')}, classify {ms('classify_ns')}, "
+      f"ledger {ms('ledger_ns')}, total {ms('total_ns')}")
+
 for f in failures:
     print(f"  FAIL {f}")
 
@@ -139,12 +210,5 @@ sys.exit(1 if failures and strict else 0)
 PY
 verdict=$?
 set -e
-
-echo
-echo "largest directories no rule reached:"
-sed -n '/^UNMATCHED/,/^$/p' "$txt" | tail -n +2
-
-echo
-sed -n '/^DEBUG/,$p' "$txt" | sed -n '1,4p'
 
 exit $verdict

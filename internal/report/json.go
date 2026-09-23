@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/asamgx/storix/internal/classify"
+	"github.com/asamgx/storix/internal/detect"
 	"github.com/asamgx/storix/internal/ledger"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/scan"
@@ -31,7 +33,7 @@ func JSON(w io.Writer, r *scan.Result, o Options) error {
 	}
 	o = o.withDefaults()
 	bw := bufio.NewWriterSize(w, 64<<10)
-	e := &jsonWriter{w: bw}
+	e := &jsonWriter{w: bw, class: r.Class}
 
 	e.begin("{")
 	e.field("schema", SchemaVersion)
@@ -50,6 +52,16 @@ func JSON(w io.Writer, r *scan.Result, o Options) error {
 	}
 	e.field("timing", r.Timing)
 	e.field("ledger", r.Ledger)
+	if c := classificationJSON(r); c != nil {
+		e.field("classification", c)
+	}
+	// The application inventory is the apps lane's own document, emitted
+	// whole rather than summarised: `storix apps --json` prints the same
+	// shape, and a consumer that has the scan document should not have to
+	// run a second command to get the applications out of it.
+	if inventory, ok := scan.Apps(r); ok {
+		e.field("apps", inventory)
+	}
 	e.field("facts", factsJSON(r.Facts))
 	e.field("counters", r.Ledger.Counters)
 	e.field("errors", errorsJSON(r.Tree.Errors))
@@ -83,8 +95,11 @@ func displayPath(p string) string { return mac.DisplayPath(p) }
 // tracked by hand and every leaf value still goes through encoding/json to
 // get the escaping right.
 type jsonWriter struct {
-	w     *bufio.Writer
-	err   error
+	w   *bufio.Writer
+	err error
+	// class is the classification the per-node fields come from, nil when
+	// the scan has none: a tree without buckets is still a tree.
+	class *classify.Classification
 	stack []bool // per level: nothing written at this level yet
 }
 
@@ -173,6 +188,7 @@ func (e *jsonWriter) node(n *walk.Node, depth int, o Options) {
 			Apparent: n.Small.Apparent,
 		})
 	}
+	e.claim(n)
 
 	kept, dropped := children(n, depth, o)
 	if len(kept) > 0 {
@@ -188,6 +204,32 @@ func (e *jsonWriter) node(n *walk.Node, depth int, o Options) {
 		e.field("children_omitted", dropped)
 	}
 	e.end("}")
+}
+
+// claim writes the node's place in the classification: which bucket its bytes
+// belong to, whose they are, how safely they could be freed, and what decided
+// it.
+//
+// A node that carries no claim of its own gets its nearest ancestor's, marked
+// inherited, rather than nothing: the whole point of the inheritance is that
+// every byte under a claimed directory belongs to that claim, and a consumer
+// filtering the tree by bucket would otherwise lose most of the disk. A node
+// in no bucket at all — Other — is left without the fields, which is what
+// makes "no bucket key" searchable.
+func (e *jsonWriter) claim(n *walk.Node) {
+	cl, ok := e.class.OfNode(n)
+	if !ok {
+		return
+	}
+	e.field("bucket", cl.Bucket.ID())
+	if cl.Owner != "" {
+		e.field("owner", cl.Owner)
+	}
+	e.field("reclaim", cl.Reclaim.String())
+	e.field("source", cl.Source.String())
+	if _, explicit := e.class.ExplicitAtNode(n); !explicit {
+		e.field("inherited", true)
+	}
 }
 
 // children applies the depth and size limits, returning the children to emit
@@ -246,6 +288,179 @@ func flagNames(f walk.Flags) []string {
 		if f&e.flag != 0 {
 			out = append(out, e.name)
 		}
+	}
+	return out
+}
+
+// jsonClassification is the classification half of the document: what the
+// detectors found, what the engine concluded, and where the two disagreed.
+//
+// It is a summary and says so by its caps. The per-node truth is on the tree
+// nodes themselves, the bucket totals are under "ledger", and this section
+// answers the questions a consumer asks without walking either: which tools
+// were probed, what they hold, who owns the most bytes, and which directories
+// no rule has reached yet.
+type jsonClassification struct {
+	Detectors  []jsonDetector      `json:"detectors"`
+	Developer  []jsonDevGroup      `json:"developer"`
+	Containers []jsonRuntime       `json:"containers"`
+	Conflicts  jsonConflicts       `json:"conflicts"`
+	Owners     []scan.OwnerRow     `json:"owners"`
+	Unmatched  []scan.UnmatchedRow `json:"unmatched"`
+	// Timing is how long the engine took, which on a cached scan is how
+	// long the reclassification on load took.
+	Timing time.Duration `json:"timing_ns"`
+}
+
+// jsonDetector is one detector's status row. The probe commands are left out:
+// they run to megabytes for the inventory probes, and the evidence a reader
+// wants is on the claims.
+type jsonDetector struct {
+	Name     string        `json:"name"`
+	State    string        `json:"state"`
+	Reason   string        `json:"reason,omitempty"`
+	Duration time.Duration `json:"duration_ns"`
+	Verified bool          `json:"verified"`
+}
+
+// jsonDevGroup is one detector's developer rows.
+type jsonDevGroup struct {
+	Detector string           `json:"detector"`
+	Tools    []detect.Tool    `json:"tools,omitempty"`
+	Projects []detect.Project `json:"projects,omitempty"`
+	// Reclaimable is what the tool itself says it would free, which is not
+	// storix's arithmetic and is never summed into the ledger.
+	Reclaimable int64  `json:"reclaimable,omitempty"`
+	ReclaimNote string `json:"reclaim_note,omitempty"`
+}
+
+// jsonRuntime is one container runtime, tagged with the detector that found
+// it. The embedded runtime carries the two columns of docs/04: what the host
+// allocated and what the daemon believes it is using.
+type jsonRuntime struct {
+	Detector string `json:"detector"`
+	detect.Runtime
+}
+
+// jsonConflicts is where two sources claimed the same node.
+type jsonConflicts struct {
+	Total  int                  `json:"total"`
+	ByKind []scan.ConflictCount `json:"by_kind"`
+	Top    []jsonConflict       `json:"top"`
+}
+
+// jsonConflict is one disagreement, with both sources rendered the way the
+// why panel prints them.
+type jsonConflict struct {
+	Node   int32  `json:"node"`
+	Path   string `json:"path"`
+	Winner string `json:"winner"`
+	Loser  string `json:"loser"`
+	Bytes  int64  `json:"bytes"`
+}
+
+// How much of each list the document carries. The owners are the top 50 of
+// docs/03; the conflicts and unmatched roots are a sample for tuning, and the
+// full lists are in the scan, not in the report.
+const (
+	maxJSONOwners    = 50
+	maxJSONConflicts = 20
+	maxJSONUnmatched = 20
+)
+
+// classificationJSON assembles the section, nil when the scan has no
+// classification at all.
+func classificationJSON(r *scan.Result) *jsonClassification {
+	if r == nil || r.Class == nil {
+		return nil
+	}
+	out := &jsonClassification{
+		Detectors:  detectorsJSON(r),
+		Developer:  developerJSON(r),
+		Containers: runtimesJSON(r),
+		Conflicts:  conflictsJSON(r),
+		Owners:     scan.Owners(r.Class, maxJSONOwners),
+		Unmatched:  scan.Unmatched(r, maxJSONUnmatched),
+		Timing:     r.Timing.Classify,
+	}
+	if out.Owners == nil {
+		out.Owners = []scan.OwnerRow{}
+	}
+	if out.Unmatched == nil {
+		out.Unmatched = []scan.UnmatchedRow{}
+	}
+	return out
+}
+
+// detectorsJSON is the detectors table, in registry order.
+func detectorsJSON(r *scan.Result) []jsonDetector {
+	out := make([]jsonDetector, 0, len(r.Detectors))
+	for _, st := range r.Detectors {
+		out = append(out, jsonDetector{
+			Name:     st.Name,
+			State:    st.State.String(),
+			Reason:   st.Reason,
+			Duration: st.Duration,
+			Verified: st.Verified,
+		})
+	}
+	return out
+}
+
+// developerJSON is every detector's tool and project rows, in registry order.
+// Unlike the text section it is not filtered against the classification: a
+// consumer of the document can join on the node id itself, and dropping rows
+// here would hide a detector's own answer behind the engine's.
+func developerJSON(r *scan.Result) []jsonDevGroup {
+	out := make([]jsonDevGroup, 0, len(r.Detectors))
+	for _, st := range r.Detectors {
+		sum := r.Summaries[st.Name]
+		if len(sum.Tools) == 0 && len(sum.Projects) == 0 && sum.Reclaimable == 0 {
+			continue
+		}
+		out = append(out, jsonDevGroup{
+			Detector:    st.Name,
+			Tools:       sum.Tools,
+			Projects:    sum.Projects,
+			Reclaimable: sum.Reclaimable,
+			ReclaimNote: sum.ReclaimNote,
+		})
+	}
+	return out
+}
+
+// runtimesJSON is every container runtime the detectors reported.
+func runtimesJSON(r *scan.Result) []jsonRuntime {
+	out := make([]jsonRuntime, 0, 4)
+	for _, st := range r.Detectors {
+		for _, rt := range r.Summaries[st.Name].Runtimes {
+			out = append(out, jsonRuntime{Detector: st.Name, Runtime: rt})
+		}
+	}
+	return out
+}
+
+// conflictsJSON counts the disagreements and lists the largest few.
+func conflictsJSON(r *scan.Result) jsonConflicts {
+	out := jsonConflicts{
+		Total:  len(r.Class.Conflicts),
+		ByKind: scan.ConflictCounts(r.Class),
+		Top:    make([]jsonConflict, 0, maxJSONConflicts),
+	}
+	if out.ByKind == nil {
+		out.ByKind = []scan.ConflictCount{}
+	}
+	for i, c := range r.Class.Conflicts {
+		if i >= maxJSONConflicts {
+			break
+		}
+		out.Top = append(out.Top, jsonConflict{
+			Node:   c.Node,
+			Path:   c.Path,
+			Winner: c.Winner.String(),
+			Loser:  c.Loser.String(),
+			Bytes:  c.Bytes,
+		})
 	}
 	return out
 }
