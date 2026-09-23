@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -466,5 +467,220 @@ func TestAnUnreadableRegistrationIsNotAStaleOne(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(v.Evidence, " "), "which is gone") {
 		t.Errorf("evidence = %v, want it not to claim the path is gone", v.Evidence)
+	}
+}
+
+// TestOneDetectorServesTwoScansWithoutSharingState is the concurrency rule the
+// registry imposes on every detector: init registers one instance and every
+// scan in the process uses it.
+//
+// The probe used to hang its team-id resolver on that instance. Two scans in
+// one process — a rescan from the interface, two tests running in parallel —
+// then wrote the same field from two goroutines, and the second scan read back
+// whichever resolver finished last. Run under -race this is the assertion that
+// catches it; run without, the two fact sets still have to be each their own.
+func TestOneDetectorServesTwoScansWithoutSharingState(t *testing.T) {
+	t.Parallel()
+	c := buildCorpus(t)
+	// One pointer, exactly as detect.Register holds it, and both scans
+	// reach for it at once.
+	shared := &Detector{
+		TeamCachePath: filepath.Join(t.TempDir(), "teamids.json"),
+		Opts:          Options{Root: c.Root},
+	}
+
+	out := make(chan *Facts, 2)
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			raw, _ := shared.Probe(context.Background(), c.env(t))
+			f, _ := raw.(*Facts)
+			out <- f
+		}()
+	}
+	wg.Wait()
+	close(out)
+
+	for facts := range out {
+		if facts == nil {
+			t.Fatal("a concurrent probe produced no facts")
+		}
+		// Each probe's facts describe the machine it was pointed at and
+		// carry their own counts, which is what "not shared" means in the
+		// only terms a caller can check.
+		for _, b := range facts.AppDirBundles {
+			if !strings.HasPrefix(b.Path, c.Root+"/") {
+				t.Errorf("a probe of %s reported a bundle at %s", c.Root, b.Path)
+			}
+		}
+		if facts.CaskroomDir == "" {
+			t.Error("a concurrent probe lost its Caskroom")
+		}
+		if len(facts.Registry) == 0 {
+			t.Error("a concurrent probe lost its LaunchServices entries")
+		}
+	}
+}
+
+// TestTwoAnalysesOfOneDetectorAreIndependent is the same rule for the pure
+// half. Analyze is called again on every cache load, and it must read only the
+// facts it was handed.
+func TestTwoAnalysesOfOneDetectorAreIndependent(t *testing.T) {
+	t.Parallel()
+	c := buildCorpus(t)
+	d := c.detector(t)
+	raw, _ := d.Probe(context.Background(), c.env(t))
+	facts, ok := raw.(*Facts)
+	if !ok {
+		t.Fatalf("Probe returned %T", raw)
+	}
+	tree := c.walk(t)
+
+	full := d.AnalyzeAt(tree, facts, contextFor(c), time.Now().Add(365*24*time.Hour))
+	if full == nil || len(full.Owners) == 0 {
+		t.Fatal("the first analysis found nothing")
+	}
+
+	// A second analysis over empty facts knows nothing about the first,
+	// however many owners the first one found.
+	empty := d.AnalyzeAt(tree, &Facts{}, contextFor(c), time.Now().Add(365*24*time.Hour))
+	if empty == nil {
+		t.Fatal("the second analysis produced nothing at all")
+	}
+	if n := len(empty.Inventory.Casks); n != 0 {
+		t.Errorf("the second analysis inherited %d casks from the first", n)
+	}
+	if n := len(empty.Inventory.Registry); n != 0 {
+		t.Errorf("the second analysis inherited %d registry entries from the first", n)
+	}
+
+	// And the first analysis is unchanged by the second having run.
+	if len(full.Inventory.Casks) == 0 {
+		t.Error("the first analysis lost its casks to the second")
+	}
+}
+
+// TestTheCodesignCountBelongsToItsOwnScan is the same finding from the report's
+// side: "the second scan read no signatures" is a fact about a scan, and
+// reading it off the shared detector answered for whichever scan finished last.
+func TestTheCodesignCountBelongsToItsOwnScan(t *testing.T) {
+	t.Parallel()
+	c := buildCorpus(t)
+	cachePath := filepath.Join(t.TempDir(), "teamids.json")
+
+	d := c.detector(t)
+	d.TeamCachePath = cachePath
+	raw, _ := d.Probe(context.Background(), c.env(t))
+	first := codesignCalls(t, raw)
+	if first == 0 {
+		t.Fatal("the first probe read no signatures")
+	}
+
+	// The same detector value, a second probe, a warm cache: the count is
+	// the second probe's own and not a running total.
+	raw, _ = d.Probe(context.Background(), c.env(t))
+	if got := codesignCalls(t, raw); got != 0 {
+		t.Errorf("the second probe reports %d codesign calls, want 0", got)
+	}
+}
+
+// TestALateProbeStepDegradesRatherThanRunning covers the budget. The probe is
+// hidden behind the walk and is worth nothing if it outlives it, so a step that
+// arrives with no time left says so instead of issuing a command that will be
+// killed — and a step that was never run is evidence that was never gathered.
+func TestALateProbeStepDegradesRatherThanRunning(t *testing.T) {
+	t.Parallel()
+	pf := newProbeFixture(t)
+	pf.records["pkgutil --pkgs"] = probe.Result{Stdout: "com.example.one\n"}
+	pf.records[lsregisterPath+" -dump"] = probe.Result{Stdout: "path: /Applications/X.app\nidentifier: com.example.x\n"}
+
+	asked := map[string]bool{}
+	p := pf.prober()
+	inner := p.env.Runner
+	p.env.Runner = runnerFunc(func(ctx context.Context, c probe.Cmd) probe.Result {
+		asked[c.Key()] = true
+		return inner.Run(ctx, c)
+	})
+
+	spent, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	p.registry(spent)
+	p.receipts(spent)
+
+	if len(asked) != 0 {
+		t.Errorf("commands were issued with no budget left: %v", asked)
+	}
+	reasons := joinDegradations(p.f)
+	for _, want := range []string{probeLSRegister, probePkgutil, "budget"} {
+		if !strings.Contains(reasons, want) {
+			t.Errorf("degradations = %q, want one naming %q", reasons, want)
+		}
+	}
+}
+
+// TestADegradedLaunchServicesDumpCannotProduceAnOrphan is finding 2 for the
+// probe that used to time out on this machine every scan.
+//
+// The dump is where a bundle inside the tree gets its identifier when no
+// Info.plist was read for it. Without it that application is name-only, an
+// owner keyed on its bundle id stops matching it, and the verdict is an orphan
+// for software sitting on the disk.
+func TestADegradedLaunchServicesDumpCannotProduceAnOrphan(t *testing.T) {
+	t.Parallel()
+	c := buildCorpus(t)
+	env := c.env(t)
+	replay, ok := env.Runner.(*probe.Replay)
+	if !ok {
+		t.Fatalf("the corpus runner is %T", env.Runner)
+	}
+	replay.Records[lsregisterPath+" -dump"] = probe.Result{TimedOut: true, Duration: lsregisterTimeout}
+
+	d := c.detector(t)
+	raw, _ := d.Probe(context.Background(), env)
+	facts, ok := raw.(*Facts)
+	if !ok {
+		t.Fatalf("Probe returned %T", raw)
+	}
+	deg, degraded := degradationFor(facts, probeLSRegister)
+	if !degraded {
+		t.Fatalf("the timed-out dump was not recorded: %s", joinDegradations(facts))
+	}
+	if !strings.Contains(deg.Reason, "timed out") {
+		t.Errorf("degradation = %q, want it to say the dump timed out", deg.Reason)
+	}
+
+	opts := d.Opts
+	opts.CodesignAvailable = true
+	opts.Now = time.Now().Add(365 * 24 * time.Hour)
+	a := Analyze(c.walk(t), facts, contextFor(c), opts)
+
+	// A degradation is only worth recording if a reader meets it. The
+	// report carries the list, which is what makes a short inventory
+	// visibly short for a reason rather than quietly wrong.
+	rep := BuildReport(a, a.Claims())
+	if rep == nil {
+		t.Fatal("no report was built")
+	}
+	var named bool
+	for _, d := range rep.Degraded {
+		if d.Probe == probeLSRegister {
+			named = true
+		}
+	}
+	if !named {
+		t.Errorf("the report does not name the probe that did not answer: %v", rep.Degraded)
+	}
+
+	if orphans := a.OwnersInState(StateOrphanLikely); len(orphans) != 0 {
+		t.Errorf("orphans = %v, want none while LaunchServices went unread", orphans)
+	}
+	v := verdictByLabel(t, a, "GlobalProtect")
+	if v.State != StateUnknown {
+		t.Errorf("GlobalProtect state = %v, want unknown", v.State)
+	}
+	if !strings.Contains(strings.Join(v.Evidence, " "), "orphan evidence incomplete: lsregister") {
+		t.Errorf("evidence = %v, want it to name the probe that did not answer", v.Evidence)
 	}
 }

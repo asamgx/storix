@@ -2,6 +2,7 @@ package apps
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -222,5 +223,112 @@ func TestTeamResolverSeed(t *testing.T) {
 	}
 	if len(byTeam["HUAQ24HBR6"]) != 1 {
 		t.Errorf("the seeded team id was not used: %v", byTeam)
+	}
+}
+
+// TestTheTeamCacheIsNotWrittenThroughASymlink covers the one file this package
+// writes, which it may be writing as root under sudo.
+//
+// The old write put the document in "<path>.tmp" with os.WriteFile. That name
+// is predictable, so anyone who can create a file in the directory could get
+// there first with a symlink and have a privileged storix write the cache
+// through it, into a file of their choosing. A symlink left at the cache path
+// itself is the same trick one step later.
+func TestTheTeamCacheIsNotWrittenThroughASymlink(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cachePath := filepath.Join(dir, "teamids.json")
+	victim := filepath.Join(dir, "victim")
+	const untouched = "the contents of a file storix was never asked to write"
+	if err := os.WriteFile(victim, []byte(untouched), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Both of the names the write could have been steered through.
+	if err := os.Symlink(victim, cachePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, cachePath+".tmp"); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewTeamResolver(nil, cachePath)
+	r.cache["com.example.app@1.0"] = "ABCDE12345"
+	r.dirty = true
+	if err := r.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if got, err := os.ReadFile(victim); err != nil || string(got) != untouched {
+		t.Errorf("the linked-to file was written through: %q, %v", got, err)
+	}
+	fi, err := os.Lstat(cachePath)
+	if err != nil {
+		t.Fatalf("the cache was not written: %v", err)
+	}
+	if !fi.Mode().IsRegular() {
+		t.Fatalf("the cache path is still a %v, so the rename followed the link", fi.Mode().Type())
+	}
+	if perm := fi.Mode().Perm(); perm != teamCacheMode {
+		t.Errorf("mode = %o, want %o", perm, teamCacheMode)
+	}
+
+	// The written file is the cache and nothing else.
+	reloaded := NewTeamResolver(nil, cachePath)
+	if err := reloaded.Load(); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if reloaded.cache["com.example.app@1.0"] != "ABCDE12345" {
+		t.Errorf("the cache did not round-trip: %v", reloaded.cache)
+	}
+}
+
+// TestTheTeamCacheIsNotReadThroughASymlink is the other direction. A link left
+// where the cache belongs must not make a privileged reader open something
+// else, however little it would learn from the contents.
+func TestTheTeamCacheIsNotReadThroughASymlink(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cachePath := filepath.Join(dir, "teamids.json")
+	victim := filepath.Join(dir, "victim")
+	if err := os.WriteFile(victim, []byte(`{"version":1,"teams":{"a@1":"PLANTED123"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, cachePath); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewTeamResolver(nil, cachePath)
+	err := r.Load()
+	if err == nil {
+		t.Fatal("Load followed a symlink at the cache path")
+	}
+	if !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("error = %v, want it to name the reason", err)
+	}
+	if len(r.cache) != 0 {
+		t.Errorf("the planted file was loaded: %v", r.cache)
+	}
+}
+
+// TestSaveLeavesNoTemporaryFileBehind keeps the directory clean whichever way
+// the write went, so a half-written cache cannot be mistaken for one later.
+func TestSaveLeavesNoTemporaryFileBehind(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	r := NewTeamResolver(nil, filepath.Join(dir, "teamids.json"))
+	r.cache["com.example.app@1.0"] = "ABCDE12345"
+	r.dirty = true
+	if err := r.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() != "teamids.json" {
+			t.Errorf("Save left %q behind", e.Name())
+		}
 	}
 }

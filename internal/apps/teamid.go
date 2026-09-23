@@ -3,6 +3,9 @@ package apps
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +72,12 @@ func NewTeamResolver(runner probe.Runner, path string) *TeamResolver {
 
 // Load reads the cache file. A missing or unreadable file is not an error:
 // the cache is an optimisation, and starting cold costs a second once.
+//
+// The path is lstat'd first, so a symlink planted where the cache lives is
+// refused rather than followed. It is the same rule the sanctioned reader in
+// internal/detect enforces, for the same reason: this process may be running
+// under sudo, and a link is the cheapest way to make a privileged reader open
+// something it was not asked for.
 func (r *TeamResolver) Load() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -77,6 +86,13 @@ func (r *TeamResolver) Load() error {
 	}
 	if r.Path == "" {
 		return nil
+	}
+	fi, err := os.Lstat(r.Path)
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return &fs.PathError{Op: "read", Path: r.Path, Err: errors.New("not a regular file")}
 	}
 	data, err := os.ReadFile(r.Path)
 	if err != nil {
@@ -95,9 +111,29 @@ func (r *TeamResolver) Load() error {
 	return nil
 }
 
-// Save writes the cache file when a lookup added to it. Under sudo the file
-// and its directory are chowned to the invoking user, because a cache owned
-// by root is a cache the next unprivileged scan cannot write.
+// teamCacheMode is the permission the cache file carries. It is the invoking
+// user's own list of which developer signed which application, so nobody else
+// on the machine needs to read it.
+const teamCacheMode = 0o600
+
+// Save writes the cache file when a lookup added to it.
+//
+// It is the only file this package writes, and it is written the way
+// internal/cache writes a scan: into a fresh temporary file in the same
+// directory, whose name os.CreateTemp chooses and whose creation is exclusive,
+// then renamed over the target. Two properties follow, and this probe needs
+// both because it can be running as root under sudo.
+//
+// A predictable temporary name — the path with ".tmp" on the end — is a name
+// another user can create first, as a symlink to anywhere they like, and
+// os.WriteFile would have followed it and written this file's contents there
+// as root. os.CreateTemp cannot: the name is unguessable and the open carries
+// O_EXCL, so an existing entry of any kind fails the call.
+//
+// The rename then replaces whatever sits at the cache path, a symlink
+// included, rather than following it. Under sudo the result is handed back to
+// the invoking user, because a cache owned by root is a cache the next
+// unprivileged scan cannot write.
 func (r *TeamResolver) Save() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -113,29 +149,61 @@ func (r *TeamResolver) Save() error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp := r.Path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+
+	tmp, err := os.CreateTemp(dir, ".teamids-*.tmp")
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, r.Path); err != nil {
-		_ = os.Remove(tmp)
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
 		return err
 	}
-	chownToInvoker(dir)
-	chownToInvoker(r.Path)
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, teamCacheMode); err != nil {
+		return err
+	}
+	if err := chownToInvoker(tmpName); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, r.Path); err != nil {
+		return err
+	}
+	if err := chownToInvoker(dir); err != nil {
+		return err
+	}
 	r.dirty = false
 	return nil
 }
 
-// chownToInvoker hands a path back to the user who ran sudo. A failure is
-// ignored: the scan has already succeeded, and a cache file with the wrong
-// owner costs one re-run of codesign rather than a wrong answer.
-func chownToInvoker(path string) {
+// chownToInvoker hands a path back to the user who ran sudo.
+//
+// It does nothing unless this process is actually root through sudo. Both
+// halves of that matter: without the effective-uid check an ordinary run would
+// issue a chown it has no right to make, and SUDO_UID is a number the calling
+// environment chose, so acting on it while unprivileged means acting on
+// whatever that environment asked for. Lchown rather than Chown, so a symlink
+// is retargeted rather than its destination.
+//
+// A failure is not fatal to the scan, which has already succeeded; it is
+// returned so the caller can record it, and a cache file with the wrong owner
+// costs one re-run of codesign rather than a wrong answer.
+func chownToInvoker(path string) error {
+	if os.Geteuid() != 0 {
+		return nil
+	}
 	uid, gid, viaSudo := mac.InvokingUser()
 	if !viaSudo {
-		return
+		return nil
 	}
-	_ = os.Chown(path, uid, gid)
+	if err := os.Lchown(path, uid, gid); err != nil {
+		return fmt.Errorf("apps: giving %s to uid %d: %w", path, uid, err)
+	}
+	return nil
 }
 
 // Resolve fills in the team id of every bundle and returns the bundles

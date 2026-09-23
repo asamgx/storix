@@ -26,8 +26,14 @@ var forbidden = regexp.MustCompile(`\bos\.(Open|OpenFile|ReadFile|Create|WriteFi
 var allowed = map[string]*regexp.Regexp{
 	// The team id cache is the one file this package writes. Reading and
 	// writing it cannot touch a dataless file: it is a few hundred bytes
-	// that storix itself created.
-	"teamid.go": regexp.MustCompile(`\bos\.(ReadFile|WriteFile|MkdirAll|Rename|Remove|Chown)\(`),
+	// that storix itself created, and the read lstats the path first so a
+	// symlink left there is refused rather than followed.
+	//
+	// os.WriteFile is not among these. The write goes through os.CreateTemp
+	// and a rename, because a temporary name another user can predict is a
+	// name they can plant a symlink at, and this probe can be running as
+	// root under sudo.
+	"teamid.go": regexp.MustCompile(`\bos\.(ReadFile|MkdirAll|Rename|Remove)\(`),
 }
 
 func TestNoUnsanctionedFileAccess(t *testing.T) {

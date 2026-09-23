@@ -83,7 +83,7 @@ func TestMachineProbe(t *testing.T) {
 			resolved++
 		}
 	}
-	t.Logf("team ids     %d resolved in %d codesign calls", resolved, d.TeamResolver().Calls())
+	t.Logf("team ids     %d resolved in %d codesign calls", resolved, f.CodesignCalls)
 
 	inv := BuildInventory(nil, f, Paths{Home: home, User: user})
 	var missing []string

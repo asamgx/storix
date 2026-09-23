@@ -228,22 +228,22 @@ func (a *Analysis) verdictFor(o *OwnerResult, now time.Time, window time.Duratio
 // orphanProbes are the probes whose failure leaves an orphan verdict without
 // the evidence that would have contradicted it: the casks that name an
 // application, the installer receipts and the launch items that show something
-// is still configured to run, and the listing of the directories an
-// application is installed in. Lose any of those and the search an orphan
-// verdict claims to have done was not done.
+// is still configured to run, the LaunchServices register, and the listing of
+// the directories an application is installed in. Lose any of those and the
+// search an orphan verdict claims to have done was not done.
 //
-// LaunchServices is deliberately not among them, although it is the fourth
-// probe that feeds a verdict. Every use of the register here points the other
-// way: a registration at a path that is gone is what promotes an orphan from
-// possible to likely, and nothing treats a registration at a path that exists
-// as a reason to keep anything. Losing it therefore makes an orphan less
-// certain, never more, and the confidence grade already carries that. Capping
-// on it would have withdrawn every orphan on a machine where the dump is
-// merely slow — which, under a scan that is saturating the disk at the same
-// time, is most of them.
+// LaunchServices earns its place through the inventory rather than through the
+// verdict. Its most visible use points the other way — a registration at a
+// path that is gone is what promotes an orphan from possible to likely — but
+// the dump is also where a bundle inside the scanned tree gets its identifier
+// when no Info.plist was read for it. Without it those bundles are name-only,
+// an owner keyed on a bundle id stops matching the application that is sitting
+// on the disk, and the verdict is an orphan for software that never left.
+// That is a keep signal lost, which is exactly what this list is for.
 var orphanProbes = map[string]bool{
 	probeBrew:         true,
 	probePkgutil:      true,
+	probeLSRegister:   true,
 	probeApplications: true,
 	probeLaunchd:      true,
 }

@@ -42,6 +42,14 @@ import (
 func init() { detect.Register(300, New()) }
 
 // Detector is the apps detector. It satisfies detect.Detector.
+//
+// One instance of it is registered at init and shared by every scan in the
+// process, so nothing on it may be written by a probe. It carries
+// configuration a caller sets before any scan starts and nothing else: a probe
+// that stored its state here raced with a second scan.Run — a rescan from the
+// interface, two tests in parallel — and handed the second scan the first
+// one's answers. Whatever one probe learns belongs on its prober and comes
+// back in its Facts.
 type Detector struct {
 	// TeamCachePath overrides where the team id cache lives; empty selects
 	// DefaultTeamCachePath.
@@ -49,9 +57,6 @@ type Detector struct {
 
 	// Opts tune the analysis.
 	Opts Options
-
-	// teams is the resolver, kept so a caller can read its call count.
-	teams *TeamResolver
 }
 
 // New builds the detector with its defaults.
@@ -63,17 +68,39 @@ func (d *Detector) Name() string { return "apps" }
 // NewFacts returns an empty fact value for decoding a cached section.
 func (d *Detector) NewFacts() detect.Facts { return &Facts{} }
 
-// TeamResolver is the resolver the last probe used, or nil before one ran.
-func (d *Detector) TeamResolver() *TeamResolver { return d.teams }
-
 // probeTimeouts are the per-command budgets. They are generous next to what
 // the commands cost and short next to what a person will wait.
+//
+// lsregister is the outlier. The dump is two hundred thousand lines and takes
+// two or three seconds on an idle machine — but this probe runs while the walk
+// is saturating the same disk, and there it has been measured at 11.6 s. Ten
+// seconds was therefore a cap the machine crossed on a normal scan, and every
+// time it did, every bundle LaunchServices alone knew about disappeared from
+// the inventory and its owner fell to orphan-likely with nothing to contradict
+// it. The cap is what bounds a dump that has genuinely hung; probeBudget is
+// what bounds the probe.
 const (
 	brewTimeout       = 5 * time.Second
 	pkgutilTimeout    = 5 * time.Second
-	lsregisterTimeout = 10 * time.Second
+	lsregisterTimeout = 30 * time.Second
 	mdfindTimeout     = 5 * time.Second
 )
+
+// probeBudget is how long the whole probe may take.
+//
+// The probe is hidden behind the walk, which costs about twenty seconds on a
+// full volume, and it is worth nothing if it outlives it: the registry cancels
+// a detector at [detect.DefaultTimeout] and a cancelled apps probe yields no
+// inventory at all. So the budget is set under both, and every step's own cap
+// is clamped to what is left of it rather than summed on top. A step that
+// arrives with nothing left records a degradation and does not run, which is
+// the difference between a report that is missing a section and one that
+// quietly asserts the section was empty.
+const probeBudget = 18 * time.Second
+
+// minStepBudget is the least time worth giving a command. Below it the command
+// would be killed before it could answer, and the degradation says so instead.
+const minStepBudget = 250 * time.Millisecond
 
 // lsregisterPath is where LaunchServices keeps its dump tool. It is not on
 // any PATH, so it is named in full.
@@ -121,9 +148,20 @@ func (d *Detector) Probe(ctx context.Context, env detect.Env) (detect.Facts, err
 		User: path.Base(env.Home),
 	}}
 
+	ctx, cancel := context.WithTimeout(ctx, probeBudget)
+	defer cancel()
+
+	// The order is the order of decreasing tolerance for being cut short.
+	// The Caskroom is read from disk and costs nothing; LaunchServices is
+	// the one command that can take ten seconds and the one whose absence
+	// silently removes installed applications from the inventory, so it
+	// goes early while the budget is untouched. The receipt loop is last
+	// among the slow ones because a receipt that was not read is a keep
+	// signal that was not found, which degrade() records and the verdicts
+	// then refuse to call an orphan.
 	p.casks(ctx)
-	p.receipts(ctx)
 	p.registry(ctx)
+	p.receipts(ctx)
 	p.launchItems()
 	p.bundles(ctx)
 	p.groupContainers()
@@ -254,6 +292,29 @@ func UncheckedNote(full string, err error) string {
 	return note
 }
 
+// within clamps a command's own cap to what is left of the probe's budget.
+//
+// The second result is false when there is not enough left to be worth
+// starting, so the caller degrades rather than issuing a command it knows will
+// be killed. A context with no deadline — a test calling one step directly —
+// leaves the cap alone.
+func (p *prober) within(ctx context.Context, want time.Duration) (time.Duration, bool) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return want, true
+	}
+	left := time.Until(deadline)
+	if left < minStepBudget {
+		return 0, false
+	}
+	return min(want, left), true
+}
+
+// outOfTime is the degradation for a step the budget did not reach.
+func (p *prober) outOfTime(name string) {
+	p.degrade(name, "the apps probe used its "+probeBudget.String()+" budget before this ran")
+}
+
 // degrade records a probe that could not run.
 func (p *prober) degrade(name, reason string) {
 	p.f.Degraded = append(p.f.Degraded, Degradation{Probe: name, Reason: reason})
@@ -317,11 +378,16 @@ func (p *prober) casks(ctx context.Context) {
 // caskroomDir asks Homebrew where the Caskroom is, falling back to the two
 // standard locations so a machine whose brew is broken still gets its casks.
 func (p *prober) caskroomDir(ctx context.Context) string {
+	budget, ok := p.within(ctx, brewTimeout)
+	if !ok {
+		p.outOfTime(probeBrew)
+		return ""
+	}
 	res := p.env.Runner.Run(ctx, probe.Cmd{
 		Name:    "brew",
 		Args:    []string{"--caskroom"},
 		Env:     []string{"HOMEBREW_NO_AUTO_UPDATE=1", "HOMEBREW_NO_ANALYTICS=1", "NO_COLOR=1"},
-		Timeout: brewTimeout,
+		Timeout: budget,
 	})
 	if res.OK() {
 		if dir := strings.TrimSpace(res.Stdout); dir != "" {
@@ -340,8 +406,13 @@ func (p *prober) caskroomDir(ctx context.Context) string {
 // dropped: there are hundreds and none describes an application the user
 // installed.
 func (p *prober) receipts(ctx context.Context) {
+	budget, ok := p.within(ctx, pkgutilTimeout)
+	if !ok {
+		p.outOfTime(probePkgutil)
+		return
+	}
 	list := p.env.Runner.Run(ctx, probe.Cmd{
-		Name: "pkgutil", Args: []string{"--pkgs"}, Timeout: pkgutilTimeout,
+		Name: "pkgutil", Args: []string{"--pkgs"}, Timeout: budget,
 	})
 	if !list.OK() {
 		p.degrade(probePkgutil, list.Reason())
@@ -355,8 +426,14 @@ func (p *prober) receipts(ctx context.Context) {
 	ids := ParsePkgList(list.Stdout)
 	said, consecutive := false, 0
 	for i, id := range ids {
+		step, have := p.within(ctx, pkgutilTimeout)
+		if !have {
+			p.degrade(probePkgutil, "the apps probe used its "+probeBudget.String()+
+				" budget with "+itoa(len(ids)-i)+" receipts unread")
+			return
+		}
 		info := p.env.Runner.Run(ctx, probe.Cmd{
-			Name: "pkgutil", Args: []string{"--pkg-info", id}, Timeout: pkgutilTimeout,
+			Name: "pkgutil", Args: []string{"--pkg-info", id}, Timeout: step,
 		})
 		if !info.OK() {
 			consecutive++
@@ -394,8 +471,12 @@ func (p *prober) receipts(ctx context.Context) {
 
 // receiptFiles measures how much of a package is still on disk.
 func (p *prober) receiptFiles(ctx context.Context, rec *Receipt) {
+	budget, ok := p.within(ctx, pkgutilTimeout)
+	if !ok {
+		return
+	}
 	res := p.env.Runner.Run(ctx, probe.Cmd{
-		Name: "pkgutil", Args: []string{"--files", rec.PkgID}, Timeout: pkgutilTimeout,
+		Name: "pkgutil", Args: []string{"--files", rec.PkgID}, Timeout: budget,
 	})
 	if !res.OK() {
 		return
@@ -416,8 +497,13 @@ func (p *prober) receiptFiles(ctx context.Context, rec *Receipt) {
 // registry reads the LaunchServices database. It is optional: a failure is a
 // degradation, never fatal, because the register is corroborating evidence.
 func (p *prober) registry(ctx context.Context) {
+	budget, ok := p.within(ctx, lsregisterTimeout)
+	if !ok {
+		p.outOfTime(probeLSRegister)
+		return
+	}
 	res := p.env.Runner.Run(ctx, probe.Cmd{
-		Name: lsregisterPath, Args: []string{"-dump"}, Timeout: lsregisterTimeout,
+		Name: lsregisterPath, Args: []string{"-dump"}, Timeout: budget,
 	})
 	if !res.OK() {
 		p.degrade(probeLSRegister, res.Reason())
@@ -585,10 +671,15 @@ func (p *prober) readBundle(bundlePath string) BundleInfo {
 // application installed by JetBrains Toolbox or dragged to the Desktop is
 // known to exist. Without it those would look like orphans.
 func (p *prober) spotlight(ctx context.Context, seen map[string]bool) {
+	budget, ok := p.within(ctx, mdfindTimeout)
+	if !ok {
+		p.outOfTime(probeSpotlight)
+		return
+	}
 	res := p.env.Runner.Run(ctx, probe.Cmd{
 		Name:    "mdfind",
 		Args:    []string{"kMDItemContentType == 'com.apple.application-bundle'"},
-		Timeout: mdfindTimeout,
+		Timeout: budget,
 	})
 	if !res.OK() {
 		p.degrade(probeSpotlight, res.Reason())
@@ -650,7 +741,6 @@ func (p *prober) teamIDs(ctx context.Context) {
 	}
 	r := NewTeamResolver(p.env.Runner, cachePath)
 	_ = r.Load()
-	p.d.teams = r
 
 	inv := BuildInventory(nil, p.f, p.paths)
 	r.Resolve(ctx, inv.InstalledBundles())
@@ -658,6 +748,7 @@ func (p *prober) teamIDs(ctx context.Context) {
 		p.degrade(probeCodesign, "writing the team id cache: "+err.Error())
 	}
 	p.f.TeamIDs = r.Cache()
+	p.f.CodesignCalls = r.Calls()
 	if len(p.f.TeamIDs) == 0 {
 		p.degrade(probeCodesign, "no signatures could be read")
 	}

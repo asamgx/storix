@@ -91,8 +91,16 @@ type Facts struct {
 	TeamIDs map[string]string `json:"teamIds,omitempty"`
 	// GroupContainerNames are the names under ~/Library/Group Containers,
 	// which decide whether codesign needs to run at all.
-	GroupContainerNames []string      `json:"groupContainerNames,omitempty"`
-	Degraded            []Degradation `json:"degraded,omitempty"`
+	GroupContainerNames []string `json:"groupContainerNames,omitempty"`
+	// CodesignCalls is how many signatures this probe read.
+	//
+	// It belongs to the scan that read them rather than to the shared
+	// detector, which is the whole point of it being here: the acceptance
+	// criterion is that a second scan on the same machine reads none, and
+	// asking a process-wide object about it gave the answer of whichever
+	// scan happened to finish last.
+	CodesignCalls int           `json:"codesignCalls,omitempty"`
+	Degraded      []Degradation `json:"degraded,omitempty"`
 }
 
 // Kind identifies the facts in the cache section and the detector registry.

@@ -530,11 +530,11 @@ func TestCorpusCodesignRunsOnceThenNever(t *testing.T) {
 
 	first := c.detector(t)
 	first.TeamCachePath = cachePath
-	if _, err := first.Probe(context.Background(), c.env(t)); err != nil {
+	firstFacts, err := first.Probe(context.Background(), c.env(t))
+	if err != nil {
 		t.Logf("probe degraded, which the corpus tolerates: %v", err)
 	}
-	firstCalls := first.TeamResolver().Calls()
-	if firstCalls == 0 {
+	if codesignCalls(t, firstFacts) == 0 {
 		t.Fatal("the first scan should have read some signatures")
 	}
 	if _, err := os.Stat(cachePath); err != nil {
@@ -543,12 +543,25 @@ func TestCorpusCodesignRunsOnceThenNever(t *testing.T) {
 
 	second := c.detector(t)
 	second.TeamCachePath = cachePath
-	if _, err := second.Probe(context.Background(), c.env(t)); err != nil {
+	secondFacts, err := second.Probe(context.Background(), c.env(t))
+	if err != nil {
 		t.Logf("probe degraded: %v", err)
 	}
-	if got := second.TeamResolver().Calls(); got != 0 {
+	if got := codesignCalls(t, secondFacts); got != 0 {
 		t.Errorf("the second scan invoked codesign %d times, want 0", got)
 	}
+}
+
+// codesignCalls reads how many signatures a probe read, from the facts that
+// probe produced rather than from the detector it ran on. The detector is a
+// process-wide singleton and would answer for whichever scan finished last.
+func codesignCalls(t *testing.T, raw detect.Facts) int {
+	t.Helper()
+	f, ok := raw.(*Facts)
+	if !ok || f == nil {
+		t.Fatalf("Probe returned %T, want *Facts", raw)
+	}
+	return f.CodesignCalls
 }
 
 // TestCorpusVerdicts is milestone A3's acceptance criterion: the state of
