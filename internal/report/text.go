@@ -66,6 +66,9 @@ type Options struct {
 	// Version is the storix version recorded in the JSON document. The
 	// report cannot read it from internal/cli, which imports this package.
 	Version string
+	// Debug adds the sections that exist to tune storix rather than to
+	// describe the machine, such as the directories no rule matched.
+	Debug bool
 }
 
 // withDefaults fills the zero values in.
@@ -93,6 +96,11 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 
 	t := &textReport{w: w, r: r, l: r.Ledger, o: o, st: st, u: u}
 	t.header()
+	t.ledgerSection()
+	t.buckets()
+	t.developer()
+	t.containers()
+	t.detectors()
 	t.volume()
 	t.container()
 	t.topDirs()
@@ -102,6 +110,7 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 	t.snapshots()
 	t.hints()
 	t.counters()
+	t.unmatched()
 	return nil
 }
 
@@ -120,6 +129,7 @@ func Unaccounted(w io.Writer, r *scan.Result, o Options) error {
 	t := &textReport{w: w, r: r, l: r.Ledger, o: o, st: newStyles(o.Color), u: o.Units}
 	t.volume()
 	t.container()
+	t.detectors()
 	t.skipped()
 	t.unreadable()
 	t.dataless()

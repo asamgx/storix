@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -167,10 +168,10 @@ func screen(m *Model) []byte {
 	return []byte(strings.ReplaceAll(m.View().Content, "\r\n", "\n"))
 }
 
-// TestProgressViewCountsAndSwitchesToBrowse drives the progress view from a
-// fake event channel: the counters have to appear while the walk runs, and
-// the finished scan has to bring up the browser by itself.
-func TestProgressViewCountsAndSwitchesToBrowse(t *testing.T) {
+// TestProgressViewCountsAndSwitchesToTheLedger drives the progress view from
+// a fake event channel: the counters have to appear while the walk runs, and
+// the finished scan has to bring up the ledger by itself.
+func TestProgressViewCountsAndSwitchesToTheLedger(t *testing.T) {
 	m := newTestModel(t, nil)
 	events := make(chan walk.Event, 1)
 	result := make(chan scanOutcome, 1)
@@ -189,11 +190,11 @@ func TestProgressViewCountsAndSwitchesToBrowse(t *testing.T) {
 
 	result <- scanOutcome{res: fixtureResult(t)}
 	close(events)
-	waitFor(t, tm, "/fixture")
+	waitFor(t, tm, "LEDGER")
 
 	final := finish(t, tm)
-	if final.view != viewBrowse {
-		t.Errorf("the interface stayed on view %d, want the browser", final.view)
+	if final.view != viewLedger {
+		t.Errorf("the interface stayed on view %d, want the ledger", final.view)
 	}
 	if final.progress.ticks < 5 {
 		t.Errorf("the progress view took %d updates, want every one of the 5 events", final.progress.ticks)
@@ -226,6 +227,7 @@ func TestProgressViewRendersItsCounters(t *testing.T) {
 func TestBrowseNavigatesSortsAndFilters(t *testing.T) {
 	res := fixtureResult(t)
 	m := newTestModel(t, res)
+	m.view = viewBrowse
 	tm := start(t, m)
 	waitFor(t, tm, "Movies/")
 
@@ -320,13 +322,13 @@ func TestUnaccountedViewShowsTheLedgerSections(t *testing.T) {
 	res := fixtureResult(t)
 	m := newTestModel(t, res)
 	tm := start(t, m)
-	waitFor(t, tm, "/fixture")
+	waitFor(t, tm, "LEDGER")
 
-	press(tm, "2")
+	press(tm, "6")
 	waitFor(t, tm, "VOLUME")
-	press(tm, "tab") // back to the browser
+	press(tm, "2") // back to the browser
 	waitFor(t, tm, "Applications/")
-	press(tm, "tab") // and out again
+	press(tm, "u") // and out again by the alias
 	waitFor(t, tm, "VOLUME")
 
 	final := finish(t, tm)
@@ -339,6 +341,7 @@ func TestUnaccountedViewShowsTheLedgerSections(t *testing.T) {
 // TestHelpOverlayOpensAndCloses checks the overlay and the key that closes it.
 func TestHelpOverlayOpensAndCloses(t *testing.T) {
 	m := newTestModel(t, fixtureResult(t))
+	m.view = viewBrowse
 	tm := start(t, m)
 	waitFor(t, tm, "/fixture")
 	press(tm, "?")
@@ -382,8 +385,8 @@ func TestQuitDuringAScanCancelsItAndShowsThePartialTree(t *testing.T) {
 	waitFor(t, tm, "INCOMPLETE")
 
 	final := finish(t, tm)
-	if final.view != viewBrowse {
-		t.Errorf("an interrupted scan ended on view %d, want the browser", final.view)
+	if final.view != viewLedger {
+		t.Errorf("an interrupted scan ended on view %d, want the ledger", final.view)
 	}
 }
 
@@ -407,5 +410,119 @@ func TestAFailedScanLeavesWithItsError(t *testing.T) {
 	}
 	if !errors.Is(final.err, want) {
 		t.Errorf("the model ended with %v, want the scan error", final.err)
+	}
+}
+
+// TestASecondQuitPressLeavesWhileTheScanIsStillRunning is the other half of
+// the quit rule: the first press asks the walk to stop, and the second
+// leaves whether or not it has.
+//
+// The session here never returns a result, which is the case that matters: a
+// walk wedged on an unresponsive mount must not hold the terminal hostage.
+func TestASecondQuitPressLeavesWhileTheScanIsStillRunning(t *testing.T) {
+	m := newTestModel(t, nil)
+	events := make(chan walk.Event, 1)
+	result := make(chan scanOutcome, 1)
+	// The real cancel is a context's, which is idempotent; this one has to
+	// be too, so that a regression here fails as a program that would not
+	// leave rather than as a panic in the fake.
+	cancelled := make(chan struct{})
+	var once sync.Once
+	m.session = &session{
+		gen: 1, events: events, result: result, start: time.Now(),
+		cancel: func() { once.Do(func() { close(cancelled) }) },
+	}
+	t.Cleanup(func() { close(events) })
+
+	tm := start(t, m)
+	events <- walk.ProgressEvent{Progress: walk.Progress{Dirs: 3, Files: 9, Current: mac.DataRoot}}
+	waitFor(t, tm, "scanning")
+
+	press(tm, "q")
+	select {
+	case <-cancelled:
+	case <-time.After(waitDuration):
+		t.Fatal("the first quit press did not cancel the scan")
+	}
+	waitFor(t, tm, "press q again")
+
+	press(tm, "q")
+	tm.tm.WaitFinished(t, teatest.WithFinalTimeout(waitDuration))
+
+	final, ok := tm.tm.FinalModel(t).(*Model)
+	if !ok {
+		t.Fatal("the final model is not a *Model")
+	}
+	if final.session == nil {
+		t.Error("the interface left claiming the scan had finished; it had not")
+	}
+	if final.err != nil {
+		t.Errorf("leaving during a scan is not a failure, but the model carries %v", final.err)
+	}
+}
+
+// TestALateMessageFromAReplacedScanIsDropped is what the generation on every
+// message is for: a rescan replaces the session, and the walk it replaced
+// goes on sending for as long as it takes to unwind.
+//
+// The messages are delivered to Update directly rather than through a
+// program, because what is under test is that nothing changed, and a screen
+// that did not change draws nothing to wait for.
+func TestALateMessageFromAReplacedScanIsDropped(t *testing.T) {
+	res := fixtureResult(t)
+	m := newTestModel(t, res)
+	m.view = viewLedger
+
+	// The second scan is the one running; generation 1 is over.
+	m.gen = 2
+	m.progress = newProgress()
+	m.session = &session{
+		gen: 2, events: make(chan walk.Event, 1), result: make(chan scanOutcome, 1),
+		cancel: func() {}, start: time.Now(),
+	}
+
+	stale := fixtureResult(t)
+	for _, msg := range []tea.Msg{
+		progressMsg{gen: 1, p: walk.Progress{Dirs: 999, Files: 999, Bytes: 999}},
+		walkDoneMsg{gen: 1},
+		eventsClosedMsg{gen: 1},
+		scanDoneMsg{gen: 1, res: stale},
+	} {
+		if _, cmd := m.Update(msg); cmd != nil {
+			t.Errorf("%T from the replaced scan armed a command", msg)
+		}
+	}
+
+	switch {
+	case m.progress.ticks != 0 || m.progress.p.Dirs != 0:
+		t.Errorf("the replaced scan's counters reached the view: %d ticks, %+v", m.progress.ticks, m.progress.p)
+	case m.session == nil || m.session.gen != 2:
+		t.Error("the replaced scan's result ended the running session")
+	case m.result != res:
+		t.Error("the replaced scan's result was adopted over the one on screen")
+	case m.view != viewLedger:
+		t.Errorf("the view moved to %d", m.view)
+	case m.status != "":
+		t.Errorf("the replaced scan wrote the status line: %q", m.status)
+	}
+
+	// The rescan key is what makes a second generation, and it refuses to
+	// make a third while the second is still running.
+	if cmd := m.key(tea.KeyPressMsg{Code: 'r', Text: "r"}); cmd != nil {
+		t.Error("the rescan key started a scan over a running one")
+	}
+	if m.gen != 2 || m.session.gen != 2 {
+		t.Errorf("the rescan key replaced the running session: gen %d", m.gen)
+	}
+	if !strings.Contains(m.status, "already running") {
+		t.Errorf("the rescan key said %q, want that a scan is already running", m.status)
+	}
+
+	// What the running scan sends is still taken.
+	if _, cmd := m.Update(progressMsg{gen: 2, p: walk.Progress{Dirs: 7}}); cmd == nil {
+		t.Error("the running scan's progress was dropped along with the old one's")
+	}
+	if m.progress.p.Dirs != 7 || m.progress.ticks != 1 {
+		t.Errorf("the running scan's counters did not land: %+v", m.progress.p)
 	}
 }

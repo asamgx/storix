@@ -198,8 +198,11 @@ func Walk(ctx context.Context, opts Options) (*Tree, error) {
 	tree := &Tree{Root: root, Opts: opts, Started: time.Now()}
 
 	stopReporter := make(chan struct{})
+	reporterDone := make(chan struct{})
 	if opts.Events != nil {
-		go reporter(opts.Events, &w.counts, tree.Started, opts.ProgressInterval, stopReporter)
+		go reporter(opts.Events, &w.counts, tree.Started, opts.ProgressInterval, stopReporter, reporterDone)
+	} else {
+		close(reporterDone)
 	}
 
 	// Wake parked workers when the context is cancelled.
@@ -233,7 +236,11 @@ func Walk(ctx context.Context, opts Options) (*Tree, error) {
 	}
 	wg.Wait()
 	close(watcherDone)
+	// The reporter is joined, not merely told to stop: the caller owns the
+	// event channel and closes it once Walk is back, so no goroutine of
+	// ours may still be holding a send when that happens.
 	close(stopReporter)
+	<-reporterDone
 
 	w.finalize(tree)
 	tree.Finished = time.Now()

@@ -1,0 +1,102 @@
+[
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--prefix"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 15000000000
+    },
+    "result": {
+      "stdout": "/opt/homebrew\n",
+      "exit_code": 0,
+      "duration_ns": 30650959
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--cellar"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 15000000000
+    },
+    "result": {
+      "stdout": "/opt/homebrew/Cellar\n",
+      "exit_code": 0,
+      "duration_ns": 17543667
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--caskroom"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 15000000000
+    },
+    "result": {
+      "stdout": "/opt/homebrew/Caskroom\n",
+      "exit_code": 0,
+      "duration_ns": 22958333
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--cache"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 15000000000
+    },
+    "result": {
+      "stdout": "/Users/andrew/Library/Caches/Homebrew\n",
+      "exit_code": 0,
+      "duration_ns": 20714375
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "list",
+        "--formula",
+        "--versions"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 15000000000
+    },
+    "result": {
+      "stdout": "aalib 1.4rc5_2\naom 3.13.1\naribb24 1.0.4\nautoconf 2.72\nazure-cli 2.77.0\nbat 0.25.0_1\nbrotli 1.2.0\nbtop 1.4.5\nbun 1.3.3\nc-ares 1.34.6\nca-certificates 2025-12-02 2026-03-19\ncairo 1.18.4\ncbonsai 1.4.2\ncertifi 2025.11.12\ncffi 2.0.0_1\ncjson 1.7.19\ncloud-sql-proxy 2.21.3\ncmatrix 2.0\ncoreutils 9.9\ncowsay 3.8.4\ncroc 10.3.1\ncrush 0.22.1\ncryptography 46.0.3\ncurlie 1.8.2\ndav1d 1.5.2\ndbmate 2.28.0\neza 0.22.1\nfastfetch 2.56.1\nfd 10.2.0\nffmpeg 8.0_1\nfiglet 2.2.5\nflac 1.5.0\nfontconfig 2.17.1\nfortune 9708\nfreetype 2.14.1_1\nfreeze 0.2.2\nfrei0r 2.5.0\nfribidi 1.0.16\nfzf 0.64.0\ngettext 1.0\ngh 2.76.1\ngiflib 5.2.2\ngit 2.50.1\ngit-delta 0.18.2_3\nglib 2.86.1 2.86.2\nglow 2.1.1\ngmp 6.3.0\ngnu-getopt 2.41.1\ngnupg 2.4.8\ngnutls 3.8.11\ngo 1.25.5\ngolangci-lint 2.7.1\ngpgme 2.0.1\ngpgmepp 2.0.0\ngraphite2 1.3.14\ngrex 1.4.6\ngti 1.9.1\ngum 0.17.0\nharfbuzz 12.1.0\nhelm 4.0.1\nhighway 1.3.0\nicu4c@77 77.1\nicu4c@78 78.3\nimagemagick 7.1.2-9\nimath 3.2.2\njasper 4.2.8\njpeg-turbo 3.1.2\njpeg-xl 0.11.1_3\njq 1.8.1\njrnl 4.2.1\njson-c 0.18\nk6 1.4.2\nk9s 0.50.16\nkrb5 1.22.2\nkubernetes-cli 1.34.1\nkustomize 5.7.1\nlame 3.100\nlazygit 0.53.0\nleptonica 1.86.0\nlibarchive 3.8.2\nlibass 0.17.4\nlibassuan 3.0.2\nlibb2 0.98.1\nlibbluray 1.4.0\nlibde265 1.0.16\nlibdeflate 1.25\nlibevent 2.1.12_1\nlibgcrypt 1.11.2\nlibgit2 1.9.1\nlibgpg-error 1.55 1.56\nlibheif 1.20.2\nlibidn2 2.3.8\nlibksba 1.6.7\nliblqr 0.4.3\nlibmicrohttpd 1.0.2\nlibnghttp2 1.68.0\nlibnghttp3 1.13.1\nlibngtcp2 1.18.0\nlibogg 1.3.6\nlibomp 21.1.7\nlibpng 1.6.53 1.6.50\nlibpq 18.1\nlibraw 0.21.4\nlibrist 0.2.11\nlibsamplerate 0.2.2\nlibsndfile 1.2.2_1\nlibsodium 1.0.20\nlibsoxr 0.1.3\nlibssh 0.11.3\nlibssh2 1.11.1\nlibtasn1 4.20.0\nlibtiff 4.7.1\nlibtool 2.5.4\nlibudfread 1.2.0\nlibultrahdr 1.4.0\nlibunibreak 6.1\nlibunistring 1.4.2\nlibusb 1.0.29\nlibuv 1.51.0\nlibvidstab 1.1.1\nlibvmaf 3.0.0\nlibvorbis 1.3.7\nlibvpx 1.15.2\nlibwebsockets 4.5.2\nlibx11 1.8.12\nlibxau 1.0.12\nlibxcb 1.17.0\nlibxdmcp 1.1.5\nlibxext 1.3.6\nlibxrender 0.9.12\nlibyaml 0.2.5\nlibzip 1.11.4\nlittle-cms2 2.17\nlolcat 100.0.1\nlpeg 1.1.0\nlsd 1.2.0\nluajit 2.1.1753364724 2.1.1748459687\nluv 1.51.0-1\nlz4 1.10.0\nlzo 2.10\nm4 1.4.20\nmad 0.15.1b\nmas 4.0.0\nmbedtls 3.6.4\nmbedtls@3 3.6.5\nmpdecimal 4.0.1\nmpg123 1.33.3\nncurses 6.5\nneofetch 7.1.0\nneovim 0.11.4\nnethogs 0.8.8\nnettle 3.10.2\nnode 25.2.1\nnpth 1.8\nnspr 4.38.2\nnss 3.118.1\nnushell 0.109.1\nnvm 0.40.3\nollama 0.12.3\noniguruma 6.9.10\nopencore-amr 0.1.6\nopenexr 3.4.2_1 3.4.4\nopenjpeg 2.5.4\nopenjph 0.25.3 0.25.0\nopenssl@3 3.6.2\nopus 1.5.2\nopusfile 0.12_1\np11-kit 0.25.10\npango 1.57.0_1\npass 1.7.4\npcre2 10.47\npinentry 1.3.2\npipx 1.7.1_1\npixman 0.46.4\npkgconf 2.5.1\npoppler 25.12.0\npostgresql@17 17.9\nposting 2.9.2\npycparser 2.23_1\npydantic 2.12.5\npyenv 2.6.16 2.6.5\npyenv-virtualenv 1.2.4\npyrefly 0.43.1\npyright 1.1.407\npython@3.12 3.12.12\npython@3.13 3.13.8 3.13.5\npython@3.14 3.14.1\nqrencode 4.1.1\nrav1e 0.8.1\nreadline 8.3.3\nreattach-to-user-namespace 2.9\nredis 8.4.0\nripgrep 15.1.0\nrubberband 4.0.0\nruff 0.12.5\nscrcpy 3.3.3\nscreenresolution 1.6\nsdl2 2.32.10\nsevenzip 25.01\nshared-mime-info 2.4_1\nsimdjson 4.2.3\nskate 1.0.1\nsnappy 1.2.2\nsox 14.4.2_6\nspeex 1.2.1\nsqlite 3.50.4 3.51.1\nsrt 1.5.4\nstarship 1.23.0\nstow 2.4.1\nsvt-av1 3.1.2\ntcl-tk@8 8.6.17\ntelnet 306\nterraform 1.12.2\ntesseract 5.5.1\nthefuck 3.32\ntheora 1.2.0\ntmux 3.6a\ntree 2.2.1\ntree-sitter 0.25.10\nttyd 1.7.7_6\nunbound 1.24.2\nunibilium 2.1.2\nutf8proc 2.11.3\nuv 0.8.3\nuvwasi 0.0.23\nvhs 0.10.0\nwatch 4.0.5\nwebp 1.6.0\nwebsocat 1.14.0\nwget 1.25.0\nwimlib 1.14.4\nx264 r3222\nx265 4.1\nxorgproto 2024.1\nxvid 1.3.7\nxz 5.8.3\nyazi 25.5.31\nyyjson 0.12.0\nzeromq 4.3.5_2\nzimg 3.0.6\nzlib 1.3.1\nzoxide 0.9.8\nzsh-autosuggestions 0.7.1\nzsh-history-substring-search 1.1.0\nzsh-syntax-highlighting 0.8.0\nzsh-you-should-use 1.10.0\nzstd 1.5.7_1\n",
+      "exit_code": 0,
+      "duration_ns": 1132129208
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "cleanup",
+        "-n"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 15000000000
+    },
+    "result": {
+      "stdout": "Would remove: /Users/andrew/Library/Caches/Homebrew/bootsnap/d2fe20dcaac1dfd932074d89a3fa98c61e62ad39b80bee7a6f7886937aaa92c0 (1,108 files, 10.2MB)\nWould remove: /opt/homebrew/Library/Homebrew/vendor/portable-ruby/4.0.2_1 (1,705 files, 34.6MB)\nWould remove: /opt/homebrew/Library/Homebrew/vendor/portable-ruby/4.0.3 (1,704 files, 34.6MB)\nWould remove: /opt/homebrew/Library/Homebrew/vendor/portable-ruby/4.0.5_1 (1,707 files, 34.6MB)\nWould remove: /opt/homebrew/Library/Homebrew/vendor/portable-ruby/4.0.6 (1,707 files, 34.6MB)\n==\u003e This operation would free approximately 148.7MB of disk space.\n",
+      "stderr": "Warning: Skipping aom: most recent version 3.15.0 not installed\nWarning: Skipping autoconf: most recent version 2.73 not installed\nWarning: Skipping azure-cli: most recent version 2.90.0 not installed\nWarning: Skipping bat: most recent version 0.26.1 not installed\nWarning: Skipping btop: most recent version 1.4.7 not installed\nWarning: Skipping oven-sh/bun/bun: most recent version 1.4.2 not installed\nWarning: Skipping c-ares: most recent version 1.34.8 not installed\nWarning: Skipping ca-certificates: most recent version 2026-08-13 not installed\nWarning: Skipping cairo: most recent version 1.18.6 not installed\nWarning: Skipping certifi: most recent version 2026.7.22 not installed\nWarning: Skipping cffi: most recent version 2.1.1 not installed\nWarning: Skipping cloud-sql-proxy: most recent version 2.25.4 not installed\nWarning: Skipping coreutils: most recent version 9.12 not installed\nWarning: Skipping croc: most recent version 11.5.3 not installed\nWarning: Skipping charmbracelet/tap/crush: most recent version 0.96.1 not installed\nWarning: Skipping cryptography: most recent version 50.0.1 not installed\nWarning: Skipping dav1d: most recent version 1.5.4 not installed\nWarning: Skipping dbmate: most recent version 2.36.0 not installed\nWarning: Skipping eza: most recent version 0.23.5 not installed\nWarning: Skipping fastfetch: most recent version 2.68.1 not installed\nWarning: Skipping fd: most recent version 10.5.0 not installed\nWarning: Skipping ffmpeg: most recent version 9.0.2 not installed\nWarning: Skipping fontconfig: most recent version 2.18.3 not installed\nWarning: Skipping freetype: most recent version 2.14.3 not installed\nWarning: Skipping frei0r: most recent version 3.5.0 not installed\nWarning: Skipping fribidi: most recent version 1.0.17 not installed\nWarning: Skipping fzf: most recent version 0.74.4 not installed\nWarning: Skipping gh: most recent version 2.101.0 not installed\nWarning: Skipping giflib: most recent version 6.1.3 not installed\nWarning: Skipping git: most recent version 2.55.0 not installed\nWarning: Skipping git-delta: most recent version 0.19.2 not installed\nWarning: Skipping glib: most recent version 2.90.0 not installed\nWarning: Skipping glow: most recent version 3.0.0 not installed\nWarning: Skipping gnu-getopt: most recent version 2.42.4 not installed\nWarning: Skipping gnupg: most recent version 2.5.22 not installed\nWarning: Skipping gnutls: most recent version 3.8.13_2 not installed\nWarning: Skipping go: most recent version 1.27.1 not installed\nWarning: Skipping golangci-lint: most recent version 2.13.2 not installed\nWarning: Skipping gpgme: most recent version 2.2.0 not installed\nWarning: Skipping gpgmepp: most recent version 2.2.0 not installed\nWarning: Skipping graphite2: most recent version 1.3.15 not installed\nWarning: Skipping gum: most recent version 2.0.1 not installed\nWarning: Skipping harfbuzz: most recent version 14.5.0 not installed\nWarning: Skipping helm: most recent version 4.3.0 not installed\nWarning: Skipping highway: most recent version 1.4.0 not installed\nWarning: Skipping icu4c@77: most recent version 77.1_1 not installed\nWarning: Skipping imagemagick: most recent version 7.1.2-31 not installed\nWarning: Skipping imath: most recent version 3.2.3 not installed\nWarning: Skipping jasper: most recent version 4.2.9 not installed\nWarning: Skipping jpeg-turbo: most recent version 3.2.0 not installed\nWarning: Skipping jpeg-xl: most recent version 0.12.0 not installed\nWarning: Skipping jq: most recent version 1.8.2 not installed\nWarning: Skipping jrnl: most recent version 4.6 not installed\nWarning: Skipping json-c: most recent version 0.19 not installed\nWarning: Skipping k6: most recent version 2.3.0 not installed\nWarning: Skipping derailed/k9s/k9s: most recent version 0.51.0 not installed\nWarning: Skipping kubernetes-cli: most recent version 1.37.0 not installed\nWarning: Skipping kustomize: most recent version 5.8.1 not installed\nWarning: Skipping lame: most recent version 4.0 not installed\nWarning: Skipping lazygit: most recent version 0.65.1 not installed\nWarning: Skipping leptonica: most recent version 1.87.0 not installed\nWarning: Skipping libarchive: most recent version 3.8.9 not installed\nWarning: Skipping libass: most recent version 0.17.5_1 not installed\nWarning: Skipping libbluray: most recent version 1.5.0 not installed\nWarning: Skipping libde265: most recent version 1.1.3 not installed\nWarning: Skipping libdeflate: most recent version 1.26 not installed\nWarning: Skipping libevent: most recent version 2.1.13 not installed\nWarning: Skipping libgcrypt: most recent version 1.12.4 not installed\nWarning: Skipping libgit2: most recent version 1.9.7 not installed\nWarning: Skipping libgpg-error: most recent version 1.61 not installed\nWarning: Skipping libheif: most recent version 1.23.5 not installed\nWarning: Skipping libksba: most recent version 1.8.1 not installed\nWarning: Skipping libmicrohttpd: most recent version 1.0.10 not installed\nWarning: Skipping libnghttp2: most recent version 1.70.0 not installed\nWarning: Skipping libnghttp3: most recent version 1.18.0 not installed\nWarning: Skipping libngtcp2: most recent version 1.25.0 not installed\nWarning: Skipping libomp: most recent version 23.1.2 not installed\nWarning: Skipping libpng: most recent version 1.6.58 not installed\nWarning: Skipping libpq: most recent version 18.6 not installed\nWarning: Skipping libraw: most recent version 0.22.2 not installed\nWarning: Skipping librist: most recent version 0.2.20 not installed\nWarning: Skipping libsodium: most recent version 1.0.22 not installed\nWarning: Skipping libssh: most recent version 0.12.2 not installed\nWarning: Skipping libssh2: most recent version 1.11.1_5 not installed\nWarning: Skipping libtasn1: most recent version 4.21.0 not installed\nWarning: Skipping libtiff: most recent version 4.7.2 not installed\nWarning: Skipping libtool: most recent version 2.6.2 not installed\nWarning: Skipping libultrahdr: most recent version 2.0.2 not installed\nWarning: Skipping libunibreak: most recent version 8.0 not installed\nWarning: Skipping libusb: most recent version 1.0.30 not installed\nWarning: Skipping libuv: most recent version 1.52.1 not installed\nWarning: Skipping libvidstab: most recent version 1.1.2 not installed\nWarning: Skipping libvmaf: most recent version 3.2.1 not installed\nWarning: Skipping libvpx: most recent version 1.17.0 not installed\nWarning: Skipping libwebsockets: most recent version 5.0.0 not installed\nWarning: Skipping libx11: most recent version 1.8.13 not installed\nWarning: Skipping libxext: most recent version 1.3.7 not installed\nWarning: Skipping libzip: most recent version 1.11.4_1 not installed\nWarning: Skipping little-cms2: most recent version 2.19.1 not installed\nWarning: Skipping lpeg: most recent version 1.1.0_2 not installed\nWarning: Skipping luajit: most recent version 2.1.1788856981 not installed\nWarning: Skipping luv: most recent version 1.52.1-0 not installed\nWarning: Skipping m4: most recent version 1.4.21 not installed\nWarning: Skipping mad: most recent version 0.16.4 not installed\nWarning: Skipping mas: most recent version 7.0.0 not installed\nWarning: Skipping mbedtls: most recent version 4.2.0 not installed\nWarning: Skipping mbedtls@3: most recent version 3.6.7 not installed\nWarning: Skipping mpg123: most recent version 1.33.7 not installed\nWarning: Skipping ncurses: most recent version 6.6 not installed\nWarning: Skipping neovim: most recent version 0.12.5_1 not installed\nWarning: Skipping nethogs: most recent version 0.9.0 not installed\nWarning: Skipping nettle: most recent version 4.0 not installed\nWarning: Skipping node: most recent version 26.9.0 not installed\nWarning: Skipping nspr: most recent version 4.40 not installed\nWarning: Skipping nss: most recent version 3.129 not installed\nWarning: Skipping nushell: most recent version 0.115.1 not installed\nWarning: Skipping nvm: most recent version 0.40.8 not installed\nWarning: Skipping ollama: most recent version 0.34.3 not installed\nWarning: Skipping openexr: most recent version 3.4.15_1 not installed\nWarning: Skipping openjph: most recent version 0.32.0 not installed\nWarning: Skipping openssl@3: most recent version 3.",
+      "exit_code": 0,
+      "duration_ns": 11201936958
+    }
+  }
+]

@@ -1,0 +1,76 @@
+[
+  {
+    "cmd": {
+      "Name": "orb",
+      "Args": [
+        "list",
+        "-f",
+        "json"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "[]\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "docker",
+      "Args": [
+        "context",
+        "ls",
+        "--format",
+        "json"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "{\"Current\":false,\"Description\":\"Current DOCKER_HOST based configuration\",\"DockerEndpoint\":\"unix:///var/run/docker.sock\",\"Error\":\"\",\"Name\":\"default\"}\n{\"Current\":true,\"Description\":\"OrbStack\",\"DockerEndpoint\":\"unix:///Users/andrew/.orbstack/run/docker.sock\",\"Error\":\"\",\"Name\":\"orbstack\"}\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "docker",
+      "Args": [
+        "--context",
+        "orbstack",
+        "system",
+        "df",
+        "--format",
+        "json"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 10000000000
+    },
+    "result": {
+      "stdout": "{\"Active\":\"11\",\"Reclaimable\":\"5.379GB (54%)\",\"Size\":\"9.853GB\",\"TotalCount\":\"36\",\"Type\":\"Images\"}\n{\"Active\":\"2\",\"Reclaimable\":\"135.5MB (99%)\",\"Size\":\"135.7MB\",\"TotalCount\":\"12\",\"Type\":\"Containers\"}\n{\"Active\":\"3\",\"Reclaimable\":\"938.7MB (19%)\",\"Size\":\"4.755GB\",\"TotalCount\":\"23\",\"Type\":\"Local Volumes\"}\n{\"Active\":\"0\",\"Reclaimable\":\"4.638GB\",\"Size\":\"5.085GB\",\"TotalCount\":\"72\",\"Type\":\"Build Cache\"}\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "docker",
+      "Args": [
+        "--context",
+        "orbstack",
+        "system",
+        "df",
+        "-v"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 10000000000
+    },
+    "result": {
+      "stdout": "Images space usage:\n\nREPOSITORY                                                                       TAG            IMAGE ID       CREATED         SIZE      SHARED SIZE   UNIQUE SIZE   CONTAINERS\narmchair-api-verify                                                              latest         cae084b7d9a6   5 weeks ago     622MB     136.6MB       485.5MB       0\narmchair-db_migration                                                            latest         857dda5de215   5 weeks ago     93MB      92.8MB        153.6kB       0\narmchair-api                                                                     slack-verify   020f534ac865   6 weeks ago     616MB     136.6MB       479.5MB       0\n<none>                                                                           <none>         577255f4431d   2 months ago    92.9MB    92.8MB        89.21kB       1\napres-automation                                                                 smoke          858b26bb1159   2 months ago    174MB     8.658MB       165.7MB       0\nghcr.io/github/github-mcp-server                                                 latest         ed0fe7f4529d   2 months ago    54.3MB    0B            54.31MB       0\n<none>                                                                           <none>         6270825e6733   2 months ago    92.9MB    92.8MB        74.43kB       0\n<none>                                                                           <none>         2c2abfe63d97   2 months ago    92.9MB    92.8MB        72.87kB       0\nnorthamerica-northeast1-docker.pkg.dev/armchair-prod/armchair-builds/sse-probe   v2             ca8ba4511efd   2 months ago    136MB     135.7MB       837B          0\n\u2026 truncated for the fixture \u2026\n",
+      "exit_code": 0
+    }
+  }
+]

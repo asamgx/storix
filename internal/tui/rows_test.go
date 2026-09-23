@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/walk"
 )
@@ -49,7 +50,7 @@ func rowNames(rows []row) []string {
 }
 
 func TestBuildRowsSortsBySizeAndAggregatesSmallFiles(t *testing.T) {
-	rows := buildRows(sampleDir(), rowOpts{sort: sortSize})
+	rows := buildRows(sampleDir(), rowOpts{sort: sortSize}, nil)
 	want := []string{
 		"Applications", "Photos.photoslibrary", "movie.mov", "partial",
 		"… 1,234 small files", "alias.bin", "evicted.psd", "locked",
@@ -65,21 +66,21 @@ func TestBuildRowsSortsBySizeAndAggregatesSmallFiles(t *testing.T) {
 
 func TestBuildRowsFlipsAndFilters(t *testing.T) {
 	dir := sampleDir()
-	asc := buildRows(dir, rowOpts{sort: sortSize, desc: true})
+	asc := buildRows(dir, rowOpts{sort: sortSize, desc: true}, nil)
 	if asc[0].name != "locked" {
 		t.Errorf("ascending by size starts with %q, want the empty directory", asc[0].name)
 	}
-	byName := buildRows(dir, rowOpts{sort: sortName})
+	byName := buildRows(dir, rowOpts{sort: sortName}, nil)
 	if byName[0].name != "Applications" {
 		t.Errorf("by name starts with %q", byName[0].name)
 	}
-	byCount := buildRows(dir, rowOpts{sort: sortCount})
+	byCount := buildRows(dir, rowOpts{sort: sortCount}, nil)
 	if byCount[0].name != "… 1,234 small files" {
 		t.Errorf("by file count starts with %q", byCount[0].name)
 	}
 	// The aggregate row is not a name the user can filter on, so filtering
 	// drops it.
-	filtered := buildRows(dir, rowOpts{sort: sortSize, filter: "PHOTO"})
+	filtered := buildRows(dir, rowOpts{sort: sortSize, filter: "PHOTO"}, nil)
 	if got := rowNames(filtered); len(got) != 1 || got[0] != "Photos.photoslibrary" {
 		t.Errorf("filter %q matched %v", "PHOTO", got)
 	}
@@ -87,8 +88,8 @@ func TestBuildRowsFlipsAndFilters(t *testing.T) {
 
 func TestBuildRowsOpensBundlesOnlyWhenAsked(t *testing.T) {
 	dir := sampleDir()
-	closed := buildRows(dir, rowOpts{sort: sortName})
-	open := buildRows(dir, rowOpts{sort: sortName, bundles: true})
+	closed := buildRows(dir, rowOpts{sort: sortName}, nil)
+	open := buildRows(dir, rowOpts{sort: sortName, bundles: true}, nil)
 	find := func(rows []row, name string) row {
 		for _, r := range rows {
 			if r.name == name {
@@ -113,7 +114,7 @@ func TestBuildRowsShowsApparentBytesOnRequest(t *testing.T) {
 	dir := &walk.Node{Name: "/d", Kind: walk.KindDir}
 	n := node(dir, "sparse.img", walk.KindFile, 0, 1, 0)
 	n.Apparent = 10 << 30
-	rows := buildRows(dir, rowOpts{sort: sortSize, apparent: true})
+	rows := buildRows(dir, rowOpts{sort: sortSize, apparent: true}, nil)
 	if rows[0].bytes != 10<<30 {
 		t.Errorf("apparent bytes = %d, want %d", rows[0].bytes, int64(10)<<30)
 	}
@@ -122,7 +123,7 @@ func TestBuildRowsShowsApparentBytesOnRequest(t *testing.T) {
 func TestRenderRowMarksWhatARowIs(t *testing.T) {
 	st := NewStyles(false, true)
 	dir := sampleDir()
-	rows := buildRows(dir, rowOpts{sort: sortName})
+	rows := buildRows(dir, rowOpts{sort: sortName}, nil)
 	c := layout(120)
 	var lines []string
 	for _, r := range rows {
@@ -141,12 +142,16 @@ func TestRenderRowMarksWhatARowIs(t *testing.T) {
 	}
 }
 
-// wideDir builds a directory of n children, the shape the browse view has to
-// stay fast on.
-func wideDir(n int) *walk.Node {
+// wideEntries is the size of the directory the frame budget is measured on:
+// twenty thousand children is the shape a package cache or a node_modules
+// takes on a real machine, and the one the browse view has to stay fast on.
+const wideEntries = 20_000
+
+// wideDir builds that directory.
+func wideDir() *walk.Node {
 	dir := &walk.Node{Name: "/System/Volumes/Data/wide", Kind: walk.KindDir}
-	dir.Children = make([]*walk.Node, 0, n)
-	for i := range n {
+	dir.Children = make([]*walk.Node, 0, wideEntries)
+	for i := range wideEntries {
 		node(dir, "entry-"+pad0(i), walk.KindFile, int64(i)*4096, 1, 0)
 	}
 	return dir
@@ -167,7 +172,7 @@ func pad0(i int) string {
 // cached against the directory.
 func TestBrowseRendersALargeDirectoryWithinAFrame(t *testing.T) {
 	const keypresses = 200
-	b := newBrowse(wideDir(20_000))
+	b := newBrowse(wideDir())
 	b.setSize(120, 40)
 	st := NewStyles(false, true)
 	b.visible() // the first build sorts; the keypresses that follow must not
@@ -178,14 +183,70 @@ func TestBrowseRendersALargeDirectoryWithinAFrame(t *testing.T) {
 		_ = b.View(st, units.Decimal, "live")
 	}
 	per := time.Since(start) / keypresses
-	t.Logf("%s per keypress over %d keypresses in a %d-entry directory", per, keypresses, 20_000)
+	t.Logf("%s per keypress over %d keypresses in a %d-entry directory", per, keypresses, wideEntries)
+	if raceDetector {
+		t.Skip("measured, not judged: the race detector costs an order of magnitude")
+	}
 	if per > 16*time.Millisecond {
 		t.Errorf("a keypress costs %s, over the 16 ms frame budget", per)
 	}
 }
 
+// TestBrowseRendersChipsWithinAFrame is the same budget with the owner and
+// reclaim columns drawn, which is what every row on a classified scan
+// carries at a hundred columns or more.
+//
+// The tags are stamped on the built rows rather than taken from a real
+// classification: the engine's answer belongs to a walked tree, and what is
+// under measurement here is the cost of drawing two more columns twenty
+// thousand times.
+func TestBrowseRendersChipsWithinAFrame(t *testing.T) {
+	const keypresses = 200
+	b := newBrowse(wideDir())
+	b.setSize(120, 40)
+	st := NewStyles(false, true)
+	for i := range b.visible() {
+		b.rows[i].owner = "OrbStack"
+		b.rows[i].reclaim = classify.ToolManaged
+		b.rows[i].classified = true
+	}
+	if c := layout(120); c.owner == 0 || c.reclaim == 0 {
+		t.Fatal("the layout dropped the chips at 120 columns; the budget would not be measuring them")
+	}
+
+	start := time.Now()
+	for i := range keypresses {
+		b.move(1 + i%3)
+		_ = b.View(st, units.Decimal, "live")
+	}
+	per := time.Since(start) / keypresses
+	t.Logf("%s per keypress over %d keypresses in a %d-entry directory with chips", per, keypresses, wideEntries)
+	if raceDetector {
+		t.Skip("measured, not judged: the race detector costs an order of magnitude")
+	}
+	if per > 16*time.Millisecond {
+		t.Errorf("a keypress with chips costs %s, over the 16 ms frame budget", per)
+	}
+}
+
+func BenchmarkBrowseRenderWithChips(b *testing.B) {
+	m := newBrowse(wideDir())
+	m.setSize(120, 40)
+	st := NewStyles(false, true)
+	for i := range m.visible() {
+		m.rows[i].owner = "OrbStack"
+		m.rows[i].reclaim = classify.ToolManaged
+		m.rows[i].classified = true
+	}
+	b.ResetTimer()
+	for i := 0; b.Loop(); i++ {
+		m.move(1 + i%3)
+		_ = m.View(st, units.Decimal, "live")
+	}
+}
+
 func BenchmarkBrowseRender(b *testing.B) {
-	m := newBrowse(wideDir(20_000))
+	m := newBrowse(wideDir())
 	m.setSize(120, 40)
 	st := NewStyles(false, true)
 	m.visible()
@@ -197,10 +258,10 @@ func BenchmarkBrowseRender(b *testing.B) {
 }
 
 func BenchmarkBuildRows(b *testing.B) {
-	dir := wideDir(20_000)
+	dir := wideDir()
 	b.ResetTimer()
 	for b.Loop() {
-		_ = buildRows(dir, rowOpts{sort: sortSize})
+		_ = buildRows(dir, rowOpts{sort: sortSize}, nil)
 	}
 }
 

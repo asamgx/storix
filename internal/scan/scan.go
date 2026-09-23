@@ -13,8 +13,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/asamgx/storix/internal/apps"
+	"github.com/asamgx/storix/internal/classify"
+	"github.com/asamgx/storix/internal/detect"
 	"github.com/asamgx/storix/internal/ledger"
 	"github.com/asamgx/storix/internal/mac"
+	"github.com/asamgx/storix/internal/probe"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/volume"
 	"github.com/asamgx/storix/internal/walk"
@@ -48,6 +52,28 @@ type Config struct {
 	// phase 1a it changes no path: those directories are attempted either
 	// way and land in the unreadable list when they are denied.
 	System bool
+	// Home is the directory the classifier and the detectors treat as the
+	// scan user's home; empty selects the invoking user's, which under sudo
+	// is the user who ran sudo and not root. A test scanning a fixture
+	// points it at the fixture's own home so the detectors look there
+	// rather than at the machine running the test.
+	Home string
+	// CodeRoots are the directories holding the user's projects, as display
+	// paths. Nil selects classify.DefaultCodeRoots; whichever list is used,
+	// only the roots that exist in the walked tree are passed to the
+	// classifier, so a machine without ~/Projects gets no rules for it.
+	CodeRoots []string
+	// Detectors is the set of tool detectors to run; nil selects
+	// detect.Default.
+	Detectors *detect.Registry
+	// DisabledDetectors names detectors to switch off. They still appear
+	// in the report, as Disabled, so a --disable-detector that matched
+	// nothing is visible rather than silent.
+	DisabledDetectors []string
+	// Probe runs the detectors' commands; nil selects probe.Exec. Tests
+	// inject a probe.Replay so a detector can be exercised on a machine
+	// that does not have the tool.
+	Probe probe.Runner
 	// Units selects decimal or binary formatting for the text the ledger
 	// builds into its verdict.
 	Units units.Format
@@ -70,12 +96,18 @@ type Config struct {
 // inside walk.Walk and is not separable from it without instrumenting the
 // walker for a number nobody acts on.
 type Timing struct {
-	Facts   time.Duration `json:"facts_ns"`
-	Walk    time.Duration `json:"walk_ns"`
-	Finish  time.Duration `json:"finish_ns"`
-	Ledger  time.Duration `json:"ledger_ns"`
-	Persist time.Duration `json:"persist_ns"`
-	Total   time.Duration `json:"total_ns"`
+	Facts time.Duration `json:"facts_ns"`
+	Walk  time.Duration `json:"walk_ns"`
+	// Probe is the wall time of the slowest detector probe. The probes run
+	// beside the walk, so this is not part of the total: it is here to
+	// answer whether any of them outlasted the walk and cost the scan
+	// anything.
+	Probe    time.Duration `json:"probe_ns"`
+	Finish   time.Duration `json:"finish_ns"`
+	Classify time.Duration `json:"classify_ns"`
+	Ledger   time.Duration `json:"ledger_ns"`
+	Persist  time.Duration `json:"persist_ns"`
+	Total    time.Duration `json:"total_ns"`
 }
 
 // Result is a finished scan.
@@ -84,6 +116,36 @@ type Result struct {
 	Facts  *volume.Facts
 	Tree   *walk.Tree
 	Ledger *ledger.Ledger
+
+	// Class is the classification of the tree: which bucket every node's
+	// bytes belong to and why. It is recomputed on every scan and on every
+	// cache load rather than stored, because the catalog lives in the
+	// binary and the answer must follow the binary, not the cache file.
+	Class *classify.Classification
+
+	// Detectors is what happened to each tool detector, in registry order:
+	// whether it ran, what it found, how long it took, and every command it
+	// issued. It is the detectors table of the report and the evidence
+	// behind a "detector:orbstack" claim.
+	Detectors []detect.Status
+	// probes are the finished probe outcomes, kept only so that Persist
+	// can store each detector's facts: the facts are what a cache load
+	// re-classifies from, and they live nowhere else on the result. They
+	// are unexported because a reader wants Detectors and Summaries; a
+	// result loaded from a cache has none of them, since nothing probed.
+	probes []detect.Outcome
+
+	// Summaries is each detector's typed rows, keyed by detector name. The
+	// containers and developer views render these; nothing here is summed
+	// into the ledger, whose arithmetic stays in internal/ledger.
+	Summaries map[string]detect.Summary
+
+	// Apps is the application inventory: what is installed, what each
+	// application costs across the buckets, and whose data is left behind.
+	// It is nil for a cache written before the inventory existed; read it
+	// through Apps rather than directly, which distinguishes that case
+	// from a machine with no applications.
+	Apps *apps.Report
 
 	// CachePath is where Persist stored the result, empty when it did not
 	// run. FromCache and CacheAge are set by the loader, not by Run.
@@ -101,6 +163,11 @@ type Result struct {
 	DatalessErr error
 	FinishErr   error
 	PersistErr  error
+	// RecordErr is why STORIX_RECORD_PROBES did not write its fixtures. It
+	// is a developer's request rather than part of a scan, but a silent
+	// failure would leave them re-running a twenty-second walk wondering
+	// where the files went.
+	RecordErr error
 }
 
 // Root returns the scanned root as a user sees it.
@@ -142,8 +209,16 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 	res.Facts = facts
 	res.Timing.Facts = time.Since(t0)
 
+	// The probes start here and are joined after the walk, so their cost is
+	// hidden behind the twenty seconds the walk takes. Stop is deferred
+	// rather than called at the join, because every early return below
+	// would otherwise leave goroutines and child processes behind.
+	reg := registry(cfg)
+	run := reg.Start(ctx, detectEnv(cfg), nil)
+	defer run.Stop()
+
 	t0 = time.Now()
-	tree, err := walk.Walk(ctx, walkOptions(cfg, root, facts))
+	tree, err := walk.Walk(ctx, walkOptions(cfg, root, facts, reg, detectContext(cfg)))
 	res.Timing.Walk = time.Since(t0)
 	if err != nil {
 		return nil, err
@@ -155,7 +230,23 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 	res.Timing.Finish = time.Since(t0)
 
 	t0 = time.Now()
-	res.Ledger = ledger.Build(facts, tree, cfg.Units)
+	outcomes := run.Wait(detect.DefaultGrace)
+	claims, summaries, statuses := detect.Classify(tree, outcomes, classifyContext(tree, cfg))
+	res.Detectors, res.Summaries, res.probes = statuses, summaries, outcomes
+	res.Timing.Probe = slowestProbe(statuses)
+	res.RecordErr = recordProbes(statuses)
+
+	res.Class = classifyWith(tree, cfg, claims)
+	res.Timing.Classify = time.Since(t0)
+
+	// The application report is built from the claims that won their node,
+	// so it runs after the engine and before the ledger. It never fails:
+	// a scan that could not attribute its applications is still a correct
+	// scan of the disk.
+	res.Apps = appsReport(tree, outcomes, res.Class, classifyContext(tree, cfg))
+
+	t0 = time.Now()
+	res.Ledger = ledger.BuildClassified(facts, tree, cfg.Units, res.Class)
 	res.Timing.Ledger = time.Since(t0)
 
 	if cfg.Persist != nil && !cfg.NoCache {
@@ -176,12 +267,13 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 // exemption prefixes, on the other hand, are written relative to the data
 // volume, so they mean nothing under a partial root and are switched off
 // there rather than silently matching nothing.
-func walkOptions(cfg Config, root string, f *volume.Facts) walk.Options {
+func walkOptions(cfg Config, root string, f *volume.Facts, reg *detect.Registry, cx classify.Context) walk.Options {
 	opts := walk.Options{
 		Root:               root,
 		Parallelism:        cfg.Parallelism,
 		SmallFileThreshold: cfg.SmallFileThreshold,
 		Events:             cfg.Events,
+		RetainLeaf:         detect.RetainLeaf(reg, cx),
 	}
 	if f.Mounts != nil {
 		opts.Mounts = mountGuard{f.Mounts}

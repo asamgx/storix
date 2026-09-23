@@ -8,11 +8,16 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
+	"github.com/asamgx/storix/internal/detect"
+	"github.com/asamgx/storix/internal/detect/xcode"
 	"github.com/asamgx/storix/internal/mac"
+	"github.com/asamgx/storix/internal/probe"
+	"github.com/asamgx/storix/internal/scan"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/volume"
 )
@@ -69,6 +74,7 @@ func runDoctor(ctx context.Context, w io.Writer, root string) error {
 	doctorNested(w, facts)
 	doctorSnapshots(w, facts)
 	doctorPaths(w)
+	doctorTools(ctx, w)
 	return nil
 }
 
@@ -300,4 +306,86 @@ func doctorPID(pid int) string {
 		return ""
 	}
 	return strconv.Itoa(pid)
+}
+
+// doctorDetectorTools names the external binaries each registered detector's
+// Probe looks for with Env.Has, mirroring the phase 1b plan's own detector
+// table (docs/04). A detector absent from this map walks static catalog
+// paths only and never asks the machine for anything, so it can never be
+// Missing.
+var doctorDetectorTools = map[string][]string{
+	"aimodels": {"ollama"},
+	"apps":     {"pkgutil", "codesign"},
+	"colima":   {"colima", "limactl"},
+	"docker":   {"docker"},
+	"go":       {"go"},
+	"homebrew": {"brew"},
+	"nix":      {"nix"},
+	"node":     {"bun", "npm", "pnpm", "yarn"},
+	"orbstack": {"docker", "orb"},
+	"podman":   {"podman"},
+	"projects": {"git"},
+	"python":   {"pip", "pip3"},
+	"ruby":     {"gem"},
+	"rust":     {"cargo", "rustup"},
+	"xcode":    {"xcode-select", "xcodebuild", "xcrun"},
+}
+
+// doctorTools prints, for every registered detector, whether its tools are on
+// the augmented PATH a scan's probes search — the same LookPath a real scan
+// runs, not a fresh guess — and, for xcode, the first-launch gate verdict.
+//
+// The gate is the one probe this command runs itself rather than leaving to
+// a scan: `xcodebuild -checkFirstLaunchStatus` only, through the xcode
+// detector's own gated Probe, which is the sole caller in the whole program
+// allowed to run `xcrun simctl` and does so only after the gate has passed.
+// Nothing here ever calls simctl directly.
+func doctorTools(ctx context.Context, w io.Writer) {
+	env := detect.DefaultEnv(&probe.Exec{}, mac.ScanPath(scan.HomeDir()))
+	reg := detect.Default()
+
+	tw := doctorSection(w, "tools (detectors)")
+	doctorf(tw, "  %s\t%s\t%s\n", "detector", "tool", "path")
+	var missing []string
+	for _, det := range reg.Detectors() {
+		name := det.Name()
+		tools := doctorDetectorTools[name]
+		if len(tools) == 0 {
+			doctorRow(tw, name, "%s", "no external tool; walks static catalog paths only")
+			continue
+		}
+		found := false
+		for i, tool := range tools {
+			label := ""
+			if i == 0 {
+				label = name
+			}
+			if p, err := env.LookPath(tool); err == nil {
+				doctorf(tw, "  %s\t%s\t%s\n", label, tool, p)
+				found = true
+			} else {
+				doctorf(tw, "  %s\t%s\t%s\n", label, tool, "not found")
+			}
+		}
+		if !found {
+			missing = append(missing, fmt.Sprintf("%s: none of %s found on the augmented PATH",
+				name, strings.Join(tools, ", ")))
+		}
+	}
+	_ = tw.Flush()
+
+	tw = doctorSection(w, "xcode gate")
+	facts, _ := xcode.New().Probe(ctx, env)
+	xf, _ := facts.(*xcode.Facts)
+	doctorRow(tw, "verdict", "%s", xf.Verdict())
+	_ = tw.Flush()
+
+	tw = doctorSection(w, "detectors that would be Missing")
+	if len(missing) == 0 {
+		doctorRow(tw, "none", "%s", "every detector found at least one of its tools on the path")
+	}
+	for _, reason := range missing {
+		doctorf(tw, "  %s\n", reason)
+	}
+	_ = tw.Flush()
 }

@@ -1,0 +1,36 @@
+[
+  {
+    "cmd": {"Name": "xcode-select", "Args": ["-p"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {"stdout": "/Applications/Xcode.app/Contents/Developer\n", "exit_code": 0, "duration_ns": 6000000}
+  },
+  {
+    "cmd": {
+      "Name": "xcodebuild",
+      "Args": ["-checkFirstLaunchStatus"],
+      "Env": ["DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"],
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {"exit_code": 0, "duration_ns": 800000000}
+  },
+  {
+    "cmd": {
+      "Name": "xcrun",
+      "Args": ["simctl", "list", "devices", "-j"],
+      "Env": ["DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"],
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {"stdout": "not json at all\n", "exit_code": 0, "duration_ns": 300000000}
+  },
+  {
+    "cmd": {
+      "Name": "xcrun",
+      "Args": ["simctl", "runtime", "list", "-j"],
+      "Env": ["DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"],
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {"stdout": "{{{\n", "exit_code": 0, "duration_ns": 200000000}
+  }
+]

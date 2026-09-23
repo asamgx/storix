@@ -1,0 +1,42 @@
+
+APPLICATIONS  (54 bundles, 51 casks, 9 from the App Store)   footprint = bundle + linked data
+  APP                     FOOTPRINT    BUNDLE     DATA  CACHES     DEV  VM  SOURCE    CONFIDENCE
+  ──────────────────────────────────────────────────────────────────────────────────────────────
+  OrbStack  ████████████   19.53 GB  728.6 MB  18.8 GB  5.7 MB       -   -  app       strong
+  VS Code   ██░░░░░░░░░░    2.92 GB    400 MB   700 MB  120 MB  1.7 GB   -  app+cask  strong
+
+CASK INSTALLED, APPLICATION MISSING  (2)
+  CASK     EXPECTED APP  INSTALLED         DATA
+  ─────────────────────────────────────────────
+  cursor   Cursor.app    2025-07-23    376.8 MB
+  devtoys  DevToys.app   2025-07-24  none found
+
+  Cursor  376.8 MB  cask-only
+            cask cursor is still installed, installed 2025-07-23
+            Cursor.app is not on the volume
+            214 MB ~/Library/Caches/com.todesktop.230313mzl4w4u92 (app-data)
+
+ORPHAN-LIKELY OWNERS  (2, 373.3 MB)
+  OWNER        SIZE  LAST WRITE  CONFIDENCE
+  ─────────────────────────────────────────
+  Warp     373.1 MB  2026-02-21  likely
+  TabNine    217 KB  -           possible
+
+  Warp  373.1 MB  orphan-likely
+            no application bundle for Warp anywhere on the volume
+            the directory is named after a bundle identifier, which only an installation creates
+
+  TabNine  217 KB  orphan-likely
+            no application bundle for TabNine anywhere on the volume
+            the only evidence is the directory name, so this is possible rather than likely
+
+IN THE TRASH  (1, 5.4 MB)
+
+  DynamicLake Pro  5.4 MB  in-trash
+            the only copy is in the Trash: ~/.Trash/DynamicLakePro.app
+
+UNKNOWN OWNER  (1 of 553 directories, largest first)
+  SomethingNobodyKnows  122.8 MB  ~/Library/Caches/SomethingNobodyKnows
+
+DEGRADED PROBES
+  lsregister  timed out after 10s

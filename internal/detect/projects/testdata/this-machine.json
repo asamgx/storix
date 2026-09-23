@@ -1,0 +1,442 @@
+[
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/brewsync",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1789803184\n",
+      "exit_code": 0,
+      "duration_ns": 19187833
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/comp",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1785331606\n",
+      "exit_code": 0,
+      "duration_ns": 22184209
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/dot",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1761318704\n",
+      "exit_code": 0,
+      "duration_ns": 19291000
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/fofo",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1787610501\n",
+      "exit_code": 0,
+      "duration_ns": 16998042
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/gib/Gibbons_Gibby",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1779785173\n",
+      "exit_code": 0,
+      "duration_ns": 13800125
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/gib/apres",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1787337418\n",
+      "exit_code": 0,
+      "duration_ns": 34486792
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/gib/armchair",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1790123534\n",
+      "exit_code": 0,
+      "duration_ns": 84148125
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/gib/armchair-2",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1786653733\n",
+      "exit_code": 0,
+      "duration_ns": 20724958
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/gib/atrax",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1787940530\n",
+      "exit_code": 0,
+      "duration_ns": 19239917
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/invoice",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1769319985\n",
+      "exit_code": 0,
+      "duration_ns": 16458375
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/kepano-obsidian",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1764950957\n",
+      "exit_code": 0,
+      "duration_ns": 19059000
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/lumenic",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1775960487\n",
+      "exit_code": 0,
+      "duration_ns": 24622333
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/mochi",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stderr": "fatal: not a git repository (or any of the parent directories): .git\n",
+      "exit_code": 128,
+      "duration_ns": 9936834
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/omarchy",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1765836578\n",
+      "exit_code": 0,
+      "duration_ns": 18248125
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/omarchy-supplement",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1756319146\n",
+      "exit_code": 0,
+      "duration_ns": 16344667
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/personal/andrew.xyz",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1766885490\n",
+      "exit_code": 0,
+      "duration_ns": 21325584
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/personal/echo-engine",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1734110261\n",
+      "exit_code": 0,
+      "duration_ns": 12834042
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/personal/langlayer",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1747045268\n",
+      "exit_code": 0,
+      "duration_ns": 16098708
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/scripts",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1772227045\n",
+      "exit_code": 0,
+      "duration_ns": 17065875
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/storix",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1790129214\n",
+      "exit_code": 0,
+      "duration_ns": 15183833
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/toto",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stderr": "fatal: not a git repository (or any of the parent directories): .git\n",
+      "exit_code": 128,
+      "duration_ns": 10052209
+    }
+  },
+  {
+    "cmd": {
+      "Name": "git",
+      "Args": [
+        "-C",
+        "/System/Volumes/Data/Users/andrew/code/wtfsiw",
+        "log",
+        "-1",
+        "--format=%ct"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 2000000000
+    },
+    "result": {
+      "stdout": "1767909331\n",
+      "exit_code": 0,
+      "duration_ns": 16089500
+    }
+  }
+]

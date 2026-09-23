@@ -1,0 +1,113 @@
+[
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--prefix"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": -1,
+      "timed_out": true,
+      "duration_ns": 15000000000,
+      "error": "signal: killed"
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--cellar"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": -1,
+      "timed_out": true,
+      "duration_ns": 15000000000,
+      "error": "signal: killed"
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--caskroom"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": -1,
+      "timed_out": true,
+      "duration_ns": 15000000000,
+      "error": "signal: killed"
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--cache"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": -1,
+      "timed_out": true,
+      "duration_ns": 15000000000,
+      "error": "signal: killed"
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "list",
+        "--formula",
+        "--versions"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": -1,
+      "timed_out": true,
+      "duration_ns": 15000000000,
+      "error": "signal: killed"
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "cleanup",
+        "-n"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": -1,
+      "timed_out": true,
+      "duration_ns": 15000000000,
+      "error": "signal: killed"
+    }
+  }
+]

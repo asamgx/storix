@@ -230,3 +230,34 @@ func itoa(i int) string {
 	}
 	return string(b[p:])
 }
+
+// TestWalkJoinsItsReporterBeforeReturning is the closed-channel race: the
+// consumer owns the event channel and closes it as soon as Walk is back, so
+// no reporter tick may still be in flight at that moment.
+//
+// The failure it guards is a send on a closed channel, on a goroutine with
+// nothing to recover it, so the assertion is the test binary staying alive:
+// a regression crashes the whole run rather than failing this test politely.
+// The tick is a microsecond, which keeps the reporter permanently ready to
+// send and makes the window as wide as it can be made.
+func TestWalkJoinsItsReporterBeforeReturning(t *testing.T) {
+	f := buildFixture(t)
+	for range 40 {
+		events := make(chan Event, 1)
+		drained := make(chan struct{})
+		go func() {
+			defer close(drained)
+			for range events { //nolint:revive // the events themselves do not matter here
+			}
+		}()
+
+		if _, err := Walk(t.Context(), Options{
+			Root: f.Root, Parallelism: 8, Events: events, ProgressInterval: time.Microsecond,
+		}); err != nil {
+			t.Fatalf("Walk: %v", err)
+		}
+		// What internal/tui and internal/cli both do the moment Walk returns.
+		close(events)
+		<-drained
+	}
+}

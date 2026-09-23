@@ -1,0 +1,11 @@
+# Cask tokens whose real INSTALL_RECEIPT.json is copied from testdata/caskroom.
+# Tokens with no receipt fixture get a version directory and nothing else,
+# which is the "cask installed, application missing" shape.
+cursor
+arc
+stremioservice
+codex
+balenaetcher
+devtoys
+mattermost
+grandperspective

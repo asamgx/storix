@@ -1,0 +1,10 @@
+[
+  {
+    "cmd": {"Name": "nix", "Args": ["store", "info", "--json"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {
+      "stdout": "{\"url\":\"daemon\",\"version\":\"2.24.9\",\"trusted\":1,\"storeDir\":\"/nix/store\"}\n",
+      "exit_code": 0,
+      "duration_ns": 40000000
+    }
+  }
+]

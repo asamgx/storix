@@ -1,0 +1,96 @@
+# Directories and files of the offline corpus, relative to the fixture root.
+# A line with a tab and a number is a file of that many bytes; everything else
+# is a directory. The names are this machine's, the contents are not.
+#
+# --- Library trees that carry an owner -------------------------------------
+Users/andrewsam/Library/Application Support/Code
+Users/andrewsam/Library/Application Support/Microsoft
+Users/andrewsam/Library/Application Support/Microsoft/DeveloperTools
+Users/andrewsam/Library/Application Support/Google
+Users/andrewsam/Library/Application Support/Google/Chrome
+Users/andrewsam/Library/Application Support/Google/AndroidStudio2025.1.3
+Users/andrewsam/Library/Application Support/Google/GoogleUpdater
+Users/andrewsam/Library/Application Support/BraveSoftware
+Users/andrewsam/Library/Application Support/BraveSoftware/Brave-Browser
+Users/andrewsam/Library/Application Support/OpenAI
+Users/andrewsam/Library/Application Support/OpenAI/Codex
+Users/andrewsam/Library/Application Support/OpenAI/ChatGPT Atlas
+Users/andrewsam/Library/Application Support/Smart Code ltd
+Users/andrewsam/Library/Application Support/stremio-server
+Users/andrewsam/Library/Application Support/Cursor
+Users/andrewsam/Library/Application Support/Antigravity
+Users/andrewsam/Library/Application Support/Wondershare
+Users/andrewsam/Library/Application Support/Autodesk
+Users/andrewsam/Library/Application Support/Autodesk/AdskLicensing
+Users/andrewsam/Library/Application Support/PaloAltoNetworks
+Users/andrewsam/Library/Application Support/dev.warp.Warp-Stable
+Users/andrewsam/Library/Application Support/com.operasoftware.Opera
+Users/andrewsam/Library/Application Support/Vivaldi
+Users/andrewsam/Library/Application Support/Chromium
+Users/andrewsam/Library/Application Support/so.cap.desktop
+Users/andrewsam/Library/Application Support/TabNine
+Users/andrewsam/Library/Application Support/UI Launcher
+Users/andrewsam/Library/Application Support/boringNotch
+Users/andrewsam/Library/Application Support/Arc
+Users/andrewsam/Library/Application Support/Codex
+Users/andrewsam/Library/Application Support/mochi
+Users/andrewsam/Library/Caches/com.microsoft.VSCode
+Users/andrewsam/Library/Caches/com.smartcodeltd.stremio
+Users/andrewsam/Library/Caches/com.openai.chat
+Users/andrewsam/Library/Caches/ChatGPTHelper
+Users/andrewsam/Library/Caches/com.openai.atlas
+Users/andrewsam/Library/Caches/dev.kdrag0n.MacVirt
+Users/andrewsam/Library/Caches/lens-desktop-updater
+Users/andrewsam/Library/Caches/com.todesktop.230313mzl4w4u92
+Users/andrewsam/Library/Caches/com.google.antigravity
+Users/andrewsam/Library/Caches/k9s
+Users/andrewsam/Library/Caches/lazygit
+Users/andrewsam/Library/Caches/zoxide
+Users/andrewsam/Library/Caches/gk
+Users/andrewsam/Library/Caches/GitKrakenCLI
+Users/andrewsam/Library/Caches/turborepo
+Users/andrewsam/Library/Caches/fastmcp
+Users/andrewsam/Library/Caches/go
+Users/andrewsam/Library/Caches/storix
+Users/andrewsam/Library/Caches/SomethingNobodyKnows
+Users/andrewsam/Library/Containers/com.stremio.Stremio
+Users/andrewsam/Library/Containers/com.andrewsam.mochi
+Users/andrewsam/Library/Containers/com.apple.Safari
+Users/andrewsam/Library/Group Containers/2DC432GLL2.com.openai.codex.notifications
+Users/andrewsam/Library/Group Containers/HUAQ24HBR6.dev.orbstack
+Users/andrewsam/Library/Group Containers/--AppIdentifierPrefix-localsend.shared_group
+Users/andrewsam/Library/Group Containers/group.net.whatsapp.WhatsApp.shared
+Users/andrewsam/Library/Group Containers/243LU875E5.groups.com.apple.podcasts
+Users/andrewsam/Library/Group Containers/group.com.apple.notes
+Users/andrewsam/Library/LaunchAgents/com.google.keystone.agent.plist	220
+Users/andrewsam/Library/LaunchAgents/com.google.GoogleUpdater.wake.plist	260
+Library/LaunchDaemons/dev.orbstack.OrbStack.privhelper.plist	480
+Library/LaunchDaemons/com.autodesk.cer.plist	520
+Users/andrewsam/Library/Preferences/com.aviorrok.DynamicLakePro.plist	180
+Users/andrewsam/Library/Preferences/com.vivaldi.Vivaldi.plist	180
+Users/andrewsam/Library/Preferences/com.microsoft.edgemac.plist	180
+Users/andrewsam/Library/Preferences/org.chromium.Chromium.plist	180
+Users/andrewsam/Library/Preferences/com.wondershare.Installer.plist	180
+#
+# --- The user's own project ------------------------------------------------
+Users/andrewsam/code/mochi
+Users/andrewsam/code/gib
+#
+# --- A bundle in the Trash, which is never an installation -----------------
+# The real ~/.Trash is not readable by an unprivileged process, so the
+# in-trash case exists here as a fixture and nowhere else.
+Users/andrewsam/.Trash/DynamicLakePro.app/Contents
+Users/andrewsam/.Trash/DynamicLakePro.app/Contents/MacOS/DynamicLakePro	4096
+#
+# --- Casks with no application, which the cask rules must still resolve ----
+# Uninstalling an application by dragging it to the Trash leaves Homebrew's
+# own symlink behind, pointing at nothing. A line with "->" is a symlink, and
+# these two dangle exactly as they do on the reference machine.
+opt/homebrew/Caskroom/cursor/1.2.4
+opt/homebrew/Caskroom/cursor/1.2.4/Cursor.app -> /Applications/Cursor.app
+opt/homebrew/Caskroom/stremioservice/0.1.15
+opt/homebrew/Caskroom/stremioservice/0.1.15/StremioService.app -> /Applications/StremioService.app
+opt/homebrew/Caskroom/devtoys/2.0.6
+opt/homebrew/Caskroom/devtoys/2.0.6/DevToys.app -> /Applications/DevToys.app
+opt/homebrew/Caskroom/mattermost/5.12.1
+opt/homebrew/Caskroom/mattermost/5.12.1/Mattermost.app -> /Applications/Mattermost.app
