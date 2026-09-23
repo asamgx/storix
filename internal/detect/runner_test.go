@@ -386,3 +386,85 @@ func TestStateNames(t *testing.T) {
 		t.Error("Healthy does not mean ok-or-degraded")
 	}
 }
+
+// TestALeafHookThatPanicsCostsOnlyItself is the walker's protection: the
+// hooks run on the walker's own goroutines, where an unrecovered panic ends
+// the scan rather than the detector.
+//
+// The crashed hook is also asked only once. A hook that panicked on an
+// ordinary file will panic on the next thousand, and recovering a million
+// times is not containment.
+func TestALeafHookThatPanicsCostsOnlyItself(t *testing.T) {
+	cx := classify.Context{Home: "/Users/andrew", CodeRoots: []string{"/Users/andrew/code"}}
+
+	var calls atomic.Int32
+	boom := &fake{name: "boom", retain: func(classify.Context) func(string, *walk.Entry) bool {
+		return func(string, *walk.Entry) bool {
+			calls.Add(1)
+			panic("a detector bug")
+		}
+	}}
+	good := &fake{name: "good", retain: func(classify.Context) func(string, *walk.Entry) bool {
+		return func(_ string, e *walk.Entry) bool { return e.Name == "go.mod" }
+	}}
+
+	reg := New(boom, good)
+	hook := RetainLeaf(reg, cx)
+	if hook == nil {
+		t.Fatal("no hook was composed")
+	}
+	for range 5 {
+		if !hook("/Users/andrew/code/x", &walk.Entry{Name: "go.mod"}) {
+			t.Fatal("the surviving hook stopped answering after its neighbour crashed")
+		}
+		if hook("/Users/andrew/code/x", &walk.Entry{Name: "README"}) {
+			t.Fatal("a leaf nothing claims was retained")
+		}
+	}
+	if n := calls.Load(); n != 1 {
+		t.Errorf("the crashed hook was called %d times, want 1: it is not switched off", n)
+	}
+
+	run := reg.Start(t.Context(), testEnv(), nil)
+	defer run.Stop()
+	outs := run.Wait(time.Second)
+
+	out, ok := byName(outs, "boom")
+	if !ok {
+		t.Fatal("the crashed detector is missing from the table")
+	}
+	if out.Status.State != Panic {
+		t.Errorf("the crashed detector is %s, want panic", out.Status.State)
+	}
+	if !strings.Contains(out.Status.Reason, "a detector bug") {
+		t.Errorf("the reason does not say what happened: %q", out.Status.Reason)
+	}
+	if other, _ := byName(outs, "good"); other.Status.State == Panic {
+		t.Error("a detector was blamed for its neighbour's panic")
+	}
+}
+
+// TestALeafHookThatPanicsWhileBeingBuiltIsContained covers the other half:
+// the hook is constructed before the walk, and a detector can crash there
+// too.
+func TestALeafHookThatPanicsWhileBeingBuiltIsContained(t *testing.T) {
+	cx := classify.Context{Home: "/Users/andrew"}
+	ctor := &fake{name: "ctor", retain: func(classify.Context) func(string, *walk.Entry) bool {
+		panic("a bug in the constructor")
+	}}
+
+	reg := New(ctor)
+	if hook := RetainLeaf(reg, cx); hook != nil {
+		t.Error("a detector that could not build its hook still handed one to the walk")
+	}
+
+	run := reg.Start(t.Context(), testEnv(), nil)
+	defer run.Stop()
+	out, ok := byName(run.Wait(time.Second), "ctor")
+	if !ok || out.Status.State != Panic {
+		t.Fatalf("the detector is %v, want panic", out.Status.State)
+	}
+	if !strings.Contains(out.Status.Reason, "a bug in the constructor") {
+		t.Errorf("the reason does not say what happened: %q", out.Status.Reason)
+	}
+}

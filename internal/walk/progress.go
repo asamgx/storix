@@ -64,7 +64,16 @@ func (c *counters) snapshot(started time.Time) Progress {
 
 // reporter periodically publishes a ProgressEvent until stop is closed. The
 // send never blocks the walk: a consumer that is behind simply misses ticks.
-func reporter(ch chan<- Event, c *counters, started time.Time, interval time.Duration, stop <-chan struct{}) {
+//
+// done is closed when the goroutine returns, and Walk waits on it before it
+// returns. Without that join the reporter outlives the walk by a scheduling
+// quantum, and the consumer closes the event channel as soon as Walk is back:
+// a tick caught in flight would then be a send on a closed channel, on a
+// goroutine with nothing to recover it. The stop channel is re-checked after
+// the tick for the same reason, because a select whose cases are both ready
+// picks between them at random.
+func reporter(ch chan<- Event, c *counters, started time.Time, interval time.Duration, stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
 	t := time.NewTicker(interval)
 	defer t.Stop()
 	for {
@@ -72,6 +81,11 @@ func reporter(ch chan<- Event, c *counters, started time.Time, interval time.Dur
 		case <-stop:
 			return
 		case <-t.C:
+			select {
+			case <-stop:
+				return
+			default:
+			}
 			select {
 			case ch <- ProgressEvent{c.snapshot(started)}:
 			default:

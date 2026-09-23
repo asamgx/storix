@@ -65,6 +65,11 @@ type Model struct {
 	gen     int
 	result  *scan.Result
 
+	// quitting records that the user has already asked a running scan to
+	// stop. The next quit press leaves rather than asking again, which is
+	// what keeps the interface closeable while a walk is unwinding.
+	quitting bool
+
 	progress progressModel
 	ledger   ledgerModel
 	browse   browseModel
@@ -157,6 +162,7 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) startScan() tea.Cmd {
 	m.gen++
 	m.progress = newProgress()
+	m.quitting = false
 	m.session = newSession(m.ctx, m.gen, m.cfg)
 	return tea.Batch(listen(m.session), m.progress.spin.Tick, tick())
 }
@@ -279,6 +285,7 @@ func (m *Model) finish(msg scanDoneMsg) tea.Cmd {
 		return nil
 	}
 	m.session = nil
+	m.quitting = false
 	if msg.err != nil {
 		m.err = msg.err
 		m.status = "scan failed: " + msg.err.Error()
@@ -490,15 +497,25 @@ func (m *Model) openInBrowse(n *walk.Node) {
 // quit cancels a running scan, or leaves when nothing is running.
 //
 // The first press during a scan stops the walk and waits for the partial
-// tree, which is worth showing and worth caching; the second leaves.
+// tree, which is worth showing and worth caching; the second leaves without
+// waiting for it. Leaving is always two presses away, however long the walk
+// takes to unwind: a scan that will not stop must not hold the terminal.
+//
+// Leaving early costs the cached scan and nothing else. The walk is already
+// cancelled, and the store writes a scan to a temporary file and renames it,
+// so an interrupted write leaves the previous cache entry intact.
 func (m *Model) quit() tea.Cmd {
-	if m.session != nil {
-		m.session.cancel()
-		m.progress.cancelled = true
-		m.status = "stopping the scan; the partial tree will be shown"
-		return nil
+	if m.session == nil {
+		return tea.Quit
 	}
-	return tea.Quit
+	if m.quitting {
+		return tea.Quit
+	}
+	m.quitting = true
+	m.session.cancel()
+	m.progress.cancelled = true
+	m.status = "stopping the scan; press q again to leave now"
+	return nil
 }
 
 // toggleView steps to the next result view, wrapping at the end.

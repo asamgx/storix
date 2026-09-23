@@ -317,7 +317,7 @@ func (m *ledgerModel) tableView(st Styles, u units.Format) string {
 // header is the title line with the total on the right.
 func (m *ledgerModel) header(st Styles, u units.Format, title string, total int64) string {
 	right := u.Bytes(total) + " used"
-	left := truncate(title, max(m.width-len(right)-2, 1))
+	left := truncate(title, max(m.width-lipgloss.Width(right)-2, 1))
 	gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(right), 1)
 	return st.Crumb.Render(left) + strings.Repeat(" ", gap) + st.Dim.Render(right)
 }

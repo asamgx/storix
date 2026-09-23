@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/asamgx/storix/internal/apps"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/report"
@@ -385,8 +387,8 @@ func (m *appsModel) header(st Styles, u units.Format) string {
 	counts := m.rep.Counts
 	right := fmt.Sprintf("%d bundles  %d casks  %s to look at",
 		counts.Bundles, counts.Casks, u.Bytes(m.rep.NeedsAttention()))
-	left := truncate("APPLICATIONS", max(m.width-len(right)-2, 1))
-	gap := max(m.width-len(left)-len(right), 1)
+	left := truncate("APPLICATIONS", max(m.width-lipgloss.Width(right)-2, 1))
+	gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(right), 1)
 	return st.Crumb.Render(left) + strings.Repeat(" ", gap) + st.Dim.Render(right)
 }
 
@@ -435,7 +437,7 @@ func (m *appsModel) renderRow(st Styles, u units.Format, c appsCols, r appRow, t
 	case sectionHeading:
 		return st.Title.Render(truncate(r.title, m.width))
 	case sectionAttention:
-		return finishRow(st, m.attentionRow(st, u, c, r), selected)
+		return finishRow(st, m.attentionRow(st, u, c, r, total), selected)
 	default:
 		return finishRow(st, m.installedRow(st, u, c, r, total), selected)
 	}
@@ -481,13 +483,17 @@ func (m *appsModel) installedRow(st Styles, u units.Format, c appsCols, r appRow
 
 // attentionRow is one owner storix cannot account for, with the claim it is
 // making about it and how sure it is.
-func (m *appsModel) attentionRow(st Styles, u units.Format, c appsCols, r appRow) string {
+//
+// The bar is measured against the same total the installed table uses, which
+// the view works out once: recomputing it here made drawing the table cost
+// the square of its length, and left the two tables on different scales.
+func (m *appsModel) attentionRow(st Styles, u units.Format, c appsCols, r appRow, total int64) string {
 	e := r.entry
 	name := truncate(appTitle(e), c.name)
 	var sb strings.Builder
 	sb.WriteString(strings.Repeat(" ", markerWidth))
 	sb.WriteString(padRight(st.Label.Render(name), c.name, name))
-	sb.WriteString(" " + bar(st, e.Footprint.Total, m.largestFootprint(m.rows), c.bar))
+	sb.WriteString(" " + bar(st, e.Footprint.Total, total, c.bar))
 	size := u.Fixed(e.Footprint.Total)
 	sb.WriteString(" " + padLeft(st.Value.Render(size), bytesWidth, size))
 	last := ""

@@ -184,6 +184,9 @@ func TestBrowseRendersALargeDirectoryWithinAFrame(t *testing.T) {
 	}
 	per := time.Since(start) / keypresses
 	t.Logf("%s per keypress over %d keypresses in a %d-entry directory", per, keypresses, wideEntries)
+	if raceDetector {
+		t.Skip("measured, not judged: the race detector costs an order of magnitude")
+	}
 	if per > 16*time.Millisecond {
 		t.Errorf("a keypress costs %s, over the 16 ms frame budget", per)
 	}
@@ -218,6 +221,9 @@ func TestBrowseRendersChipsWithinAFrame(t *testing.T) {
 	}
 	per := time.Since(start) / keypresses
 	t.Logf("%s per keypress over %d keypresses in a %d-entry directory with chips", per, keypresses, wideEntries)
+	if raceDetector {
+		t.Skip("measured, not judged: the race detector costs an order of magnitude")
+	}
 	if per > 16*time.Millisecond {
 		t.Errorf("a keypress with chips costs %s, over the 16 ms frame budget", per)
 	}

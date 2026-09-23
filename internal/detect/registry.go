@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/asamgx/storix/internal/classify"
@@ -60,6 +61,15 @@ func Register(order int, det Detector) {
 type Registry struct {
 	dets     []Detector
 	disabled []string
+
+	// mu guards leafPanics, which the walker's own goroutines write to and
+	// Wait reads once the walk is over.
+	mu sync.Mutex
+	// leafPanics names the detectors whose leaf-retention hook crashed,
+	// with the reason. The hook runs on the walker's goroutines, where a
+	// panic would take the whole scan down, so it is caught there and
+	// reported here instead.
+	leafPanics map[string]string
 }
 
 // New builds a registry from an explicit list, which is what tests use.
@@ -284,6 +294,7 @@ func (run *Run) Wait(grace time.Duration) []Outcome {
 		}
 	}
 	if run.reg != nil {
+		run.reg.applyLeafPanics(out)
 		for _, name := range run.reg.disabled {
 			out = append(out, Outcome{Status: Status{
 				Name: name, State: Disabled, Reason: "switched off with --disable-detector", Verified: true,
@@ -355,6 +366,12 @@ func classifyOne(t *walk.Tree, out Outcome, cx classify.Context, st *Status) (cl
 // RetainLeaf composes the leaf-retention hooks of every detector that has
 // one. It returns nil when none does, which leaves walk.Options.RetainLeaf
 // unset and costs the walk nothing.
+//
+// A hook that panics is contained rather than fatal: it runs on the walker's
+// own goroutines, where nothing would recover it and the whole scan would go
+// down with it. The detector's status becomes Panic and its hook is switched
+// off for the rest of the walk, because a hook that crashed once on an
+// ordinary file will crash again on the next thousand.
 func RetainLeaf(r *Registry, cx classify.Context) func(dir string, e *walk.Entry) bool {
 	if r == nil {
 		return nil
@@ -365,7 +382,7 @@ func RetainLeaf(r *Registry, cx classify.Context) func(dir string, e *walk.Entry
 		if !ok {
 			continue
 		}
-		if h := lr.RetainLeaf(cx); h != nil {
+		if h := guardLeaf(r, det.Name(), lr, cx); h != nil {
 			hooks = append(hooks, h)
 		}
 	}
@@ -382,6 +399,73 @@ func RetainLeaf(r *Registry, cx classify.Context) func(dir string, e *walk.Entry
 			}
 		}
 		return false
+	}
+}
+
+// guardLeaf builds one detector's leaf hook behind a recover, and wraps the
+// hook it returns in another.
+//
+// The wrapper costs one deferred call per retained-leaf question, which is
+// the price of a detector bug costing its own hook rather than the scan. A
+// hook that has crashed is not asked again: the flag is read before the
+// defer is set up, so the cost of a dead hook is one atomic load.
+func guardLeaf(r *Registry, name string, lr LeafRetainer, cx classify.Context) (hook func(string, *walk.Entry) bool) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			r.leafPanicked(name, fmt.Sprintf("panic while building the leaf hook: %v", rec))
+			hook = nil
+		}
+	}()
+	inner := lr.RetainLeaf(cx)
+	if inner == nil {
+		return nil
+	}
+	var off atomic.Bool
+	return func(dir string, e *walk.Entry) (keep bool) {
+		if off.Load() {
+			return false
+		}
+		defer func() {
+			if rec := recover(); rec != nil {
+				off.Store(true)
+				r.leafPanicked(name, fmt.Sprintf("panic in the leaf hook: %v", rec))
+				keep = false
+			}
+		}()
+		return inner(dir, e)
+	}
+}
+
+// leafPanicked records a crashed hook. The first panic is the one kept: it is
+// the one that happened while the detector was still being asked, and the
+// ones after it are the same bug on a different file.
+func (r *Registry) leafPanicked(name, reason string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.leafPanics == nil {
+		r.leafPanics = make(map[string]string, 1)
+	}
+	if _, seen := r.leafPanics[name]; !seen {
+		r.leafPanics[name] = reason
+	}
+}
+
+// applyLeafPanics marks the detectors whose leaf hook crashed during the
+// walk. Their facts are left alone: the probe is a different piece of code
+// and its evidence is still worth classifying.
+func (r *Registry) applyLeafPanics(outs []Outcome) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range outs {
+		reason, ok := r.leafPanics[outs[i].Status.Name]
+		if !ok {
+			continue
+		}
+		outs[i].Status.State = Panic
+		outs[i].Status.Reason = reason
 	}
 }
 
