@@ -1,0 +1,100 @@
+Checking data integrity.....done.
+--------------------------------------------------------------------------------
+BundleClass:                BRM_Bundle
+path:                       /Applications/Google Chrome.app (0x1a2c)
+directory:                  /Applications
+name:                       Google Chrome
+displayName:                Google Chrome
+teamID:                     EQHXZ8M8AV
+identifier:                 com.google.Chrome
+codeInfoID:                 com.google.Chrome
+platform:                   native
+--------------------------------------------------------------------------------
+path:                       /Applications/Visual Studio Code.app (0x1a30)
+directory:                  /Applications
+name:                       Code
+displayName:                Code
+teamID:                     UBF8T346G9
+identifier:                 com.microsoft.VSCode
+codeInfoID:                 com.microsoft.VSCode
+--------------------------------------------------------------------------------
+path:                       /Applications/ChatGPT.app (0x1a34)
+directory:                  /Applications
+name:                       ChatGPT
+teamID:                     2DC432GLL2
+identifier:                 com.openai.codex
+--------------------------------------------------------------------------------
+path:                       /Applications/OrbStack.app (0x1a38)
+directory:                  /Applications
+name:                       OrbStack
+teamID:                     HUAQ24HBR6
+identifier:                 dev.kdrag0n.MacVirt
+--------------------------------------------------------------------------------
+path:                       /Applications/Stremio.app (0x1a3c)
+directory:                  /Applications
+name:                       Stremio
+identifier:                 com.westbridge.stremio5-mac
+--------------------------------------------------------------------------------
+path:                       /opt/homebrew/Caskroom/stremioservice/0.1.15/StremioService.app (0x1a40)
+directory:                  /opt/homebrew/Caskroom
+name:                       StremioService
+identifier:                 com.stremio.service
+--------------------------------------------------------------------------------
+path:                       /Users/andrewsam/.Trash/DynamicLakePro.app (0x1a44)
+directory:                  ~/.Trash
+name:                       DynamicLakePro
+teamID:                     4R9T2LB4WK
+identifier:                 com.aviorrok.DynamicLakePro
+--------------------------------------------------------------------------------
+path:                       /Users/andrewsam/.Trash/DynamicLakePro.app/Contents/Library/LoginItems/DynamicLakeProLaunchAtLoginHelper.app (0x1a48)
+directory:                  ~/.Trash
+name:                       DynamicLakeProLaunchAtLoginHelper
+identifier:                 com.aviorrok.DynamicLakePro.LaunchAtLoginHelper
+--------------------------------------------------------------------------------
+path:                       /Users/andrewsam/Library/Application Support/com.raycast.macos/Updates/1.104.25-f907483b57876ffe4d8447b928e587590c7cc898/Raycast.app (0x1a4c)
+directory:                  ~/Library
+name:                       Raycast
+displayName:                Raycast
+teamID:                     SY64MV22J9
+identifier:                 com.raycast.macos
+codeInfoID:                 com.raycast.macos
+--------------------------------------------------------------------------------
+path:                       /Users/andrewsam/Library/Application Support/com.raycast.macos/Updates/1.104.27-5eff12699b5030d4b3bce30bdcf89b2447fe6953/Raycast.app (0x1a50)
+directory:                  ~/Library
+name:                       Raycast
+teamID:                     SY64MV22J9
+identifier:                 com.raycast.macos
+--------------------------------------------------------------------------------
+path:                       /Users/andrewsam/Library/Caches/com.openai.codex/org.sparkle-project.Sparkle/Launcher/8zc0GUdoq/Updater.app (0x1a54)
+directory:                  ~/Library
+name:                       Updater
+identifier:                 org.sparkle-project.Sparkle.Updater
+--------------------------------------------------------------------------------
+path:                       /Users/andrewsam/Library/Caches/net.whatsapp.WhatsApp/org.sparkle-project.Sparkle/Launcher/obj9QgXs6/Updater.app (0x1a58)
+directory:                  ~/Library
+name:                       Updater
+identifier:                 org.sparkle-project.Sparkle.Updater
+--------------------------------------------------------------------------------
+path:                       /Applications/Brave Browser.app/Contents/Frameworks/Brave Browser Framework.framework/Versions/151.1.93.136/Helpers/Brave Browser Helper.app (0x1a5c)
+directory:                  /Applications
+name:                       Brave Browser Helper
+identifier:                 com.brave.Browser.helper
+--------------------------------------------------------------------------------
+path:                       /Applications/Brave Browser.app (0x1a60)
+directory:                  /Applications
+name:                       Brave Browser
+identifier:                 com.brave.Browser
+--------------------------------------------------------------------------------
+path:                       /Applications/GlobalProtect.app (0x1a64)
+directory:                  /Applications
+name:                       GlobalProtect
+identifier:                 com.paloaltonetworks.GlobalProtect
+--------------------------------------------------------------------------------
+path:                       /Applications/Autodesk/AutoCAD 2027/AutoCAD 2027.app (0x1a68)
+directory:                  /Applications
+name:                       AutoCAD 2027
+identifier:                 com.autodesk.AutoCAD2027
+--------------------------------------------------------------------------------
+Some trailing junk that is not a key value pair at all
+path:                       /System/Library (0x1a6c)
+identifier:                 com.apple.system-library

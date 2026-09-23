@@ -1,0 +1,51 @@
+{
+  "homebrew_version": "5.0.5",
+  "loaded_from_api": true,
+  "uninstall_flight_blocks": false,
+  "installed_as_dependency": false,
+  "installed_on_request": true,
+  "time": 1765695800,
+  "runtime_dependencies": {},
+  "source": {
+    "tap": "homebrew/cask",
+    "tap_git_head": "5211ab1edc687deb34fd3848367a79a56a5f6f71",
+    "version": "2.1.4",
+    "path": "/Users/andrewsam/Library/Caches/Homebrew/api/cask.jws.json"
+  },
+  "arch": "arm64",
+  "uninstall_artifacts": [
+    {
+      "uninstall": [
+        {
+          "quit": "io.balena.etcher.*"
+        }
+      ]
+    },
+    {
+      "app": [
+        "balenaEtcher.app"
+      ]
+    },
+    {
+      "zap": [
+        {
+          "trash": [
+            "~/Library/Application Support/balenaEtcher",
+            "~/Library/Application Support/com.apple.sharedfilelist/com.apple.LSSharedFileList.ApplicationRecentDocuments/io.balena.etcher.sfl*",
+            "~/Library/Preferences/io.balena.etcher.helper.plist",
+            "~/Library/Preferences/io.balena.etcher.plist",
+            "~/Library/Saved Application State/io.balena.etcher.savedState"
+          ]
+        }
+      ]
+    }
+  ],
+  "built_on": {
+    "os": "Macintosh",
+    "os_version": "macOS 26",
+    "cpu_family": "arm_donan",
+    "xcode": "26.0.1",
+    "clt": "26.1.0.0.1.1761104275",
+    "preferred_perl": "5.34"
+  }
+}

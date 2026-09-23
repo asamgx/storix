@@ -1,0 +1,65 @@
+# Every candidate the corpus resolves to an owner, one row per directory.
+# Paths are canonical: the fixture root is stripped and the scan user's home
+# is written as "~". Apple-owned names are absent by design, because the apps
+# detector must never claim them.
+# dir	owner key	confidence	rule
+/Library/LaunchDaemons/com.autodesk.cer.plist	app:com.autodesk.AutoCAD2027	strong	apps/alias
+/Library/LaunchDaemons/dev.orbstack.OrbStack.privhelper.plist	app:dev.kdrag0n.MacVirt	strong	apps/alias
+~/Library/Application Support/Antigravity	product:antigravity	likely	apps/alias
+~/Library/Application Support/Arc	app:company.thebrowser.Browser	strong	apps/cask-zap
+~/Library/Application Support/Autodesk	app:com.autodesk.AutoCAD2027	strong	apps/alias
+~/Library/Application Support/BraveSoftware	app:com.brave.Browser	strong	apps/alias
+~/Library/Application Support/Chromium	product:chromium	likely	apps/alias
+~/Library/Application Support/Code	app:com.microsoft.VSCode	strong	apps/alias
+~/Library/Application Support/Codex	cli:codex-cli	likely	apps/alias
+~/Library/Application Support/Cursor	cask:cursor	likely	apps/cask-zap
+~/Library/Application Support/Google	app:com.google.Chrome	strong	apps/alias
+~/Library/Application Support/Google/AndroidStudio2025.1.3	app:com.google.android.studio	strong	apps/alias
+~/Library/Application Support/Google/Chrome	app:com.google.Chrome	strong	apps/alias
+~/Library/Application Support/Google/GoogleUpdater	app:com.google.Chrome	strong	apps/alias
+~/Library/Application Support/Microsoft	app:com.microsoft.VSCode	strong	apps/alias
+~/Library/Application Support/OpenAI	app:com.openai.codex	strong	apps/alias
+~/Library/Application Support/PaloAltoNetworks	product:globalprotect	likely	apps/alias
+~/Library/Application Support/Smart Code ltd	app:com.westbridge.stremio5-mac	strong	apps/alias
+~/Library/Application Support/TabNine	product:tabnine	likely	apps/alias
+~/Library/Application Support/UI Launcher	product:ui-launcher	likely	apps/alias
+~/Library/Application Support/Vivaldi	product:vivaldi	likely	apps/alias
+~/Library/Application Support/Wondershare	product:wondershare	likely	apps/alias
+~/Library/Application Support/boringNotch	product:boringnotch	likely	apps/alias
+~/Library/Application Support/com.operasoftware.Opera	product:opera	likely	apps/alias
+~/Library/Application Support/dev.warp.Warp-Stable	product:warp	likely	apps/alias
+~/Library/Application Support/mochi	project:mochi	likely	apps/own-build
+~/Library/Application Support/so.cap.desktop	product:cap	likely	apps/alias
+~/Library/Application Support/stremio-server	app:com.westbridge.stremio5-mac	likely	apps/cask-zap
+~/Library/Caches/ChatGPTHelper	app:com.openai.codex	strong	apps/alias
+~/Library/Caches/GitKrakenCLI	cli:gitkrakencli	likely	apps/non-app
+~/Library/Caches/SomethingNobodyKnows	unknown:SomethingNobodyKnows	unknown	apps/unknown
+~/Library/Caches/com.google.antigravity	product:antigravity	likely	apps/alias
+~/Library/Caches/com.microsoft.VSCode	app:com.microsoft.VSCode	strong	apps/bundle-id
+~/Library/Caches/com.openai.atlas	product:atlas	likely	apps/alias
+~/Library/Caches/com.openai.chat	app:com.openai.codex	strong	apps/alias
+~/Library/Caches/com.smartcodeltd.stremio	app:com.westbridge.stremio5-mac	strong	apps/alias
+~/Library/Caches/com.todesktop.230313mzl4w4u92	cask:cursor	likely	apps/cask-zap
+~/Library/Caches/dev.kdrag0n.MacVirt	app:dev.kdrag0n.MacVirt	strong	apps/bundle-id
+~/Library/Caches/fastmcp	cli:fastmcp	likely	apps/non-app
+~/Library/Caches/gk	cli:gk	likely	apps/non-app
+~/Library/Caches/go	cli:go	likely	apps/non-app
+~/Library/Caches/k9s	cli:k9s	likely	apps/non-app
+~/Library/Caches/lazygit	cli:lazygit	likely	apps/non-app
+~/Library/Caches/lens-desktop-updater	app:com.electron.kontena-lens	likely	apps/updater-suffix
+~/Library/Caches/storix	cli:storix	likely	apps/non-app
+~/Library/Caches/turborepo	cli:turborepo	likely	apps/non-app
+~/Library/Caches/zoxide	cli:zoxide	likely	apps/non-app
+~/Library/Containers/com.andrewsam.mochi	project:mochi	likely	apps/own-build
+~/Library/Containers/com.stremio.Stremio	app:com.westbridge.stremio5-mac	strong	apps/alias
+~/Library/Group Containers/--AppIdentifierPrefix-localsend.shared_group	app:org.localsend.localsendApp	strong	apps/alias
+~/Library/Group Containers/2DC432GLL2.com.openai.codex.notifications	app:com.openai.codex	strong	apps/team-id
+~/Library/Group Containers/HUAQ24HBR6.dev.orbstack	app:dev.kdrag0n.MacVirt	strong	apps/team-id
+~/Library/Group Containers/group.net.whatsapp.WhatsApp.shared	app:net.whatsapp.WhatsApp	strong	apps/bundle-id
+~/Library/LaunchAgents/com.google.GoogleUpdater.wake.plist	app:com.google.Chrome	strong	apps/alias
+~/Library/LaunchAgents/com.google.keystone.agent.plist	app:com.google.Chrome	strong	apps/alias
+~/Library/Preferences/com.aviorrok.DynamicLakePro.plist	app:com.aviorrok.DynamicLakePro	strong	apps/bundle-id
+~/Library/Preferences/com.microsoft.edgemac.plist	product:edge	likely	apps/alias
+~/Library/Preferences/com.vivaldi.Vivaldi.plist	product:vivaldi	likely	apps/alias
+~/Library/Preferences/com.wondershare.Installer.plist	product:wondershare	likely	apps/alias
+~/Library/Preferences/org.chromium.Chromium.plist	product:chromium	likely	apps/alias
