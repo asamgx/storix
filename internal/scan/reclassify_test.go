@@ -328,16 +328,71 @@ func TestReclassifyOnLoadIsWithinBudget(t *testing.T) {
 	}
 }
 
-// TestTheRecomputedAppsReportEqualsTheStoredOne checks on the user's own
-// cache that the application inventory is reconstructible: the report the
-// loader rebuilds from the stored facts and the fresh classification is the
-// same document, to the byte, as the one the scan stored. The stored section
-// is kept for the files that carry no apps facts, not because the analysis
+// TestTheRecomputedAppsReportEqualsTheStoredOne is the promise that lets the
+// loader rebuild the inventory instead of trusting the stored one: the report
+// rebuilt from the stored facts and the fresh classification is the same
+// document, to the byte, as the one the scan wrote. The stored section is
+// kept for the files that carry no apps facts, not because the analysis
 // cannot be redone.
 //
-// It runs only where there is a real cache with an inventory in it, because a
-// fixture has no applications to inventory.
+// It reads a cache this test wrote, from a fixture in its own temp directory.
+// It used to read the developer's real cache instead, and that made it a test
+// of how recently somebody had scanned: a cache written by an older build was
+// compared against this build's output and failed with a byte count, on any
+// machine whose newest scan predated the binary. A fixture has applications
+// enough — a bundle with no identifier is exactly the case the inventory has
+// to name from its own directory — and the comparison is between two runs of
+// the same code over the same tree, which is what the promise is about.
 func TestTheRecomputedAppsReportEqualsTheStoredOne(t *testing.T) {
+	live, cfg, store := scannedFixture(t)
+	_, meta := latestMeta(t, store)
+
+	var stored *apps.Report
+	if err := section(meta, SectionApps, &stored); err != nil {
+		t.Fatalf("decode the apps section: %v", err)
+	}
+	if stored == nil || len(stored.Apps) == 0 {
+		t.Fatalf("the fixture stored no application inventory (%+v), so there is nothing to rebuild", stored)
+	}
+	if live.Apps == nil {
+		t.Fatal("the live scan produced no application inventory")
+	}
+
+	loaded, ok, err := LoadLatest(cfg)
+	if err != nil || !ok {
+		t.Fatalf("LoadLatest = %v, %v", ok, err)
+	}
+	if loaded.Apps == nil {
+		t.Fatal("the loaded scan rebuilt no application inventory, and fell back to nothing")
+	}
+	if got, want := mustJSON(t, loaded.Apps), mustJSON(t, stored); got != want {
+		t.Errorf("the rebuilt inventory differs from the stored one\n rebuilt: %s\n stored:  %s",
+			clipJSON(got), clipJSON(want))
+	}
+}
+
+// realCacheEnv opts a test in to reading the cache of the machine it runs on,
+// and says which storix wrote it.
+const realCacheEnv = "STORIX_TEST_REAL_CACHE"
+
+// TestTheRecomputedAppsReportEqualsThisMachinesCache is the same promise
+// against a real inventory of real applications, which a fixture cannot be.
+//
+// It is opt-in because it can only mean anything when the cache was written
+// by the build under test, and nothing in this package can ask what that
+// build calls itself. So the version is supplied along with the opt-in:
+//
+//	STORIX_TEST_REAL_CACHE="$(storix version | cut -d' ' -f2-)" \
+//	  go test ./internal/scan/ -run ThisMachinesCache
+//
+// A cache written by anything else is skipped rather than failed. Comparing
+// this build's output against an older build's stored report says only that
+// the two builds differ, which is what the version already said.
+func TestTheRecomputedAppsReportEqualsThisMachinesCache(t *testing.T) {
+	version := os.Getenv(realCacheEnv)
+	if version == "" {
+		t.Skipf("set %s to the version `storix version` prints to check this machine's own cache", realCacheEnv)
+	}
 	store, err := cache.DefaultStore()
 	if err != nil {
 		t.Skipf("no cache store: %v", err)
@@ -346,6 +401,10 @@ func TestTheRecomputedAppsReportEqualsTheStoredOne(t *testing.T) {
 	if err != nil {
 		t.Skipf("no stored scan: %v", err)
 	}
+	if meta.Storix != version {
+		t.Skipf("the newest cache was written by storix %q, not %q: rescan before checking it",
+			meta.Storix, version)
+	}
 	var stored *apps.Report
 	if err := section(meta, SectionApps, &stored); err != nil {
 		t.Fatalf("decode the apps section: %v", err)
@@ -353,12 +412,11 @@ func TestTheRecomputedAppsReportEqualsTheStoredOne(t *testing.T) {
 	if stored == nil {
 		t.Skip("the stored scan carries no application inventory")
 	}
-	res, ok, err := LoadLatest(Config{FromCache: true, Units: units.Decimal})
+	res, ok, err := LoadLatest(Config{FromCache: true, Units: units.Decimal, Version: version})
 	if err != nil || !ok {
-		t.Skipf("the stored scan did not load: %v", err)
+		t.Fatalf("the stored scan did not load: %v, %v", ok, err)
 	}
-	got, want := mustJSON(t, res.Apps), mustJSON(t, stored)
-	if got != want {
+	if got, want := mustJSON(t, res.Apps), mustJSON(t, stored); got != want {
 		t.Errorf("the rebuilt inventory differs from the stored one (%d vs %d bytes)", len(got), len(want))
 	}
 }
