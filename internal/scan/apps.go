@@ -1,6 +1,8 @@
 package scan
 
 import (
+	"time"
+
 	"github.com/asamgx/storix/internal/apps"
 	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/detect"
@@ -37,16 +39,37 @@ func Apps(res *Result) (*apps.Report, bool) {
 // and costs about sixty milliseconds on a full volume, against a walk of
 // twenty seconds, and the alternative is a detector holding state between two
 // calls that are meant to be independent.
+//
+// It is run against the scan's own clock rather than the wall clock, because
+// the report is rebuilt on every cache load and an inventory that quietly
+// re-dates itself each time it is read is not the inventory that was stored.
+// The verdicts are full of ages — "written 3 hours ago", and a thirty-day
+// window deciding whether a directory is an orphan — so reading a scan four
+// hours after taking it produced a different document from the same facts, and
+// a scan reread a month later could reclassify data as orphaned that the scan
+// itself had found fresh. The walk's finish time is the instant the facts
+// describe, it is stored in the cache file, and it is therefore the only clock
+// that makes the report a function of the scan.
 func appsReport(t *walk.Tree, outs []detect.Outcome, class *classify.Classification, cx classify.Context) *apps.Report {
 	det, facts := appsOutcome(outs)
 	if det == nil || facts == nil || class == nil {
 		return nil
 	}
-	a := det.Analyze(t, facts, cx)
+	a := det.AnalyzeAt(t, facts, cx, scanClock(t))
 	if a == nil {
 		return nil
 	}
 	return apps.BuildReport(a, class.Claims)
+}
+
+// scanClock is the instant a scan's own facts describe: when its walk ended.
+// A tree that carries no finish time — one hand-built by a test — leaves the
+// choice to the analysis, which falls back to time.Now.
+func scanClock(t *walk.Tree) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return t.Finished
 }
 
 // appsOutcome finds the application inventory among the probe results.

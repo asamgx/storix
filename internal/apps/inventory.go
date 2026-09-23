@@ -159,6 +159,29 @@ func (p Paths) Strip(display string) string {
 	return display
 }
 
+// OnVolume reports whether a display path lies on the volume this scan
+// covers.
+//
+// It matters because Spotlight does not stop at the scanned disk. A Time
+// Machine drive, a cloned system volume or a mounted disk image answers
+// "kMDItemContentType == 'com.apple.application-bundle'" with every
+// application it holds, and a copy on a backup is the opposite of evidence
+// that the application is installed here: keeping a copy of what was deleted
+// is what a backup is for.
+//
+// A scan with no root is rooted at the boot volume, where every other disk is
+// mounted under /Volumes. A scan with one — a fixture, or another volume — is
+// bounded by that root instead.
+func (p Paths) OnVolume(display string) bool {
+	if display == "" {
+		return false
+	}
+	if p.Root == "" || p.Root == "/" {
+		return !strings.HasPrefix(display, "/Volumes/")
+	}
+	return display == p.Root || strings.HasPrefix(display, p.Root+"/")
+}
+
 // Inventory is the in-memory join of Facts with the walked tree. It is built
 // inside the analysis and never cached: the tree it points into changes every
 // scan, while the facts it was built from do not.
@@ -203,7 +226,8 @@ func BuildInventory(t *walk.Tree, f *Facts, p Paths) *Inventory {
 		inv.CaskByToken[c.Token] = c
 	}
 	for _, e := range f.Registry {
-		inv.registryByID[e.ID] = append(inv.registryByID[e.ID], e)
+		k := strings.ToLower(e.ID)
+		inv.registryByID[k] = append(inv.registryByID[k], e)
 	}
 
 	seen := make(map[string]bool)
@@ -272,7 +296,8 @@ func (inv *Inventory) link() {
 	})
 	for _, b := range inv.Bundles {
 		if b.ID != "" {
-			inv.ByID[b.ID] = append(inv.ByID[b.ID], b)
+			k := idKey(b.ID)
+			inv.ByID[k] = append(inv.ByID[k], b)
 		}
 		for _, n := range b.Names() {
 			for _, k := range nameKeys(n) {
@@ -304,7 +329,7 @@ func (inv *Inventory) link() {
 
 // Installed returns the installed bundle for an identifier.
 func (inv *Inventory) Installed(id string) (*Bundle, bool) {
-	for _, b := range inv.ByID[id] {
+	for _, b := range inv.ByID[idKey(id)] {
 		if b.Source.Installed() {
 			return b, true
 		}
@@ -316,7 +341,7 @@ func (inv *Inventory) Installed(id string) (*Bundle, bool) {
 // ones in the Trash. It is the backstop that keeps an unconventional install
 // from being reported as an orphan.
 func (inv *Inventory) AnyBundle(id string) (*Bundle, bool) {
-	if bs := inv.ByID[id]; len(bs) > 0 {
+	if bs := inv.ByID[idKey(id)]; len(bs) > 0 {
 		return bs[0], true
 	}
 	return nil, false
@@ -373,7 +398,17 @@ func (inv *Inventory) InstalledForTeam(team string) []*Bundle {
 }
 
 // RegistryFor lists the LaunchServices entries for an identifier.
-func (inv *Inventory) RegistryFor(id string) []RegistryEntry { return inv.registryByID[id] }
+func (inv *Inventory) RegistryFor(id string) []RegistryEntry { return inv.registryByID[idKey(id)] }
+
+// idKey is how a bundle identifier is keyed in every index here.
+//
+// macOS treats an identifier case-insensitively: Ollama's Info.plist says
+// "com.electron.ollama" while its cache directory is named
+// "com.electron.Ollama", and LaunchServices answers to both. Indexing by the
+// literal string meant the directory matched nothing, the application looked
+// absent, and its data was reported as an orphan. The owner key keeps the
+// identifier as it was written; only the lookups fold.
+func idKey(id string) string { return strings.ToLower(id) }
 
 // InstalledBundles lists the bundles a team id lookup would have to sign, in
 // a stable order: the input to the codesign pass.

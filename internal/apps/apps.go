@@ -17,6 +17,8 @@ package apps
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -82,6 +84,30 @@ const lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/" +
 // could otherwise return thousands of paths.
 const maxSpotlightBundles = 200
 
+// maxReceiptFailures is how many consecutive `pkgutil --pkg-info` calls may
+// fail before the receipt loop gives up.
+//
+// One failure is a receipt the database cannot describe and the loop carries
+// on. Three in a row is the database itself being unavailable, and running
+// the remaining several hundred calls against it costs seconds and learns
+// nothing. Either way the degradation is recorded, because a receipt that was
+// never read is a keep signal that was never found.
+const maxReceiptFailures = 3
+
+// Probe names. They are named constants rather than literals because a
+// verdict reads them back: [Analysis.incompleteEvidence] decides whether an
+// orphan verdict rests on evidence a degraded probe could not gather, and a
+// typo there would silently un-guard the answer.
+const (
+	probeBrew         = "brew"
+	probePkgutil      = "pkgutil"
+	probeLSRegister   = "lsregister"
+	probeSpotlight    = "mdfind"
+	probeCodesign     = "codesign"
+	probeApplications = "applications"
+	probeLaunchd      = "launchd"
+)
+
 // Probe interrogates the machine. It is the only part of this package that
 // touches the outside world, and it never fails: a command that is missing or
 // that times out becomes a Degradation and the rest of the probe carries on,
@@ -141,12 +167,28 @@ func (d *Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) (
 // detector's options. It is exported because the apps report, the footprint
 // view and `storix explain` all need the analysis rather than the claims.
 func (d *Detector) Analyze(t *walk.Tree, f detect.Facts, cx classify.Context) *Analysis {
+	return d.AnalyzeAt(t, f, cx, time.Time{})
+}
+
+// AnalyzeAt is Analyze with the clock named explicitly.
+//
+// Every age in a verdict — "written 3 hours ago", the thirty-day window that
+// keeps a recently used tool out of the orphan list — is measured from some
+// instant, and which instant it is decides whether a scan means the same thing
+// tomorrow as it did today. A caller that holds the scan's own clock passes it
+// here, so that rebuilding the report from a cache file reproduces the report
+// that file was written with instead of re-dating it to the moment of reading.
+// A zero now falls back to the tree's finish time and then to time.Now.
+func (d *Detector) AnalyzeAt(t *walk.Tree, f detect.Facts, cx classify.Context, now time.Time) *Analysis {
 	facts, ok := f.(*Facts)
 	if !ok || facts == nil {
 		return nil
 	}
 	opts := d.Opts
-	opts.CodesignAvailable = !degradedFor(facts, "codesign")
+	opts.CodesignAvailable = !degradedFor(facts, probeCodesign)
+	if opts.Now.IsZero() {
+		opts.Now = now
+	}
 	return Analyze(t, facts, cx, opts)
 }
 
@@ -182,6 +224,36 @@ type prober struct {
 // the analysis, the cache and the report.
 func (p *prober) display(full string) string { return mac.DisplayPath(full) }
 
+// check asks whether a path is there, in the form the facts record.
+//
+// The second result is empty when the answer is known either way, and carries
+// the reason when it is not: a stat refused by the sandbox or by a missing
+// Full Disk Access grant says nothing about whether the file is there, and the
+// verdicts must not read it as "gone". See [detect.Env.Lookup].
+func (p *prober) check(full string) (exists bool, checkErr string) {
+	ok, err := p.env.Lookup(full)
+	if err == nil {
+		return ok, ""
+	}
+	return false, UncheckedNote(full, err)
+}
+
+// UncheckedNote is the evidence line for a path that could not be stat'd. It
+// names the path and the reason, and adds the one thing a reader can do about
+// the reason that causes nearly all of them.
+func UncheckedNote(full string, err error) string {
+	msg := err.Error()
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		msg = pe.Err.Error()
+	}
+	note := "could not check " + full + ": " + msg
+	if errors.Is(err, fs.ErrPermission) {
+		note += "; grant Full Disk Access"
+	}
+	return note
+}
+
 // degrade records a probe that could not run.
 func (p *prober) degrade(name, reason string) {
 	p.f.Degraded = append(p.f.Degraded, Degradation{Probe: name, Reason: reason})
@@ -211,13 +283,13 @@ func (p *prober) readDir(dir string) ([]string, error) {
 func (p *prober) casks(ctx context.Context) {
 	dir := p.caskroomDir(ctx)
 	if dir == "" {
-		p.degrade("brew", "no Caskroom directory found")
+		p.degrade(probeBrew, "no Caskroom directory found")
 		return
 	}
 	p.f.CaskroomDir = p.display(dir)
 	tokens, err := p.readDir(dir)
 	if err != nil {
-		p.degrade("brew", "listing "+dir+": "+err.Error())
+		p.degrade(probeBrew, "listing "+dir+": "+err.Error())
 		return
 	}
 	sort.Strings(tokens)
@@ -236,7 +308,7 @@ func (p *prober) casks(ctx context.Context) {
 		c, decErr := DecodeReceipt(token, data)
 		c.Dir = p.display(path.Join(dir, token))
 		if decErr != nil {
-			p.degrade("brew", "receipt for "+token+": "+decErr.Error())
+			p.degrade(probeBrew, "receipt for "+token+": "+decErr.Error())
 		}
 		p.f.Casks = append(p.f.Casks, c)
 	}
@@ -272,25 +344,48 @@ func (p *prober) receipts(ctx context.Context) {
 		Name: "pkgutil", Args: []string{"--pkgs"}, Timeout: pkgutilTimeout,
 	})
 	if !list.OK() {
-		p.degrade("pkgutil", list.Reason())
+		p.degrade(probePkgutil, list.Reason())
 		return
 	}
-	for _, id := range ParsePkgList(list.Stdout) {
+	// A receipt that could not be read is a keep signal that was not found,
+	// and a keep signal that was not found is an orphan verdict nobody
+	// argued against. So the first failure is recorded rather than skipped,
+	// and a run of them stops the loop instead of grinding through several
+	// hundred calls to a database that is not answering.
+	ids := ParsePkgList(list.Stdout)
+	said, consecutive := false, 0
+	for i, id := range ids {
 		info := p.env.Runner.Run(ctx, probe.Cmd{
 			Name: "pkgutil", Args: []string{"--pkg-info", id}, Timeout: pkgutilTimeout,
 		})
 		if !info.OK() {
+			consecutive++
+			if !said {
+				p.degrade(probePkgutil, "--pkg-info "+id+": "+info.Reason())
+				said = true
+			}
+			if consecutive >= maxReceiptFailures {
+				p.degrade(probePkgutil, "gave up after "+itoa(consecutive)+
+					" consecutive --pkg-info failures; "+itoa(len(ids)-i-1)+
+					" receipts were not read")
+				return
+			}
 			continue
 		}
+		consecutive = 0
 		rec := ParsePkgInfo(info.Stdout)
 		if rec.PkgID == "" {
 			continue
 		}
-		rec.LocationExists = rec.InstallPath() != "" && p.env.Exists(p.paths.Resolve(rec.InstallPath()))
+		if install := rec.InstallPath(); install != "" {
+			rec.LocationExists, rec.CheckErr = p.check(p.paths.Resolve(install))
+		}
 		// The file listing is evidence only for a receipt whose install
 		// location is gone, and it is the one command here that can be
-		// slow, so it is run for those receipts alone.
-		if !rec.LocationExists {
+		// slow, so it is run for those receipts alone. A location that
+		// could not be checked is not gone, so it is not run for one of
+		// those either.
+		if !rec.LocationExists && rec.CheckErr == "" {
 			p.receiptFiles(ctx, &rec)
 		}
 		p.f.Receipts = append(p.f.Receipts, rec)
@@ -325,15 +420,15 @@ func (p *prober) registry(ctx context.Context) {
 		Name: lsregisterPath, Args: []string{"-dump"}, Timeout: lsregisterTimeout,
 	})
 	if !res.OK() {
-		p.degrade("lsregister", res.Reason())
+		p.degrade(probeLSRegister, res.Reason())
 		return
 	}
 	entries := ParseLSRegisterDump(strings.NewReader(res.Stdout))
 	if len(entries) < 10 {
-		p.degrade("lsregister", "dump yielded only "+itoa(len(entries))+" entries; format may have changed")
+		p.degrade(probeLSRegister, "dump yielded only "+itoa(len(entries))+" entries; format may have changed")
 	}
 	for i := range entries {
-		entries[i].Exists = p.env.Exists(p.paths.Resolve(entries[i].Path))
+		entries[i].Exists, entries[i].CheckErr = p.check(p.paths.Resolve(entries[i].Path))
 	}
 	p.f.Registry = entries
 }
@@ -353,6 +448,13 @@ func (p *prober) launchItems() {
 	for _, d := range dirs {
 		names, err := p.readDir(d.path)
 		if err != nil {
+			// A directory that is not there is an answer: plenty of
+			// machines have no ~/Library/LaunchAgents. A directory
+			// that is there and would not open is a set of keep
+			// signals nobody read, and the verdicts have to know.
+			if !errors.Is(err, fs.ErrNotExist) {
+				p.degrade(probeLaunchd, "listing "+d.path+": "+err.Error())
+			}
 			continue
 		}
 		sort.Strings(names)
@@ -369,7 +471,9 @@ func (p *prober) launchItems() {
 				continue
 			}
 			item, _ := ParseLaunchPlist(p.display(full), data, d.system)
-			item.ProgramExists = item.Program != "" && p.env.Exists(p.paths.Resolve(item.Program))
+			if item.Program != "" {
+				item.ProgramExists, item.CheckErr = p.check(p.paths.Resolve(item.Program))
+			}
 			p.f.LaunchItems = append(p.f.LaunchItems, item)
 		}
 	}
@@ -418,6 +522,14 @@ func (p *prober) readBundlesIn(dir string, depth int, seen map[string]bool) {
 	}
 	names, err := p.readDir(dir)
 	if err != nil {
+		// /Applications/Setapp and ~/Applications are absent on most
+		// machines, which says nothing. A listing refused for any other
+		// reason is a set of installed applications this scan did not
+		// see, and every one of them is an orphan verdict waiting to be
+		// wrong.
+		if !errors.Is(err, fs.ErrNotExist) {
+			p.degrade(probeApplications, "listing "+dir+": "+err.Error())
+		}
 		return
 	}
 	sort.Strings(names)
@@ -479,13 +591,28 @@ func (p *prober) spotlight(ctx context.Context, seen map[string]bool) {
 		Timeout: mdfindTimeout,
 	})
 	if !res.OK() {
-		p.degrade("mdfind", res.Reason())
+		p.degrade(probeSpotlight, res.Reason())
 		return
 	}
 	count := 0
 	for _, line := range strings.Split(res.Stdout, "\n") {
 		full := strings.TrimSpace(line)
 		if full == "" || seen[full] || NestedInBundle(path.Dir(full)) {
+			continue
+		}
+		// Spotlight indexes every mounted volume, so a Time Machine disk
+		// or a cloned system drive answers with the applications it
+		// holds. A copy on another volume is not this volume's
+		// installation, and counting one as such is how an application
+		// deleted from this disk keeps looking installed.
+		if !p.paths.OnVolume(p.display(full)) {
+			continue
+		}
+		// The index also outlives what it indexed. A hit that is
+		// definitely gone is dropped; one that merely could not be
+		// checked is kept, because the cost of wrongly dropping it is an
+		// orphan verdict and the cost of keeping it is a stale row.
+		if exists, err := p.env.Lookup(full); err == nil && !exists {
 			continue
 		}
 		seen[full] = true
@@ -528,11 +655,11 @@ func (p *prober) teamIDs(ctx context.Context) {
 	inv := BuildInventory(nil, p.f, p.paths)
 	r.Resolve(ctx, inv.InstalledBundles())
 	if err := r.Save(); err != nil {
-		p.degrade("codesign", "writing the team id cache: "+err.Error())
+		p.degrade(probeCodesign, "writing the team id cache: "+err.Error())
 	}
 	p.f.TeamIDs = r.Cache()
 	if len(p.f.TeamIDs) == 0 {
-		p.degrade("codesign", "no signatures could be read")
+		p.degrade(probeCodesign, "no signatures could be read")
 	}
 }
 

@@ -27,8 +27,11 @@ type LaunchItem struct {
 	// understood, which the report prints as "program unknown".
 	Program string `json:"program,omitempty"`
 	// ProgramExists is the result of an lstat on Program, filled in by
-	// Probe.
+	// Probe. False covers both "the program is gone" and "the program
+	// could not be checked"; CheckErr tells them apart.
 	ProgramExists bool `json:"programExists,omitempty"`
+	// CheckErr is why Program could not be stat'd, empty when it could.
+	CheckErr string `json:"checkErr,omitempty"`
 	// BundleIDs are AssociatedBundleIdentifiers, the modern way a helper
 	// names the application it belongs to.
 	BundleIDs []string `json:"bundleIds,omitempty"`
@@ -86,6 +89,8 @@ func (l LaunchItem) Describe() string {
 		return "launch item " + l.Label + " present, program unknown"
 	case l.ProgramExists:
 		return "launch item " + l.Label + " runs " + l.Program
+	case l.CheckErr != "":
+		return "launch item " + l.Label + " points at " + l.Program + ", which could not be checked"
 	default:
 		return "launch item " + l.Label + " points at " + l.Program + ", which is missing"
 	}
@@ -99,7 +104,8 @@ func (l LaunchItem) Owns(id string) bool {
 	if id == "" {
 		return false
 	}
-	if strings.EqualFold(l.Label, id) || strings.HasPrefix(l.Label+".", id+".") {
+	label, want := strings.ToLower(l.Label), strings.ToLower(id)
+	if label == want || strings.HasPrefix(label+".", want+".") {
 		return true
 	}
 	for _, b := range l.BundleIDs {

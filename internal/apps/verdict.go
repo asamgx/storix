@@ -153,10 +153,21 @@ func (a *Analysis) verdictFor(o *OwnerResult, now time.Time, window time.Duratio
 	}
 
 	if o.Owner.Kind == KindVendor {
-		v.State, v.Confidence = StateVendor, classify.Corroborating
+		if b, ok := a.vendorInstalled(o); ok {
+			v.State, v.Confidence = StateVendor, classify.Corroborating
+			v.Evidence = append(v.Evidence,
+				o.Owner.Label+" is a publisher folder shared by several products, "+
+					"so it is not attributable to one",
+				"at least one of them is installed: "+b.Path)
+			v.Keep = a.keepSignals(o, now, window)
+			return v
+		}
+		// Nothing inside the folder belongs to anything that is installed,
+		// so the folder is residue like any other and takes the ordinary
+		// path below. A publisher folder is protected by the publisher's
+		// products, not by being a publisher folder.
 		v.Evidence = append(v.Evidence,
-			o.Owner.Label+" is shared by several installed applications and is not attributable to one")
-		return v
+			"nothing inside "+o.Owner.Label+" belongs to an installed application")
 	}
 
 	// Keep signals (D24). Each one is a reason to believe the software is
@@ -187,7 +198,7 @@ func (a *Analysis) verdictFor(o *OwnerResult, now time.Time, window time.Duratio
 	switch {
 	case len(stale) > 0:
 		v.State = StateOrphanLikely
-		v.Evidence = append(v.Evidence, "the only copy is a staged update at "+stale[0].Path)
+		v.Evidence = append(v.Evidence, a.staleCopyNote(stale[0]))
 	case o.Owner.Kind == KindUnknown:
 		// Nothing identified the directory in the first place, so there
 		// is no application to say is missing. An unknown owner is not
@@ -202,7 +213,94 @@ func (a *Analysis) verdictFor(o *OwnerResult, now time.Time, window time.Duratio
 	}
 
 	v.Confidence, v.Evidence = a.orphanConfidence(o, v.Evidence)
+	// An orphan verdict is a claim about what is *not* on the machine, so it
+	// is only as good as the search behind it. When the probes that would
+	// have found the software could not run, or when a path that would have
+	// been a keep signal could not be stat'd, the honest answer is that
+	// nothing is known — not that the software is gone.
+	if gaps := a.incompleteEvidence(o); len(gaps) > 0 {
+		v.State, v.Confidence = StateUnknown, classify.UnknownOwner
+		v.Evidence = append(v.Evidence, gaps...)
+	}
 	return v
+}
+
+// orphanProbes are the probes whose failure leaves an orphan verdict without
+// the evidence that would have contradicted it: the casks that name an
+// application, the installer receipts and the launch items that show something
+// is still configured to run, and the listing of the directories an
+// application is installed in. Lose any of those and the search an orphan
+// verdict claims to have done was not done.
+//
+// LaunchServices is deliberately not among them, although it is the fourth
+// probe that feeds a verdict. Every use of the register here points the other
+// way: a registration at a path that is gone is what promotes an orphan from
+// possible to likely, and nothing treats a registration at a path that exists
+// as a reason to keep anything. Losing it therefore makes an orphan less
+// certain, never more, and the confidence grade already carries that. Capping
+// on it would have withdrawn every orphan on a machine where the dump is
+// merely slow — which, under a scan that is saturating the disk at the same
+// time, is most of them.
+var orphanProbes = map[string]bool{
+	probeBrew:         true,
+	probePkgutil:      true,
+	probeApplications: true,
+	probeLaunchd:      true,
+}
+
+// incompleteEvidence lists the reasons an orphan verdict cannot be reached for
+// this owner: probes that did not run, and paths that could not be checked.
+//
+// The two are the same failure seen from different ends. A degraded probe is a
+// class of evidence nobody gathered; an unreadable path is one particular
+// piece of it. Either way the search that an orphan verdict rests on was not
+// the search it claims to have been, and inventory.go's rule — a degraded
+// probe must never become a verdict — applies to both.
+func (a *Analysis) incompleteEvidence(o *OwnerResult) []string {
+	var out []string
+	for _, deg := range a.Inventory.Degraded {
+		if orphanProbes[deg.Probe] {
+			out = append(out, "orphan evidence incomplete: "+deg.Probe+" "+deg.Reason)
+		}
+	}
+	return append(out, a.uncheckedFor(o)...)
+}
+
+// uncheckedFor lists the owner's own paths that could not be stat'd.
+//
+// Each one is a keep signal that may or may not exist. A launch item whose
+// program could not be checked might be running the software right now; a
+// receipt whose install location could not be checked might point at a
+// directory that is still there. Reading either as absence is how a machine
+// without Full Disk Access reports its installed software as orphaned.
+func (a *Analysis) uncheckedFor(o *OwnerResult) []string {
+	var out []string
+	for _, item := range a.Inventory.LaunchItems {
+		if item.CheckErr == "" {
+			continue
+		}
+		for _, id := range o.IDs {
+			if item.Owns(id) {
+				out = append(out, item.CheckErr)
+				break
+			}
+		}
+	}
+	for _, rec := range a.Inventory.Receipts {
+		if rec.CheckErr == "" || !a.receiptOwnedBy(rec, o) {
+			continue
+		}
+		out = append(out, rec.CheckErr)
+	}
+	for _, id := range o.IDs {
+		for _, e := range a.Inventory.RegistryFor(id) {
+			if e.CheckErr != "" {
+				out = append(out, e.CheckErr)
+			}
+		}
+	}
+	dedupeInPlace(&out)
+	return out
 }
 
 // orphanConfidence grades an orphan verdict.
@@ -246,7 +344,9 @@ func (a *Analysis) orphanConfidence(o *OwnerResult, ev []string) (classify.Confi
 func (a *Analysis) staleRegistration(o *OwnerResult) (RegistryEntry, string, bool) {
 	for _, id := range o.IDs {
 		for _, e := range a.Inventory.RegistryFor(id) {
-			if !e.Exists {
+			// An entry whose path could not be stat'd says nothing
+			// about whether the bundle was removed.
+			if !e.Exists && e.CheckErr == "" {
 				return e, id, true
 			}
 		}
@@ -255,7 +355,7 @@ func (a *Analysis) staleRegistration(o *OwnerResult) (RegistryEntry, string, boo
 		return RegistryEntry{}, "", false
 	}
 	for _, e := range a.Inventory.Registry {
-		if e.Exists {
+		if e.Exists || e.CheckErr != "" {
 			continue
 		}
 		if p, ok := defaultIndex.LookupID(e.ID); ok && p.Slug == o.Owner.Slug {
@@ -282,6 +382,13 @@ func (a *Analysis) bundlesFor(o *OwnerResult) (live, stale, trashed []*Bundle) {
 			live = append(live, b)
 		case a.isStaleCopy(b, o):
 			stale = append(stale, b)
+		case !a.Inventory.Paths.OnVolume(b.Path):
+			// A copy on a Time Machine disk, a mounted image or a
+			// cloned system volume is not this volume's installation.
+			// Counting one as such is how an application deleted from
+			// this disk keeps looking installed forever, which is the
+			// answer that makes the whole report untrustworthy.
+			stale = append(stale, b)
 		default:
 			// A bundle somewhere unconventional — a JetBrains Toolbox
 			// directory, a Downloads folder — is still an installation.
@@ -304,6 +411,47 @@ func (a *Analysis) bundlesFor(o *OwnerResult) (live, stale, trashed []*Bundle) {
 		}
 	}
 	return live, stale, trashed
+}
+
+// staleCopyNote says what sort of copy was found in place of an installation.
+func (a *Analysis) staleCopyNote(b *Bundle) string {
+	if !a.Inventory.Paths.OnVolume(b.Path) {
+		return "the only copy is on another volume at " + b.Path
+	}
+	return "the only copy is a staged update at " + b.Path
+}
+
+// vendorInstalled reports whether any of a publisher's products is installed,
+// and names the bundle that proves it.
+//
+// This is what decides whether ~/Library/Application Support/Google is a live
+// publisher folder or residue, and it is deliberately not a question about the
+// folder's name: the folder is kept because Chrome or Android Studio is
+// installed, and once every Google product has gone it is left behind like any
+// other orphan.
+//
+// Two signals answer it, because neither is enough alone. An installed bundle
+// under the publisher's reverse-DNS prefix is the direct answer, and it is the
+// one that keeps "BraveSoftware" while com.brave.Browser is installed even
+// though nothing inside the folder is named after it. A child of the folder
+// that resolved to something installed is the other, and it is the one that
+// keeps "Smart Code ltd" while Stremio ships under com.westbridge.
+func (a *Analysis) vendorInstalled(o *OwnerResult) (*Bundle, bool) {
+	if prefix, ok := strings.CutPrefix(o.Owner.Key, "vendor:"); ok && prefix != "" {
+		if signed := a.Inventory.InstalledForVendor(prefix); len(signed) > 0 {
+			return signed[0], true
+		}
+	}
+	for _, i := range a.vendorKids[o.Owner.Key] {
+		child, ok := a.Owners[a.Matches[i].Owner.Key]
+		if !ok || child == o {
+			continue
+		}
+		if live, _, _ := a.bundlesFor(child); len(live) > 0 {
+			return live[0], true
+		}
+	}
+	return nil, false
 }
 
 // isStaleCopy reports whether a bundle is a copy that proves nothing: one
@@ -384,18 +532,23 @@ func (a *Analysis) hasLiveLaunchItem(o *OwnerResult) bool { return len(a.liveLau
 func (a *Analysis) liveReceipts(o *OwnerResult) []Receipt {
 	var out []Receipt
 	for _, rec := range a.Inventory.Receipts {
-		if !rec.LocationExists {
-			continue
-		}
-		id := strings.TrimSuffix(rec.PkgID, ".pkg")
-		for _, ownerID := range o.IDs {
-			if id == ownerID || (rec.VendorPrefix() != "" && strings.HasPrefix(ownerID, rec.VendorPrefix()+".")) {
-				out = append(out, rec)
-				break
-			}
+		if rec.LocationExists && a.receiptOwnedBy(rec, o) {
+			out = append(out, rec)
 		}
 	}
 	return out
+}
+
+// receiptOwnedBy reports whether an installer receipt describes this owner,
+// by its package id or by the vendor prefix the id shares with the owner's.
+func (a *Analysis) receiptOwnedBy(rec Receipt, o *OwnerResult) bool {
+	id := strings.TrimSuffix(rec.PkgID, ".pkg")
+	for _, ownerID := range o.IDs {
+		if id == ownerID || (rec.VendorPrefix() != "" && strings.HasPrefix(ownerID, rec.VendorPrefix()+".")) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *Analysis) hasLiveReceipt(o *OwnerResult) bool { return len(a.liveReceipts(o)) > 0 }

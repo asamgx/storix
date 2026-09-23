@@ -73,10 +73,15 @@ type Product struct {
 // Products is the alias table, seeded from a real machine's corpus. Rows are
 // grouped by how they were discovered rather than alphabetically, because a
 // reader adding a row is nearly always looking at one family at a time.
+//
+// A publisher folder's name never appears in Names. "Google" holds Chrome's
+// updater, Android Studio's caches and whatever Google ships next, so reading
+// it as a name for Chrome handed Chrome the lot; locations.go's vendorDirs
+// owns those names instead, and products_test.go keeps the two lists disjoint.
 var Products = []Product{
 	// Editors and IDEs.
 	{Slug: "vscode", Label: "VS Code", BundleIDs: []string{"com.microsoft.VSCode", "com.microsoft.VSCode.ShipIt"},
-		Vendor: "com.microsoft", Names: []string{"Code", "Visual Studio Code", "Microsoft"}, Casks: []string{"visual-studio-code"}},
+		Vendor: "com.microsoft", Names: []string{"Code", "Visual Studio Code"}, Casks: []string{"visual-studio-code"}},
 	{Slug: "cursor", Label: "Cursor", BundleIDs: []string{"com.todesktop.230313mzl4w4u92"},
 		Names: []string{"Cursor", ".cursor"}, Casks: []string{"cursor"}, Distinct: true},
 	{Slug: "zed", Label: "Zed", BundleIDs: []string{"dev.zed.Zed"}, Vendor: "dev.zed", Names: []string{"Zed"}, Casks: []string{"zed"}},
@@ -92,10 +97,10 @@ var Products = []Product{
 	{Slug: "chrome", Label: "Google Chrome", BundleIDs: []string{
 		"com.google.Chrome", "com.google.Chrome.*", "com.google.Keystone", "com.google.Keystone.Agent",
 		"com.google.keystone.*", "com.google.GoogleUpdater", "com.google.GoogleUpdater.*"},
-		Names: []string{"Google", "Chrome", "Google Chrome", "GoogleUpdater", "Keystone", "RLZ", "consentOptions", "GoogleSoftwareUpdate"},
+		Names: []string{"Chrome", "Google Chrome", "GoogleUpdater", "Keystone", "RLZ", "consentOptions", "GoogleSoftwareUpdate"},
 		Casks: []string{"google-chrome"}},
 	{Slug: "brave", Label: "Brave Browser", BundleIDs: []string{"com.brave.Browser", "com.brave.Browser.*"},
-		Vendor: "com.brave", Names: []string{"BraveSoftware", "Brave Browser", "Brave"}, Casks: []string{"brave-browser"}},
+		Vendor: "com.brave", Names: []string{"Brave Browser", "Brave", "Brave-Browser"}, Casks: []string{"brave-browser"}},
 	{Slug: "arc", Label: "Arc", BundleIDs: []string{"company.thebrowser.Browser", "company.thebrowser.Browser.*"},
 		Vendor: "company.thebrowser", Names: []string{"Arc"}, Casks: []string{"arc"}},
 	{Slug: "opera", Label: "Opera", BundleIDs: []string{"com.operasoftware.Opera", "com.operasoftware.*"},
@@ -108,7 +113,7 @@ var Products = []Product{
 	// AI tools.
 	{Slug: "chatgpt", Label: "ChatGPT", BundleIDs: []string{
 		"com.openai.codex", "com.openai.chat", "com.openai.chat.*", "com.openai.sky.CUAService"},
-		Vendor: "com.openai", Names: []string{"OpenAI", "ChatGPT", "ChatGPTHelper"}, Casks: []string{"chatgpt"}, TeamIDs: []string{"2DC432GLL2"}},
+		Vendor: "com.openai", Names: []string{"ChatGPT", "ChatGPTHelper"}, Casks: []string{"chatgpt"}, TeamIDs: []string{"2DC432GLL2"}},
 	{Slug: "atlas", Label: "Atlas", BundleIDs: []string{"com.openai.atlas", "com.openai.atlas.*"},
 		Names: []string{"Atlas", "ChatGPT Atlas"}, Distinct: true},
 	{Slug: "codex-cli", Label: "Codex CLI", Names: []string{"Codex", ".codex"}, Casks: []string{"codex"}, Kind: KindNonApp},
@@ -183,7 +188,7 @@ var Products = []Product{
 
 	// Vendors with heavyweight installers.
 	{Slug: "autocad", Label: "AutoCAD", BundleIDs: []string{"com.autodesk.AutoCAD2027", "com.autodesk.*"},
-		Vendor: "com.autodesk", Names: []string{"Autodesk", "AutoCAD 2027", "AdskLicensing"}},
+		Vendor: "com.autodesk", Names: []string{"AutoCAD 2027", "AdskLicensing"}},
 	{Slug: "globalprotect", Label: "GlobalProtect", BundleIDs: []string{"com.paloaltonetworks.GlobalProtect", "com.paloaltonetworks.*"},
 		Vendor: "com.paloaltonetworks", Names: []string{"PaloAltoNetworks", "GlobalProtect"}, TeamIDs: []string{"PXPZ95SK77"}, Distinct: true},
 	{Slug: "wondershare", Label: "Wondershare", BundleIDs: []string{"com.wondershare.*", "com.wondershare.Installer", "com.wondershare.mac-drfoneframe"},
@@ -268,13 +273,13 @@ func newProductIndex(ps []Product) (*productIndex, error) {
 		ix.all = append(ix.all, p)
 		for _, id := range p.BundleIDs {
 			if strings.ContainsAny(id, "*?") {
-				ix.globs = append(ix.globs, productGlob{id, p})
+				ix.globs = append(ix.globs, productGlob{idKey(id), p})
 				continue
 			}
-			if prev, ok := ix.byID[id]; ok && prev != p {
+			if prev, ok := ix.byID[idKey(id)]; ok && prev != p {
 				return nil, fmt.Errorf("apps: bundle id %q claimed by %q and %q", id, prev.Slug, p.Slug)
 			}
-			ix.byID[id] = p
+			ix.byID[idKey(id)] = p
 		}
 		for _, n := range p.Names {
 			for _, k := range nameKeys(n) {
@@ -335,13 +340,15 @@ func nameKeys(n string) []string {
 }
 
 // LookupID finds the product an identifier belongs to, trying literal ids
-// first and glob families afterwards.
+// first and glob families afterwards. The comparison folds case, because
+// macOS does: see idKey.
 func (ix *productIndex) LookupID(id string) (*Product, bool) {
-	if p, ok := ix.byID[id]; ok {
+	k := idKey(id)
+	if p, ok := ix.byID[k]; ok {
 		return p, true
 	}
 	for _, g := range ix.globs {
-		if ok, _ := path.Match(g.pattern, id); ok {
+		if ok, _ := path.Match(g.pattern, k); ok {
 			return g.product, true
 		}
 	}

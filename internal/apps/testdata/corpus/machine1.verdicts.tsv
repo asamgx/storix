@@ -53,3 +53,8 @@ product:warp	Warp	orphan-likely	likely
 product:wondershare	Wondershare	orphan-likely	likely
 project:mochi	mochi	own-build	likely
 unknown:SomethingNobodyKnows	SomethingNobodyKnows	unknown	unknown
+vendor:com.autodesk	Autodesk	vendor	corroborating
+vendor:com.brave	BraveSoftware	vendor	corroborating
+vendor:com.google	Google	vendor	corroborating
+vendor:com.microsoft	Microsoft	vendor	corroborating
+vendor:com.openai	OpenAI	vendor	corroborating

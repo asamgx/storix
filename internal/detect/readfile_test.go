@@ -1,9 +1,12 @@
 package detect
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -109,6 +112,55 @@ func TestStatAndExists(t *testing.T) {
 	fi, err := Stat(dir)
 	if err != nil || !fi.IsDir {
 		t.Errorf("Stat(dir) = %+v, %v", fi, err)
+	}
+}
+
+// TestLookupTellsGoneFromUnreadable is the distinction Exists cannot make.
+// A path that is not there and a path this process may not look at both stat
+// with an error, and only the first of them is evidence that an application
+// was uninstalled. Collapsing the second into "gone" is how a machine without
+// Full Disk Access reports its installed software as orphaned.
+func TestLookupTellsGoneFromUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "f")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	real := Env{Stat: Stat}
+	if ok, err := real.Lookup(file); !ok || err != nil {
+		t.Errorf("Lookup(present) = %v, %v; want true, nil", ok, err)
+	}
+	if ok, err := real.Lookup(filepath.Join(dir, "absent")); ok || err != nil {
+		t.Errorf("Lookup(ENOENT) = %v, %v; want false, nil", ok, err)
+	}
+	if ok, err := real.Lookup(""); ok || err != nil {
+		t.Errorf("Lookup(\"\") = %v, %v; want false, nil", ok, err)
+	}
+
+	// A stat that fails for any other reason leaves the answer unknown, and
+	// says so with an error rather than by returning false on its own.
+	denied := Env{Stat: func(string) (FileInfo, error) {
+		return FileInfo{}, &fs.PathError{Op: "lstat", Path: file, Err: syscall.EPERM}
+	}}
+	ok, err := denied.Lookup(file)
+	if ok {
+		t.Error("Lookup said an unreadable path was there")
+	}
+	if err == nil {
+		t.Fatal("Lookup reported EPERM as a definite absence")
+	}
+	if !errors.Is(err, fs.ErrPermission) {
+		t.Errorf("Lookup error = %v, want a permission error", err)
+	}
+	if denied.Exists(file) {
+		t.Error("Exists is still a boolean and must answer false when it could not look")
+	}
+
+	// An environment with no stat function knows nothing, which is also an
+	// error rather than an absence.
+	if _, err := (Env{}).Lookup(file); err == nil {
+		t.Error("an environment with no Stat reported a definite absence")
 	}
 }
 

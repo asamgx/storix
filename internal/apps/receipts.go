@@ -25,8 +25,15 @@ type Receipt struct {
 	// InstallTime is when the package was installed.
 	InstallTime time.Time `json:"installTime,omitempty"`
 	// LocationExists is the result of an lstat on the install path, filled
-	// in by Probe; the parser never touches the filesystem.
+	// in by Probe; the parser never touches the filesystem. It is false
+	// both for a location that is gone and for one that could not be
+	// checked, so a caller reading absence as evidence that the software
+	// was removed reads CheckErr first.
 	LocationExists bool `json:"locationExists"`
+	// CheckErr is why the install location could not be stat'd, empty when
+	// it could. A location that could not be checked is not a location that
+	// is missing: see [detect.Env.Lookup].
+	CheckErr string `json:"checkErr,omitempty"`
 	// FilesPresent and FilesTotal are the presence ratio from
 	// "pkgutil --files", run only for receipts whose location is missing.
 	FilesPresent int `json:"filesPresent,omitempty"`

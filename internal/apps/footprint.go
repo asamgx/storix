@@ -99,10 +99,16 @@ func Footprints(a *Analysis, winners []classify.Claim) []Footprint {
 		}
 	}
 
-	out := make([]Footprint, 0, len(byKey))
+	ordered := make([]*Footprint, 0, len(byKey))
 	for _, key := range a.OwnerKeys() {
 		fp := byKey[key]
 		fp.Components = dropNested(fp.Components)
+		ordered = append(ordered, fp)
+	}
+	dropOverlap(ordered)
+
+	out := make([]Footprint, 0, len(ordered))
+	for _, fp := range ordered {
 		fp.total()
 		if fp.Total == 0 && len(fp.Components) == 0 {
 			continue
@@ -156,6 +162,63 @@ func dropNested(cs []Component) []Component {
 		out = append(out, c)
 	}
 	return out
+}
+
+// dropOverlap stops one owner's component from counting another owner's bytes.
+//
+// dropNested settles the question inside a single footprint. Across footprints
+// it stays open, and the answer it leaves is wrong in a way that matters:
+// ~/Library/Application Support/Google is the publisher folder, 2.68 GB of it,
+// and Android Studio's own directory sits inside it. Both are claimed, by
+// different owners, and both carry their whole subtree — so those bytes are in
+// two footprints at once, and uninstalling Chrome would have offered Android
+// Studio's live data for deletion.
+//
+// A node's bytes belong to exactly one owner: the deepest one that claimed
+// them. So each component gives up the bytes of every component claimed
+// beneath it, and only the outermost of those is subtracted, because a nested
+// one is already inside it. The arithmetic is exact — the subtracted amounts
+// reappear in the owners that claimed them — and a component reduced to
+// nothing stays in the list, since "Google holds nothing of its own" is an
+// answer a reader wants rather than a row to hide.
+func dropOverlap(fps []*Footprint) {
+	type ref struct {
+		owner string
+		comp  *Component
+	}
+	var all []ref
+	for _, fp := range fps {
+		for i := range fp.Components {
+			all = append(all, ref{fp.Owner.Key, &fp.Components[i]})
+		}
+	}
+	if len(all) < 2 {
+		return
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].comp.Path < all[j].comp.Path })
+
+	// The paths are sorted, so a component's descendants are exactly the run
+	// of entries that follows it and carries its path as a prefix.
+	inner := make([]int64, len(all))
+	for i := range all {
+		prefix := all[i].comp.Path + "/"
+		covered := ""
+		for j := i + 1; j < len(all) && strings.HasPrefix(all[j].comp.Path, prefix); j++ {
+			if covered != "" && strings.HasPrefix(all[j].comp.Path, covered) {
+				continue
+			}
+			if all[j].owner == all[i].owner {
+				continue
+			}
+			covered = all[j].comp.Path + "/"
+			inner[i] += all[j].comp.Bytes
+		}
+	}
+	for i, r := range all {
+		if r.comp.Bytes -= inner[i]; r.comp.Bytes < 0 {
+			r.comp.Bytes = 0
+		}
+	}
 }
 
 // total sums the components into the per-bucket columns.

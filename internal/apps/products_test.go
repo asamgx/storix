@@ -1,6 +1,9 @@
 package apps
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // TestProductTableHasNoCollisions is the invariant the whole alias table
 // rests on: an identifier or a name may mean exactly one product. A
@@ -54,14 +57,11 @@ func TestProductLookupByName(t *testing.T) {
 	t.Parallel()
 	tests := []struct{ name, slug string }{
 		{"Code", "vscode"},
-		{"Microsoft", "vscode"},
-		{"Google", "chrome"},
 		{"GoogleUpdater", "chrome"},
 		{"Keystone", "chrome"},
-		{"BraveSoftware", "brave"},
+		{"Brave-Browser", "brave"},
 		{"Smart Code ltd", "stremio"},
 		{"stremio-server", "stremio"},
-		{"OpenAI", "chatgpt"},
 		{"ChatGPTHelper", "chatgpt"},
 		{"lens-desktop", "lens"},
 		{"Wondershare", "wondershare"},
@@ -84,6 +84,41 @@ func TestProductLookupByName(t *testing.T) {
 				t.Errorf("LookupName(%q) = %q, want %q", tc.name, p.Slug, tc.slug)
 			}
 		})
+	}
+}
+
+// TestPublisherFoldersAreNotProductNames is the invariant behind the split
+// between vendorDirs and the alias table.
+//
+// "Google" holds Chrome's updater, Android Studio's caches and whatever Google
+// ships next. While it was also one of Chrome's names, the alias table
+// answered "Google" with Chrome, and Chrome was handed the whole 2.68 GB
+// folder — Android Studio's live data with it. A publisher folder therefore
+// has exactly one meaning, and it is the publisher.
+func TestPublisherFoldersAreNotProductNames(t *testing.T) {
+	t.Parallel()
+	for folder := range vendorDirs {
+		if p, ok := defaultIndex.LookupName(folder); ok {
+			t.Errorf("the publisher folder %q is also a name of %q; "+
+				"one of the two lists has to give it up", folder, p.Slug)
+		}
+	}
+}
+
+// TestPublisherFoldersHaveAPrefix keeps the second half of the bargain. A
+// publisher folder is kept while the publisher still has something installed,
+// and the reverse-DNS prefix is what answers that; a folder without one would
+// be kept or discarded by its name, which is what this whole split exists to
+// stop.
+func TestPublisherFoldersHaveAPrefix(t *testing.T) {
+	t.Parallel()
+	for folder, prefix := range vendorDirs {
+		if _, ok := ParseReverseDNS(prefix); !ok {
+			t.Errorf("the publisher folder %q maps to %q, which is not a reverse-DNS prefix", folder, prefix)
+		}
+		if folder != strings.ToLower(folder) {
+			t.Errorf("the publisher folder key %q is not lower case, so it will never match", folder)
+		}
 	}
 }
 

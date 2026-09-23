@@ -199,3 +199,99 @@ func TestIsFontCask(t *testing.T) {
 		t.Error("fontforge is not a font cask")
 	}
 }
+
+// TestAnUnexpectedScalarTypeCostsOneFieldNotTheReceipt is finding 7.
+//
+// Homebrew writes the install time as an integer, and a receipt rewritten by
+// anything that round-trips JSON through a single number type carries it as a
+// float. Decoding the document in one call meant that one float failed the
+// whole receipt — and a cask receipt is where Cursor's zap paths live, which
+// is the only thing that attributes an opaque ToDesktop identifier to Cursor.
+func TestAnUnexpectedScalarTypeCostsOneFieldNotTheReceipt(t *testing.T) {
+	t.Parallel()
+	const body = `{
+	  "source": {"version": "1.2.3"},
+	  "uninstall_artifacts": [
+	    {"uninstall": [{"quit": "com.todesktop.230313mzl4w4u92"}]},
+	    {"zap": [{"trash": ["~/Library/Application Support/Cursor"]}]}
+	  ]`
+
+	cases := []struct {
+		name string
+		time string
+		want int64
+	}{
+		{"an integer, as Homebrew writes it", `1753303598`, 1753303598},
+		{"a float, as a round trip leaves it", `1753303598.0`, 1753303598},
+		{"a float with a fraction", `1753303598.75`, 1753303598},
+		{"a string", `"1753303598"`, 1753303598},
+		{"a type nothing can read as a time", `{"epoch": 1753303598}`, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			c, err := DecodeReceipt("cursor", []byte(body+`,"time": `+tc.time+"}"))
+			if err != nil {
+				t.Fatalf("DecodeReceipt: %v", err)
+			}
+			if c.ReceiptErr != "" {
+				t.Errorf("ReceiptErr = %q, want the receipt kept", c.ReceiptErr)
+			}
+			// Whatever the time did, the fields that attribute data survive.
+			if len(c.ZapPaths) != 1 || c.ZapPaths[0] != "~/Library/Application Support/Cursor" {
+				t.Errorf("ZapPaths = %v, want the zap path the attribution needs", c.ZapPaths)
+			}
+			if len(c.QuitIDs) != 1 {
+				t.Errorf("QuitIDs = %v, want the quit id", c.QuitIDs)
+			}
+			if c.Version != "1.2.3" {
+				t.Errorf("Version = %q", c.Version)
+			}
+			switch {
+			case tc.want == 0 && !c.InstalledAt.IsZero():
+				t.Errorf("InstalledAt = %v, want zero when the time cannot be read", c.InstalledAt)
+			case tc.want != 0 && c.InstalledAt.Unix() != tc.want:
+				t.Errorf("InstalledAt = %v, want unix %d", c.InstalledAt, tc.want)
+			}
+		})
+	}
+}
+
+// TestAScalarWhereAnObjectWasExpectedCostsOneField is the same rule for the
+// other fields: a "source" that is a bare string loses the version and nothing
+// else.
+func TestAScalarWhereAnObjectWasExpectedCostsOneField(t *testing.T) {
+	t.Parallel()
+	c, err := DecodeReceipt("cursor", []byte(
+		`{"source": "https://example.invalid/cursor.dmg", "time": 1753303598,
+		  "uninstall_artifacts": [{"app": ["Cursor.app"]}]}`))
+	if err != nil {
+		t.Fatalf("DecodeReceipt: %v", err)
+	}
+	if c.ReceiptErr != "" {
+		t.Errorf("ReceiptErr = %q, want the receipt kept", c.ReceiptErr)
+	}
+	if len(c.Apps) != 1 || c.Apps[0] != "Cursor.app" {
+		t.Errorf("Apps = %v, want the artifact that survived", c.Apps)
+	}
+	if c.InstalledAt.Unix() != 1753303598 {
+		t.Errorf("InstalledAt = %v", c.InstalledAt)
+	}
+	if c.Version != "" {
+		t.Errorf("Version = %q, want empty: the field could not be read", c.Version)
+	}
+}
+
+// TestADocumentThatIsNotAnObjectIsStillAnError keeps the one case that must
+// fail: a receipt that is not JSON at all tells the caller nothing, and the
+// cask matches on its token alone.
+func TestADocumentThatIsNotAnObjectIsStillAnError(t *testing.T) {
+	t.Parallel()
+	c, err := DecodeReceipt("cursor", []byte("not json"))
+	if err == nil {
+		t.Fatal("a receipt that is not JSON decoded without error")
+	}
+	if c.Token != "cursor" || c.ReceiptErr == "" {
+		t.Errorf("cask = %+v, want the token and the reason", c)
+	}
+}

@@ -146,8 +146,10 @@ func BuildReport(a *Analysis, winners []classify.Claim) *Report {
 	r := &Report{Schema: ReportSchema, Degraded: a.Inventory.Degraded}
 	r.Counts = counts(a)
 
+	rendered := make(map[string]bool)
 	for _, fp := range Footprints(a, winners) {
 		e := entryOf(a, fp)
+		rendered[fp.Owner.Key] = true
 		switch fp.State {
 		case StateInstalled:
 			r.Apps = append(r.Apps, e)
@@ -163,14 +165,24 @@ func BuildReport(a *Analysis, winners []classify.Claim) *Report {
 			r.OwnBuild = append(r.OwnBuild, e)
 		case StateVendor:
 			r.Vendor = append(r.Vendor, e)
+		case StateUnknown:
+			// An owner can be unknown and still have claimed its
+			// bytes: one whose data was written yesterday, or one
+			// whose orphan verdict was withdrawn because a probe
+			// could not run. Those keep the footprint they earned,
+			// and losing it is how 2.6 GB of an owner's data
+			// stopped being shown at all.
+			r.Unknown = append(r.Unknown, e)
 		}
 	}
-	// Unknown owners are added from the analysis rather than from the
-	// footprints, because they deliberately emit no claim: a claim that
-	// says "I could not attribute this" would outrank the catalog rule for
-	// the same path. They still belong in the report, which is where a
-	// reader and the next round of alias-table rows come from.
-	r.Unknown = unknownEntries(a)
+	// The owners that claimed nothing are added from the analysis instead.
+	// A directory nothing could be attributed to deliberately emits no
+	// claim — one that said "I could not attribute this" would outrank the
+	// catalog rule for the same path — so it has no footprint to render.
+	// It still belongs in the report, which is where a reader and the next
+	// round of alias-table rows come from.
+	r.Unknown = append(r.Unknown, unknownEntries(a, rendered)...)
+	sortEntries(r.Unknown, false)
 
 	for _, c := range a.CaskOnlyCasks() {
 		ref := CaskRef{Token: c.Token, Version: c.Version, InstalledAt: c.InstalledAt}
@@ -187,13 +199,14 @@ func BuildReport(a *Analysis, winners []classify.Claim) *Report {
 }
 
 // unknownEntries lists the directories nothing could be attributed to,
-// largest first.
-func unknownEntries(a *Analysis) []Entry {
+// largest first. Owners already rendered from their footprint are skipped, so
+// that an owner which is unknown but did claim its bytes appears once.
+func unknownEntries(a *Analysis, rendered map[string]bool) []Entry {
 	var out []Entry
 	for _, key := range a.OwnerKeys() {
 		o := a.Owners[key]
 		v := a.Verdicts[key]
-		if v == nil || v.State != StateUnknown {
+		if v == nil || v.State != StateUnknown || rendered[key] {
 			continue
 		}
 		e := Entry{
@@ -213,13 +226,23 @@ func unknownEntries(a *Analysis) []Entry {
 		}
 		out = append(out, e)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Footprint.Total != out[j].Footprint.Total {
-			return out[i].Footprint.Total > out[j].Footprint.Total
-		}
-		return out[i].Label < out[j].Label
-	})
+	sortEntries(out, false)
 	return out
+}
+
+// sortEntries orders one list the way the report shows it: by size, which is
+// what the question "what is big" needs, or by name for a reader comparing two
+// runs.
+func sortEntries(entries []Entry, byName bool) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		if byName {
+			return entries[i].Label < entries[j].Label
+		}
+		if entries[i].Footprint.Total != entries[j].Footprint.Total {
+			return entries[i].Footprint.Total > entries[j].Footprint.Total
+		}
+		return entries[i].Label < entries[j].Label
+	})
 }
 
 // counts fills in the headline numbers.
@@ -303,16 +326,7 @@ func (r *Report) SortBy(byName bool) {
 	for _, list := range [][]Entry{
 		r.Apps, r.CaskOnly, r.Orphans, r.InTrash, r.Unknown, r.NonApp, r.OwnBuild, r.Vendor,
 	} {
-		entries := list
-		sort.SliceStable(entries, func(i, j int) bool {
-			if byName {
-				return entries[i].Label < entries[j].Label
-			}
-			if entries[i].Footprint.Total != entries[j].Footprint.Total {
-				return entries[i].Footprint.Total > entries[j].Footprint.Total
-			}
-			return entries[i].Label < entries[j].Label
-		})
+		sortEntries(list, byName)
 	}
 }
 

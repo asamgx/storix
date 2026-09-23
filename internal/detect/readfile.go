@@ -176,12 +176,45 @@ func Stat(path string) (FileInfo, error) {
 	return FileInfo{Name: fi.Name(), Size: fi.Size(), Mode: fi.Mode(), IsDir: fi.IsDir()}, nil
 }
 
+// Lookup answers the question Exists cannot: whether a path is there, and,
+// when that is not knowable, why.
+//
+// The distinction is the whole point. A stat that fails with ENOENT says the
+// path is gone; a stat that fails with EPERM says only that this process was
+// not allowed to look, which on macOS is the ordinary answer for half the
+// user's Library until Full Disk Access is granted. Collapsing the second into
+// "it does not exist" is how an installed application's receipt, launch item
+// or LaunchServices registration turns into evidence that the application was
+// uninstalled — the most expensive wrong answer the apps inventory can give.
+//
+// A path that is there returns (true, nil); one that is definitely gone
+// returns (false, nil); anything else returns (false, err) and means the
+// caller does not know.
+func (e Env) Lookup(path string) (bool, error) {
+	if path == "" {
+		return false, nil
+	}
+	if e.Stat == nil {
+		return false, &fs.PathError{Op: "stat", Path: path, Err: errors.New("no stat function is configured")}
+	}
+	if _, err := e.Stat(path); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // Exists reports whether env.Stat finds anything at path. It is the gate
 // nearly every detector opens with, so it is written once here.
+//
+// It answers a boolean question with a boolean, which means it cannot tell
+// "gone" from "could not look": both are false. That is fine for a caller
+// deciding whether to bother reading a file, and wrong for a caller turning
+// the answer into evidence about what the user has installed. Those callers
+// use [Env.Lookup] instead.
 func (e Env) Exists(path string) bool {
-	if e.Stat == nil || path == "" {
-		return false
-	}
-	_, err := e.Stat(path)
-	return err == nil
+	ok, _ := e.Lookup(path)
+	return ok
 }

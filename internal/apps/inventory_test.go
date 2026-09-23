@@ -219,3 +219,94 @@ func TestCacheLike(t *testing.T) {
 		}
 	}
 }
+
+// TestBundleIdentifiersMatchTheWayMacOSMatchesThem is finding 8.
+//
+// Ollama's Info.plist says "com.electron.ollama" and its cache directory is
+// named "com.electron.Ollama". macOS treats the two as the same identifier and
+// LaunchServices answers to both; a case-sensitive index answered to neither,
+// so the directory matched nothing, the application looked absent, and live
+// data was reported as an orphan.
+func TestBundleIdentifiersMatchTheWayMacOSMatchesThem(t *testing.T) {
+	t.Parallel()
+	inv := BuildInventory(nil, &Facts{
+		AppDirBundles: []BundleInfo{
+			{Path: "/Applications/Ollama.app", ID: "com.electron.ollama", DisplayName: "Ollama"},
+		},
+		Registry: []RegistryEntry{
+			{ID: "com.electron.ollama", Path: "/Applications/Ollama.app", Exists: true},
+		},
+	}, Paths{Home: "/Users/andrewsam"})
+
+	for _, id := range []string{"com.electron.ollama", "com.electron.Ollama", "COM.ELECTRON.OLLAMA"} {
+		if b, ok := inv.Installed(id); !ok || b.ID != "com.electron.ollama" {
+			t.Errorf("Installed(%q) found nothing", id)
+		}
+		if _, ok := inv.AnyBundle(id); !ok {
+			t.Errorf("AnyBundle(%q) found nothing", id)
+		}
+		if got := inv.RegistryFor(id); len(got) != 1 {
+			t.Errorf("RegistryFor(%q) = %v, want the one registration", id, got)
+		}
+	}
+
+	// A different identifier is still a different identifier.
+	if _, ok := inv.Installed("com.electron.kontena-lens"); ok {
+		t.Error("folding case also folded two different identifiers together")
+	}
+}
+
+// TestTheAliasTableFoldsCaseToo covers the other index an identifier goes
+// through, literal rows and glob families alike.
+func TestTheAliasTableFoldsCaseToo(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"com.electron.Ollama", "com.electron.ollama"} {
+		p, ok := defaultIndex.LookupID(id)
+		if !ok {
+			t.Errorf("LookupID(%q) found nothing", id)
+			continue
+		}
+		if p.Slug != "ollama" {
+			t.Errorf("LookupID(%q) = %q, want ollama", id, p.Slug)
+		}
+	}
+	// "com.google.Chrome.*" is a glob family, and a directory that carries
+	// the identifier in another case belongs to it just the same.
+	if p, ok := defaultIndex.LookupID("com.google.chrome.framework"); !ok || p.Slug != "chrome" {
+		t.Errorf("LookupID of a differently-cased helper = %v, %v", p, ok)
+	}
+}
+
+// TestALaunchItemOwnsAnIdentifierWhateverItsCase keeps the third index in
+// step: a keep signal that is not recognised is a keep signal that was not
+// found.
+func TestALaunchItemOwnsAnIdentifierWhateverItsCase(t *testing.T) {
+	t.Parallel()
+	item := LaunchItem{Label: "com.google.Keystone.Agent", BundleIDs: []string{"com.google.Chrome"}}
+	for _, id := range []string{"com.google.keystone", "com.google.Keystone", "com.google.chrome"} {
+		if !item.Owns(id) {
+			t.Errorf("Owns(%q) = false", id)
+		}
+	}
+	if item.Owns("com.google.antigravity") {
+		t.Error("Owns matched an unrelated identifier")
+	}
+}
+
+// TestACaskQuitIDMatchesWhateverTheCase is the fourth, and the one that
+// decides whether a cask can claim a directory at all.
+func TestACaskQuitIDMatchesWhateverTheCase(t *testing.T) {
+	t.Parallel()
+	c := &Cask{Token: "ollama-app", QuitIDs: []string{"com.electron.Ollama"}}
+	for _, id := range []string{"com.electron.ollama", "com.electron.Ollama"} {
+		if _, ok := c.MatchesID(id); !ok {
+			t.Errorf("MatchesID(%q) = false", id)
+		}
+	}
+	globbed := &Cask{Token: "etcher", QuitIDs: []string{"io.balena.Etcher.*"}}
+	for _, id := range []string{"io.balena.etcher", "io.balena.etcher.helper"} {
+		if _, ok := globbed.MatchesID(id); !ok {
+			t.Errorf("MatchesID(%q) against a glob = false", id)
+		}
+	}
+}

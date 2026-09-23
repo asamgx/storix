@@ -668,14 +668,17 @@ func TestCorpusNotFlagged(t *testing.T) {
 		}
 	}
 
-	// The vendor folders resolve to the one installed application each
-	// publisher has, which is what keeps "Google" and "Microsoft" out of
-	// the orphan list without a special case for either.
+	// A publisher folder belongs to the publisher, not to whichever of its
+	// products the alias table happens to name first, and it stays out of
+	// the orphan list for as long as any of those products is installed.
+	// Both halves matter: attributing ~/Library/Application Support/Google
+	// to Chrome handed Chrome the whole folder, Android Studio's data
+	// included, and offering it for deletion when Chrome went would have
+	// taken data whose application is still on the machine.
 	for _, dir := range []string{
 		"~/Library/Application Support/Google",
 		"~/Library/Application Support/Microsoft",
 		"~/Library/Application Support/Autodesk",
-		"~/Library/Application Support/stremio-server",
 	} {
 		found := false
 		for i, cand := range a.Candidates {
@@ -683,13 +686,30 @@ func TestCorpusNotFlagged(t *testing.T) {
 				continue
 			}
 			found = true
-			v := a.Verdicts[a.Matches[i].Owner.Key]
-			if v == nil || v.State != StateInstalled {
-				t.Errorf("%s is owned by %s, whose state is %v", dir, a.Matches[i].Owner.Key, v)
+			key := a.Matches[i].Owner.Key
+			if a.Matches[i].Owner.Kind != KindVendor {
+				t.Errorf("%s resolved to %s, want the publisher", dir, key)
+			}
+			if v := a.Verdicts[key]; v == nil || v.State != StateVendor {
+				t.Errorf("%s is owned by %s, whose state is %v, want vendor", dir, key, v)
 			}
 		}
 		if !found {
 			t.Errorf("%s was not a candidate", dir)
+		}
+	}
+
+	// A directory that names one product stays that product's, whether or
+	// not the product publishes under its own reverse-DNS prefix.
+	for _, dir := range []string{"~/Library/Application Support/stremio-server"} {
+		for i, cand := range a.Candidates {
+			if c.canonical(cand.Path) != dir {
+				continue
+			}
+			v := a.Verdicts[a.Matches[i].Owner.Key]
+			if v == nil || v.State != StateInstalled {
+				t.Errorf("%s is owned by %s, whose state is %v", dir, a.Matches[i].Owner.Key, v)
+			}
 		}
 	}
 }

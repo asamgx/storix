@@ -106,7 +106,14 @@ func (r *resolver) Resolve(c Candidate) Match {
 	}
 
 	// 2. Cask receipt: quit ids, zapped data paths, application names.
-	if m, ok := r.byCask(c, ev); ok {
+	//
+	// Inside a publisher folder the zapped paths are held back until step
+	// 5b. A cask globs the folder — google-chrome zaps
+	// "~/Library/Caches/Google/*" — which is a claim about the publisher's
+	// directory and not about each product inside it, and letting it win
+	// here handed Chrome the whole of Android Studio's caches. The quit ids
+	// and the application names name one product, so they stay.
+	if m, ok := r.byCask(c, ev, c.Vendor == ""); ok {
 		return m
 	}
 
@@ -140,6 +147,15 @@ func (r *resolver) Resolve(c Candidate) Match {
 	if b, ok := r.inv.InstalledByName(c.Name); ok {
 		return r.fromBundle(b, classify.Likely, "apps/display-name",
 			evidence(ev, "directory name "+c.Name+" matches "+b.Path))
+	}
+
+	// 5b. The cask paths held back at step 2, now that everything which
+	//     names a single product has had its turn. A glob over a publisher
+	//     folder is the right answer for a directory nothing else claims.
+	if c.Vendor != "" {
+		if m, ok := r.byCask(c, ev, true); ok {
+			return m
+		}
 	}
 
 	// 6. Updater suffix: recurse on the application before the suffix.
@@ -233,17 +249,28 @@ func (r *resolver) byBundleID(name string, ev []string) (Match, bool) {
 	return Match{}, false
 }
 
-// byCask is step 2. A cask receipt is the only evidence that survives the
-// application being deleted, which is why a cask whose bundle is missing
-// still yields an owner instead of an unknown.
-func (r *resolver) byCask(c Candidate, ev []string) (Match, bool) {
+// byCask is step 2, and step 5b for a candidate inside a publisher folder. A
+// cask receipt is the only evidence that survives the application being
+// deleted, which is why a cask whose bundle is missing still yields an owner
+// instead of an unknown.
+//
+// allowPaths says whether the receipt's zapped data paths count. They always
+// do at step 2 and never inside a publisher folder, where a glob over the
+// folder is a claim about the publisher rather than about each product in it;
+// those candidates come back at step 5b with allowPaths set, once the rules
+// that name one product have had their turn.
+func (r *resolver) byCask(c Candidate, ev []string, allowPaths bool) (Match, bool) {
 	for _, cask := range r.inv.Casks {
 		pattern, matched := "", false
 		rule := ""
+		zapPattern, zapped := "", false
+		if allowPaths {
+			zapPattern, zapped = cask.MatchesPath(c.Path, r.inv.Paths.Home)
+		}
 		if p, ok := cask.MatchesID(c.Name); ok {
 			pattern, matched, rule = p, true, "apps/cask-quit"
-		} else if p, ok := cask.MatchesPath(c.Path, r.inv.Paths.Home); ok {
-			pattern, matched, rule = p, true, "apps/cask-zap"
+		} else if zapped {
+			pattern, matched, rule = zapPattern, true, "apps/cask-zap"
 		} else if hasFold(cask.AppNames(), c.Name) {
 			pattern, matched, rule = c.Name+".app", true, "apps/cask-app-name"
 		}
@@ -419,7 +446,10 @@ func (r *resolver) byVendor(c Candidate, ev []string) (Match, bool) {
 				installed[0].Path+" ("+installed[0].ID+")")), true
 	default:
 		return Match{
-			Owner:      Owner{Key: "vendor:" + rdns.Vendor, Kind: KindVendor, Label: rdns.Vendor + " (shared)"},
+			Owner: Owner{
+				Key: "vendor:" + rdns.Vendor, Kind: KindVendor,
+				Label: VendorLabel(rdns.Vendor, ""),
+			},
 			Confidence: classify.Corroborating,
 			Rule:       "apps/vendor-prefix",
 			Evidence: evidence(ev, "vendor prefix "+rdns.Vendor+" is shared by several installed applications; "+

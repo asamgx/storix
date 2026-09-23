@@ -22,8 +22,12 @@ type RegistryEntry struct {
 	Path string `json:"path"`
 	// TeamID is the signing team, when the dump records one.
 	TeamID string `json:"teamId,omitempty"`
-	// Exists is the result of an lstat, filled in by Probe.
+	// Exists is the result of an lstat, filled in by Probe. It is false
+	// both for a path that is gone and for one that could not be checked,
+	// so a caller reading absence as evidence checks CheckErr first.
 	Exists bool `json:"exists"`
+	// CheckErr is why the path could not be stat'd, empty when it could.
+	CheckErr string `json:"checkErr,omitempty"`
 	// InTrash is true for a path under a Trash directory.
 	InTrash bool `json:"inTrash,omitempty"`
 }

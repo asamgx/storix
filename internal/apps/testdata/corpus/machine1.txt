@@ -5,18 +5,23 @@
 # --- Library trees that carry an owner -------------------------------------
 Users/andrewsam/Library/Application Support/Code
 Users/andrewsam/Library/Application Support/Microsoft
+Users/andrewsam/Library/Application Support/Microsoft/DeveloperTools
 Users/andrewsam/Library/Application Support/Google
 Users/andrewsam/Library/Application Support/Google/Chrome
 Users/andrewsam/Library/Application Support/Google/AndroidStudio2025.1.3
 Users/andrewsam/Library/Application Support/Google/GoogleUpdater
 Users/andrewsam/Library/Application Support/BraveSoftware
+Users/andrewsam/Library/Application Support/BraveSoftware/Brave-Browser
 Users/andrewsam/Library/Application Support/OpenAI
+Users/andrewsam/Library/Application Support/OpenAI/Codex
+Users/andrewsam/Library/Application Support/OpenAI/ChatGPT Atlas
 Users/andrewsam/Library/Application Support/Smart Code ltd
 Users/andrewsam/Library/Application Support/stremio-server
 Users/andrewsam/Library/Application Support/Cursor
 Users/andrewsam/Library/Application Support/Antigravity
 Users/andrewsam/Library/Application Support/Wondershare
 Users/andrewsam/Library/Application Support/Autodesk
+Users/andrewsam/Library/Application Support/Autodesk/AdskLicensing
 Users/andrewsam/Library/Application Support/PaloAltoNetworks
 Users/andrewsam/Library/Application Support/dev.warp.Warp-Stable
 Users/andrewsam/Library/Application Support/com.operasoftware.Opera

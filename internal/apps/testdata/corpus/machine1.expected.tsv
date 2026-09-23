@@ -7,18 +7,23 @@
 /Library/LaunchDaemons/dev.orbstack.OrbStack.privhelper.plist	app:dev.kdrag0n.MacVirt	strong	apps/alias
 ~/Library/Application Support/Antigravity	product:antigravity	likely	apps/alias
 ~/Library/Application Support/Arc	app:company.thebrowser.Browser	strong	apps/cask-zap
-~/Library/Application Support/Autodesk	app:com.autodesk.AutoCAD2027	strong	apps/alias
-~/Library/Application Support/BraveSoftware	app:com.brave.Browser	strong	apps/alias
+~/Library/Application Support/Autodesk	vendor:com.autodesk	corroborating	apps/vendor-dir
+~/Library/Application Support/Autodesk/AdskLicensing	app:com.autodesk.AutoCAD2027	strong	apps/alias
+~/Library/Application Support/BraveSoftware	vendor:com.brave	corroborating	apps/vendor-dir
+~/Library/Application Support/BraveSoftware/Brave-Browser	app:com.brave.Browser	strong	apps/alias
 ~/Library/Application Support/Chromium	product:chromium	likely	apps/alias
 ~/Library/Application Support/Code	app:com.microsoft.VSCode	strong	apps/alias
 ~/Library/Application Support/Codex	cli:codex-cli	likely	apps/alias
 ~/Library/Application Support/Cursor	cask:cursor	likely	apps/cask-zap
-~/Library/Application Support/Google	app:com.google.Chrome	strong	apps/alias
+~/Library/Application Support/Google	vendor:com.google	corroborating	apps/vendor-dir
 ~/Library/Application Support/Google/AndroidStudio2025.1.3	app:com.google.android.studio	strong	apps/alias
 ~/Library/Application Support/Google/Chrome	app:com.google.Chrome	strong	apps/alias
 ~/Library/Application Support/Google/GoogleUpdater	app:com.google.Chrome	strong	apps/alias
-~/Library/Application Support/Microsoft	app:com.microsoft.VSCode	strong	apps/alias
-~/Library/Application Support/OpenAI	app:com.openai.codex	strong	apps/alias
+~/Library/Application Support/Microsoft	vendor:com.microsoft	corroborating	apps/vendor-dir
+~/Library/Application Support/Microsoft/DeveloperTools	vendor:com.microsoft	corroborating	apps/vendor-dir
+~/Library/Application Support/OpenAI	vendor:com.openai	corroborating	apps/vendor-dir
+~/Library/Application Support/OpenAI/ChatGPT Atlas	product:atlas	likely	apps/alias
+~/Library/Application Support/OpenAI/Codex	cli:codex-cli	likely	apps/alias
 ~/Library/Application Support/PaloAltoNetworks	product:globalprotect	likely	apps/alias
 ~/Library/Application Support/Smart Code ltd	app:com.westbridge.stremio5-mac	strong	apps/alias
 ~/Library/Application Support/TabNine	product:tabnine	likely	apps/alias

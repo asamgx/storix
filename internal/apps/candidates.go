@@ -26,6 +26,11 @@ type Analysis struct {
 	Owners map[string]*OwnerResult
 	// Verdicts is the state of each owner, keyed the same way.
 	Verdicts map[string]*Verdict
+	// vendorKids maps a publisher folder's owner key to the indices of the
+	// candidates found inside it. A publisher folder is kept or discarded
+	// by what its children turn out to belong to, so the verdict needs to
+	// find them again; see [Analysis.vendorInstalled].
+	vendorKids map[string][]int
 }
 
 // OwnerResult is everything known about one owner.
@@ -91,10 +96,23 @@ type Options struct {
 //
 // It is pure: it reads the tree and the facts and touches nothing else, which
 // is what lets a cached scan re-run it without going near the machine.
+//
+// Options.Now is the instant every age in the result is measured from. When it
+// is unset the tree's own finish time is used, so that reloading a scan from
+// the cache next week rebuilds the same document rather than one whose
+// evidence has quietly aged; only a tree that carries no clock at all falls
+// back to time.Now.
 func Analyze(t *walk.Tree, f *Facts, cx classify.Context, opts Options) *Analysis {
 	paths := pathsFor(cx, opts)
 	inv := BuildInventory(t, f, paths)
-	a := &Analysis{Tree: t, Inventory: inv, Owners: make(map[string]*OwnerResult)}
+	a := &Analysis{
+		Tree: t, Inventory: inv,
+		Owners:     make(map[string]*OwnerResult),
+		vendorKids: make(map[string][]int),
+	}
+	if opts.Now.IsZero() && t != nil {
+		opts.Now = t.Finished
+	}
 
 	r := &resolver{
 		inv:               inv,
@@ -117,20 +135,25 @@ func Analyze(t *walk.Tree, f *Facts, cx classify.Context, opts Options) *Analysi
 	for _, cand := range collectCandidates(t, paths) {
 		m := r.Resolve(cand)
 		switch {
-		case cand.Vendor == "" && IsVendorDir(cand.Name) && m.Owner.Kind != KindUnknown:
+		case cand.Vendor == "" && IsVendorDir(cand.Name):
+			m = vendorDirMatch(cand)
 			vendorOwners[path.Join(path.Dir(cand.Path), cand.Name)] = m
-		case cand.Vendor != "" && m.Owner.Kind == KindUnknown:
+		case cand.Vendor != "":
 			// Autodesk keeps a dozen internal directories under its
 			// own folder — AdODIS, AdskCER, ADLM — and not one of them
 			// names a product. They are still Autodesk's, and leaving
 			// 1.4 GB of them as "unknown owner" would be a worse
 			// answer than the folder they sit in already gives.
 			if parent, ok := vendorOwners[path.Dir(cand.Path)]; ok {
-				m = parent
-				m.Confidence = classify.Corroborating
-				m.Rule = "apps/vendor-dir"
-				m.Evidence = evidence(parent.Evidence,
-					cand.Name+" is inside "+cand.Vendor+"'s own folder")
+				a.vendorKids[parent.Owner.Key] = append(
+					a.vendorKids[parent.Owner.Key], len(a.Candidates))
+				if m.Owner.Kind == KindUnknown {
+					m = parent
+					m.Confidence = classify.Corroborating
+					m.Rule = "apps/vendor-dir"
+					m.Evidence = evidence(parent.Evidence,
+						cand.Name+" is inside "+cand.Vendor+"'s own folder")
+				}
 			}
 		}
 		a.Candidates = append(a.Candidates, cand)
@@ -296,6 +319,33 @@ func collectCandidates(t *walk.Tree, p Paths) []Candidate {
 		}
 	}
 	return out
+}
+
+// vendorDirMatch keys a publisher folder to the publisher, whatever the alias
+// table would otherwise make of its name.
+//
+// "Google" is in the alias table as one of Chrome's names, and before this it
+// resolved to Chrome — which handed Chrome the whole of
+// ~/Library/Application Support/Google, Android Studio's 2.68 GB of data
+// included. Uninstalling Chrome would then have reported Android Studio's
+// live data as orphaned. A publisher folder is not a product: its children are
+// the products, they are resolved one by one, and the folder itself belongs to
+// the publisher. Whether that folder is still wanted is then a question about
+// the publisher's products rather than about the folder's name, which is what
+// [Analysis.vendorInstalled] answers.
+func vendorDirMatch(c Candidate) Match {
+	prefix := VendorPrefix(c.Name)
+	return Match{
+		Owner: Owner{
+			Key:   "vendor:" + prefix,
+			Kind:  KindVendor,
+			Label: VendorLabel(prefix, c.Name),
+		},
+		Confidence: classify.Corroborating,
+		Rule:       "apps/vendor-dir",
+		Evidence: []string{c.Name + " is a publisher folder rather than a product; " +
+			"the products inside it are attributed one by one"},
+	}
 }
 
 // isLocationDir reports whether a path is itself one of the application data

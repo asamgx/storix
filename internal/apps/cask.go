@@ -55,44 +55,80 @@ func (c *Cask) HasApp() bool { return len(c.Apps) > 0 }
 // no application. Such a cask is a non-app owner, never a missing bundle.
 func (c *Cask) BinaryOnly() bool { return len(c.Apps) == 0 && len(c.Binaries) > 0 }
 
-// receiptDoc is the tolerant shape of INSTALL_RECEIPT.json.
+// DecodeReceipt parses one cask install receipt.
 //
-// Only three fields are read and each artifact element stays a RawMessage
-// until its key is known, because Homebrew's artifact stanzas are a union of
-// shapes: "binary" is an array mixing strings and {"target": …} objects,
-// "quit" is a string here and an array there, "rmdir" appears where "trash"
-// was expected. Decoding into fixed types would fail the whole receipt over
-// one unfamiliar stanza, and a failed receipt is a lost attribution.
-type receiptDoc struct {
-	Time   int64 `json:"time"`
-	Source struct {
-		Version string `json:"version"`
-	} `json:"source"`
-	UninstallArtifacts []map[string]json.RawMessage `json:"uninstall_artifacts"`
-}
-
-// DecodeReceipt parses one cask install receipt. A receipt that cannot be
-// decoded at all yields a cask carrying only its token and ReceiptErr set:
-// the caller still knows the cask is installed, which is most of the value.
+// The document is opened one field at a time rather than decoded into a fixed
+// struct, because Homebrew's receipts are a union of shapes and every one of
+// them has to survive the one field next to it changing type. "binary" is an
+// array mixing strings and {"target": …} objects, "quit" is a string here and
+// an array there, "rmdir" appears where "trash" was expected — and "time" is
+// an integer in most receipts and a float in some. Decoding the lot in one
+// call meant a single unexpected scalar failed the whole receipt, and a
+// failed receipt is a lost attribution: Cursor's zap paths are what attribute
+// an opaque ToDesktop identifier to Cursor.
+//
+// So a field that will not decode costs that field and nothing else. Only a
+// document that is not a JSON object at all yields a cask carrying its token
+// and ReceiptErr; the caller still knows the cask is installed, which is most
+// of the value.
 func DecodeReceipt(token string, data []byte) (Cask, error) {
 	c := Cask{Token: token}
-	var doc receiptDoc
+	var doc map[string]json.RawMessage
 	if err := json.Unmarshal(data, &doc); err != nil {
 		c.ReceiptErr = err.Error()
 		return c, err
 	}
-	c.Version = doc.Source.Version
-	if doc.Time > 0 {
-		c.InstalledAt = time.Unix(doc.Time, 0).UTC()
+
+	var source struct {
+		Version string `json:"version"`
 	}
-	for _, artifact := range doc.UninstallArtifacts {
-		for key, raw := range artifact {
-			c.absorb(key, raw)
+	if err := json.Unmarshal(doc["source"], &source); err == nil {
+		c.Version = source.Version
+	}
+	if secs, ok := decodeUnixSeconds(doc["time"]); ok && secs > 0 {
+		c.InstalledAt = time.Unix(secs, 0).UTC()
+	}
+	var artifacts []map[string]json.RawMessage
+	if err := json.Unmarshal(doc["uninstall_artifacts"], &artifacts); err == nil {
+		for _, artifact := range artifacts {
+			for key, raw := range artifact {
+				c.absorb(key, raw)
+			}
 		}
 	}
+
 	dedupeInPlace(&c.Apps, &c.QuitIDs, &c.Binaries, &c.Pkgs, &c.PkgutilIDs,
 		&c.LaunchctlLabels, &c.ZapPaths, &c.DeletePaths)
 	return c, nil
+}
+
+// decodeUnixSeconds reads an install time however the receipt wrote it.
+//
+// Homebrew writes seconds since the epoch, but not always as an integer: a
+// receipt rewritten by a tool that round-trips through a language with one
+// number type carries "time": 1753303598.0, and a few carry it as a string.
+// The fractional part is dropped rather than rounded, because a receipt's
+// second is already more precision than a "installed 2025-07-23" line needs.
+func decodeUnixSeconds(raw json.RawMessage) (int64, bool) {
+	if len(raw) == 0 {
+		return 0, false
+	}
+	var num json.Number
+	if err := json.Unmarshal(raw, &num); err != nil {
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			return 0, false
+		}
+		num = json.Number(s)
+	}
+	if n, err := num.Int64(); err == nil {
+		return n, true
+	}
+	f, err := num.Float64()
+	if err != nil {
+		return 0, false
+	}
+	return int64(f), true
 }
 
 // absorb folds one top-level artifact stanza into the cask.
@@ -207,17 +243,19 @@ func dedupeInPlace(lists ...*[]string) {
 // MatchesID reports whether the cask's quit ids cover a bundle id, and which
 // pattern did it. Quit ids may be globs: balenaEtcher's is "io.balena.etcher.*".
 func (c *Cask) MatchesID(id string) (string, bool) {
+	want := idKey(id)
 	for _, q := range c.QuitIDs {
-		if q == id {
+		pattern := idKey(q)
+		if pattern == want {
 			return q, true
 		}
-		if ok, _ := path.Match(q, id); ok {
+		if ok, _ := path.Match(pattern, want); ok {
 			return q, true
 		}
 		// A quit id of "io.balena.etcher.*" names the application and
 		// its helpers together, so the base identifier is a member of
 		// the family even though the glob does not spell it out.
-		if base, ok := strings.CutSuffix(q, ".*"); ok && base == id {
+		if base, ok := strings.CutSuffix(pattern, ".*"); ok && base == want {
 			return q, true
 		}
 	}

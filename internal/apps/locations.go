@@ -182,26 +182,67 @@ func IsAppleName(name string) bool {
 }
 
 // vendorDirs are directories under a location that hold one publisher's
-// several products rather than one product's data. "Google" holds Chrome's
-// updater and Android Studio's caches, so its children are the candidates and
-// the directory itself is attributed to the vendor.
-var vendorDirs = map[string]bool{
-	"google":           true,
-	"microsoft":        true,
-	"autodesk":         true,
-	"wondershare":      true,
-	"jetbrains":        true,
-	"adobe":            true,
-	"mozilla":          true,
-	"openai":           true,
-	"paloaltonetworks": true,
-	"smart code ltd":   true,
-	"bravesoftware":    true,
+// several products rather than one product's data, mapped to the publisher's
+// reverse-DNS prefix.
+//
+// "Google" holds Chrome's updater and Android Studio's caches, so its children
+// are the candidates and the directory itself belongs to the publisher. The
+// prefix is what says whether the publisher is still here: a folder is kept
+// while an installed bundle carries the prefix, and is residue like any other
+// once none does. Without it the folder would have to be kept or discarded by
+// its name, and its name is exactly what cannot tell the two apart.
+//
+// A name here must not also be a product name in products.go, or the alias
+// table would resolve the folder to one of the products inside it and hand
+// that product everything the folder holds. products_test.go asserts it.
+// A folder belongs here only when it really does hold several products.
+// "Wondershare", "PaloAltoNetworks" and "Smart Code ltd" each hold exactly
+// one, and splitting them produced two rows with the same label — the
+// publisher folder and the product — describing the same software. Those stay
+// product names.
+var vendorDirs = map[string]string{
+	"google":        "com.google",
+	"microsoft":     "com.microsoft",
+	"autodesk":      "com.autodesk",
+	"jetbrains":     "com.jetbrains",
+	"adobe":         "com.adobe",
+	"mozilla":       "org.mozilla",
+	"openai":        "com.openai",
+	"bravesoftware": "com.brave",
 }
 
 // IsVendorDir reports whether a directory name is a publisher folder whose
 // children should be resolved individually.
-func IsVendorDir(name string) bool { return vendorDirs[strings.ToLower(name)] }
+func IsVendorDir(name string) bool {
+	_, ok := vendorDirs[strings.ToLower(name)]
+	return ok
+}
+
+// VendorPrefix is the reverse-DNS publisher prefix a folder name stands for,
+// empty when the name is not a publisher folder.
+func VendorPrefix(name string) string { return vendorDirs[strings.ToLower(name)] }
+
+// vendorFolderNames maps a publisher prefix back to the folder name, so that a
+// publisher folder and a bare "com.google.*" directory that only the vendor
+// rule could place end up under one owner with one readable label.
+var vendorFolderNames = func() map[string]string {
+	out := make(map[string]string, len(vendorDirs))
+	for name, prefix := range vendorDirs {
+		out[prefix] = name
+	}
+	return out
+}()
+
+// VendorLabel is what the report prints for a publisher owner.
+func VendorLabel(prefix, folder string) string {
+	if folder != "" {
+		return folder
+	}
+	if name, ok := vendorFolderNames[prefix]; ok {
+		return name
+	}
+	return prefix + " (shared)"
+}
 
 // updaterSuffixes are the shapes an application's self-updater directory
 // takes. Resolving them is worth a rule of its own because the bytes are
