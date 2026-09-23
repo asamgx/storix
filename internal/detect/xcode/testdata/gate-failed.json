@@ -1,0 +1,20 @@
+[
+  {
+    "cmd": {"Name": "xcode-select", "Args": ["-p"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {"stdout": "/Library/Developer/CommandLineTools\n", "exit_code": 0, "duration_ns": 6000000}
+  },
+  {
+    "cmd": {
+      "Name": "xcodebuild",
+      "Args": ["-checkFirstLaunchStatus"],
+      "Env": ["DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"],
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stderr": "xcodebuild: error: Failed to check first launch status: required components are not installed.\n",
+      "exit_code": 1,
+      "duration_ns": 900000000
+    }
+  }
+]

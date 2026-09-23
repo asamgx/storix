@@ -1,0 +1,6 @@
+[
+  {
+    "cmd": {"Name": "gem", "Args": ["env", "gemdir"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {"exit_code": -1, "duration_ns": 5000000000, "timed_out": true, "error": "signal: killed"}
+  }
+]
