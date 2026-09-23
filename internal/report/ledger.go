@@ -21,10 +21,7 @@ func (t *textReport) ledgerSection() {
 	if len(l.Buckets) == 0 {
 		return
 	}
-	used := l.Volume.UsedAfter
-	if used <= 0 {
-		used = l.Scanned.Bytes
-	}
+	used := l.BucketDenominator()
 
 	t.section("LEDGER  (every byte of used space, in one of twelve buckets)")
 	tbl := newTable(t.st, false, true, true, true, false)
@@ -44,12 +41,24 @@ func (t *textReport) ledgerSection() {
 		t.bytes(used),
 		cell{"", t.st.note},
 		cell{"", t.st.note},
-		cell{"used", t.st.label},
+		cell{l.BucketDenominatorLabel(), t.st.label},
 	)
 	tbl.render(t.w)
-	t.field("identity", fmt.Sprintf(
-		"buckets 2–9 and 11 are the %s the walk saw; 1, 10 and 12 are read from the volume, not walked",
-		t.u.Bytes(l.Scanned.Bytes)), t.st.note)
+	walked := l.WalkedBucketBytes()
+	identity := fmt.Sprintf(
+		"buckets 2–9 and 11 sum to the %s the walk saw; 1, 10 and 12 are read from the volumes, not walked",
+		t.u.Bytes(walked))
+	if walked != l.Scanned.Bytes {
+		identity = fmt.Sprintf("buckets 2–9 and 11 sum to %s but the walk saw %s: a node was counted twice or not at all",
+			t.u.Bytes(walked), t.u.Bytes(l.Scanned.Bytes))
+		t.field("identity", identity, t.st.warn)
+	} else {
+		t.field("identity", identity, t.st.note)
+	}
+	if sum := l.BucketSum(); sum != used {
+		t.field("column", fmt.Sprintf("the twelve rows add up to %s against %s %s; the difference is the clamped negative residual",
+			t.u.Bytes(sum), t.u.Bytes(used), l.BucketDenominatorLabel()), t.st.note)
+	}
 	if note := t.bucketNote(); note != "" {
 		t.field("other", note, t.st.warn)
 	}
@@ -80,7 +89,7 @@ func (t *textReport) bucketNote() string {
 	if b == nil || b.Bytes == 0 {
 		return ""
 	}
-	used := t.l.Volume.UsedAfter
+	used := t.l.BucketDenominator()
 	if used <= 0 || float64(b.Bytes)/float64(used) < 0.05 {
 		return ""
 	}

@@ -382,10 +382,10 @@
       {
         "id": "unaccounted",
         "label": "Unreadable / unaccounted",
-        "bytes": 143432475712,
+        "bytes": 144872416320,
         "files": 0,
         "known": true,
-        "note": "filesystem metadata, content of 4 unreadable directories, and unaccounted (4 unreadable paths)",
+        "note": "filesystem metadata, content of 4 unreadable directories, and unaccounted (4 unreadable paths); 1.44 GB of container overhead",
         "reclaimable": 0
       }
     ],

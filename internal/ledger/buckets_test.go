@@ -100,12 +100,20 @@ func TestUnaccountedBucketSign(t *testing.T) {
 		tree(mac.DataRoot, dataUsed+10_000_000_000), units.Decimal, nil)
 
 	pos := positive.bucket(classify.BucketUnaccounted)
-	if pos.Bytes != positive.Residual.Bytes || pos.Bytes <= 0 {
-		t.Errorf("positive residual: bucket = %d, residual = %d", pos.Bytes, positive.Residual.Bytes)
+	wantPos := positive.Residual.Bytes
+	if positive.Container.Known {
+		wantPos += positive.Overhead.Bytes // container structure outside any volume lives here too
+	}
+	if pos.Bytes != wantPos || pos.Bytes <= 0 {
+		t.Errorf("positive residual: bucket = %d, want residual %d + overhead %d", pos.Bytes, positive.Residual.Bytes, positive.Overhead.Bytes)
 	}
 	neg := negative.bucket(classify.BucketUnaccounted)
-	if neg.Bytes != 0 {
-		t.Errorf("negative residual: bucket = %d, want 0", neg.Bytes)
+	wantNeg := int64(0) // the clamped residual contributes nothing…
+	if negative.Container.Known {
+		wantNeg = negative.Overhead.Bytes // …but container overhead is still real space
+	}
+	if neg.Bytes != wantNeg {
+		t.Errorf("negative residual: bucket = %d, want overhead only %d", neg.Bytes, wantNeg)
 	}
 	if neg.Note == "" {
 		t.Error("a negative residual needs a note saying the scan counted blocks twice")
@@ -279,5 +287,30 @@ func TestBucketFilesPartitionTheWalk(t *testing.T) {
 	}
 	if class.InheritedFromNode(binary) != arc {
 		t.Error("a file inside the bundle should inherit the bundle's claim")
+	}
+}
+
+// TestBucketsSumToTheContainerUsedSpace pins the column the reader adds up:
+// with a known container and a non-negative residual the twelve rows sum to
+// exactly the container's used space, which is what the table's footer says.
+func TestBucketsSumToTheContainerUsedSpace(t *testing.T) {
+	const scanned = dataUsed - 10_000_000_000
+	f := fakeFacts(mac.DataRoot, dataUsed, dataUsed, known(1_500_000_000))
+	class := classified(scanned, map[classify.Bucket]int64{
+		classify.BucketApps:      scanned / 2,
+		classify.BucketDeveloper: scanned - scanned/2,
+	})
+	l := BuildClassified(f, tree(mac.DataRoot, scanned), units.Decimal, class)
+	if !l.Container.Known {
+		t.Skip("fixture has no container")
+	}
+	if l.Residual.Bytes < 0 {
+		t.Fatalf("fixture residual %d should be positive", l.Residual.Bytes)
+	}
+	if got, want := l.BucketDenominator(), l.Container.Used; got != want {
+		t.Fatalf("denominator %d should be container used %d", got, want)
+	}
+	if got, want := l.BucketSum(), l.BucketDenominator(); got != want {
+		t.Fatalf("bucket rows sum to %d, denominator is %d (diff %d)", got, want, got-want)
 	}
 }

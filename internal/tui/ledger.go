@@ -235,17 +235,15 @@ func (m *ledgerModel) nodeOf(id int32) *walk.Node {
 	return m.tree.Nodes[id]
 }
 
-// used is what the bars and percentages are measured against: the volume's
-// used space, so the twelve bars add up to a full disk rather than to the
-// largest bucket. It is the same denominator the printed report uses.
+// used is what the bars and percentages are measured against: the
+// container's used space when it is known (bucket 1 is the sibling volumes),
+// so the twelve bars add up to the full disk. It is the same denominator the
+// printed report uses.
 func (m *ledgerModel) used() int64 {
 	if m.l == nil {
 		return 0
 	}
-	if u := m.l.Volume.UsedAfter; u > 0 {
-		return u
-	}
-	return m.l.Scanned.Bytes
+	return m.l.BucketDenominator()
 }
 
 // Column widths of the bucket table. The note is the column that gives way.

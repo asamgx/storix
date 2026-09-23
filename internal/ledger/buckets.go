@@ -130,9 +130,56 @@ func (l *Ledger) fillDerivedBuckets() {
 	default:
 		u.Note = "nothing unaccounted"
 	}
+	if l.Residual.Note != "" {
+		u.Note = u.Note + "; " + l.Residual.Note
+	}
 	if n := len(l.Unreadable); n > 0 && l.Residual.Bytes > 0 {
 		u.Note = fmt.Sprintf("%s (%d unreadable %s)", u.Note, n, plural(n, "path", "paths"))
 	}
+	// Container overhead is APFS structure outside any volume. docs/02 puts
+	// it in bucket 12, and it is what makes the twelve rows sum to the
+	// container's used space when the container is known.
+	if l.Container.Known && l.Overhead.Bytes > 0 {
+		u.Bytes += l.Overhead.Bytes
+		u.Note = fmt.Sprintf("%s; %s of container overhead", u.Note, l.Units.Bytes(l.Overhead.Bytes))
+	}
+}
+
+// BucketDenominator is what the twelve bucket rows are measured against and
+// what they sum to: the container's used space when the container is known
+// (bucket 1 is the sibling volumes, which are not part of the data volume's
+// own used space), else the data volume's used space, else the walk total.
+func (l *Ledger) BucketDenominator() int64 {
+	if l.Container.Known && l.Container.Used > 0 {
+		return l.Container.Used
+	}
+	if l.Volume.UsedAfter > 0 {
+		return l.Volume.UsedAfter
+	}
+	return l.Scanned.Bytes
+}
+
+// BucketDenominatorLabel names BucketDenominator for the table footer.
+func (l *Ledger) BucketDenominatorLabel() string {
+	if l.Container.Known && l.Container.Used > 0 {
+		return "used (container)"
+	}
+	if l.Volume.UsedAfter > 0 {
+		return "used (volume)"
+	}
+	return "scanned"
+}
+
+// BucketSum is the sum of the twelve bucket rows, the number a reader gets by
+// adding the column. It equals BucketDenominator when the residual is not
+// negative; a negative residual (APFS clones counted twice) is clamped to
+// zero in bucket 12 and the note says so.
+func (l *Ledger) BucketSum() int64 {
+	var sum int64
+	for i := range l.Buckets {
+		sum += l.Buckets[i].Bytes
+	}
+	return sum
 }
 
 // reclaimLines turns a bucket's reclaim split into lines, largest first.

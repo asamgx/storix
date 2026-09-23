@@ -5,22 +5,22 @@ storix scan
   source   live
 
 LEDGER  (every byte of used space, in one of twelve buckets)
-  ██░░░░░░░░░░░░   28.13 GB  15.5%                1  macOS
-  █░░░░░░░░░░░░░     1.4 GB   0.8%                2  Applications
-  █░░░░░░░░░░░░░       7 GB   3.9%     7 GB free  3  App data
-  █░░░░░░░░░░░░░    4.68 GB   2.6%  4.68 GB free  4  Developer
-  █░░░░░░░░░░░░░    18.7 GB  10.3%  18.7 GB free  5  Containers & VMs
+  ██░░░░░░░░░░░░   28.13 GB  13.4%                1  macOS
+  █░░░░░░░░░░░░░     1.4 GB   0.7%                2  Applications
+  █░░░░░░░░░░░░░       7 GB   3.3%     7 GB free  3  App data
+  █░░░░░░░░░░░░░    4.68 GB   2.2%  4.68 GB free  4  Developer
+  █░░░░░░░░░░░░░    18.7 GB   8.9%  18.7 GB free  5  Containers & VMs
   █░░░░░░░░░░░░░      49 KB   0.0%                6  Personal files
-  █░░░░░░░░░░░░░     3.1 GB   1.7%                7  Backups
+  █░░░░░░░░░░░░░     3.1 GB   1.5%                7  Backups
   ░░░░░░░░░░░░░░    0 bytes   0.0%                8  System caches & logs
-  █░░░░░░░░░░░░░     900 MB   0.5%   900 MB free  9  Trash
-  █░░░░░░░░░░░░░    1.57 GB   0.9%  1.57 GB free  10  Purgeable
+  █░░░░░░░░░░░░░     900 MB   0.4%   900 MB free  9  Trash
+  █░░░░░░░░░░░░░    1.57 GB   0.7%  1.57 GB free  10  Purgeable
   █░░░░░░░░░░░░░     260 MB   0.1%                11  Other
-  ███████████░░░  143.43 GB  79.2%                12  Unreadable / unaccounted
+  ██████████░░░░  144.87 GB  68.8%                12  Unreadable / unaccounted
   ────────────────────────────────────────────────────────────────────────────
-                  181.05 GB                       used
-  identity  buckets 2–9 and 11 are the 36.04 GB the walk saw; 1, 10 and 12 are read from the
-            volume, not walked
+                  210.61 GB                       used (container)
+  identity  buckets 2–9 and 11 sum to the 36.04 GB the walk saw; 1, 10 and 12 are read from the
+            volumes, not walked
 
 BUCKETS  (what is inside each one)
 
@@ -72,9 +72,9 @@ BUCKETS  (what is inside each one)
             scanned but matched no rule; a large Other means the catalog needs work
   reclaim   260 MB unknown
 
-  Unreadable / unaccounted — 143.43 GB
+  Unreadable / unaccounted — 144.87 GB
             filesystem metadata, content of 4 unreadable directories, and unaccounted (4 unreadable
-            paths)
+            paths); 1.44 GB of container overhead
 
 DEVELOPER  (what your toolchains keep, and what they would give back)
   homebrew
