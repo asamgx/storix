@@ -23,6 +23,7 @@ func DefaultEnv(runner probe.Runner, home string) Env {
 		Home:     home,
 		Euid:     os.Geteuid(),
 		ReadFile: ReadFile,
+		ReadDir:  ReadDir,
 		Stat:     Stat,
 	}
 	if e, ok := runner.(*probe.Exec); ok {

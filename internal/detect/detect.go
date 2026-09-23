@@ -15,6 +15,7 @@ package detect
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/asamgx/storix/internal/classify"
@@ -97,6 +98,12 @@ type Env struct {
 	// it refuses dataless files, refuses symlinks and caps the size. See
 	// readfile.go.
 	ReadFile func(string) ([]byte, error)
+	// ReadDir is the only sanctioned way for a detector to list a
+	// directory, and carries the same guarantees: it refuses a dataless
+	// directory, never follows a final symlink, and caps the entry count.
+	// The apps inventory lists the Caskroom, the launch agent folders and
+	// /Applications through it.
+	ReadDir func(string) ([]os.DirEntry, error)
 	// Stat is how a detector asks whether a path exists without reading
 	// it. It never follows a final symlink.
 	Stat func(string) (FileInfo, error)

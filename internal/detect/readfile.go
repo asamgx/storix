@@ -1,10 +1,12 @@
 package detect
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"sort"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -73,10 +75,10 @@ func ReadFileLimit(path string, limit int64) ([]byte, error) {
 		return nil, &fs.PathError{Op: "lstat", Path: path, Err: err}
 	}
 	if lst.Mode&syscall.S_IFMT != syscall.S_IFREG {
-		return nil, &fs.PathError{Op: "read", Path: path, Err: fmt.Errorf("not a regular file")}
+		return nil, &fs.PathError{Op: "read", Path: path, Err: errors.New("not a regular file")}
 	}
 	if lst.Flags&uint32(unix.SF_DATALESS) != 0 {
-		return nil, &fs.PathError{Op: "read", Path: path, Err: fmt.Errorf("dataless: reading it would download it")}
+		return nil, &fs.PathError{Op: "read", Path: path, Err: errors.New("dataless: reading it would download it")}
 	}
 	if lst.Size > limit {
 		return nil, &fs.PathError{Op: "read", Path: path, Err: fmt.Errorf("%d bytes is over the %d-byte limit", lst.Size, limit)}
@@ -94,7 +96,7 @@ func ReadFileLimit(path string, limit int64) ([]byte, error) {
 		return nil, &fs.PathError{Op: "fstat", Path: path, Err: err}
 	}
 	if fst.Ino != lst.Ino || fst.Dev != lst.Dev {
-		return nil, &fs.PathError{Op: "read", Path: path, Err: fmt.Errorf("the path changed between the stat and the open")}
+		return nil, &fs.PathError{Op: "read", Path: path, Err: errors.New("the path changed between the stat and the open")}
 	}
 
 	data, err := io.ReadAll(io.LimitReader(f, limit))
@@ -102,6 +104,65 @@ func ReadFileLimit(path string, limit int64) ([]byte, error) {
 		return nil, &fs.PathError{Op: "read", Path: path, Err: err}
 	}
 	return data, nil
+}
+
+// ReadDir is the one sanctioned directory lister for detectors.
+//
+// It is ReadFile's twin and carries the same guarantees, for the same reason.
+// Listing a directory carrying SF_DATALESS asks the File Provider to
+// materialize it, which is the download the whole design exists to avoid, and
+// internal/walk refuses to list one for exactly that reason. A detector that
+// reached for os.ReadDir would walk around both defences, so the lint test
+// forbids it everywhere but here.
+//
+//   - the path is lstat'd first, so a symlink to somewhere else is refused
+//     rather than followed, and anything that is not a directory is refused;
+//   - a directory carrying SF_DATALESS is refused;
+//   - the open uses O_DIRECTORY and O_NOFOLLOW and the result is re-stat'd
+//     through the descriptor, so a path swapped between the two is caught;
+//   - more than MaxReadDir entries is an error, never a silent truncation.
+//
+// The entries are sorted by name, as os.ReadDir's are, so two runs over the
+// same directory produce the same order and a golden file can hold it.
+func ReadDir(path string) ([]os.DirEntry, error) {
+	var lst unix.Stat_t
+	if err := unix.Lstat(path, &lst); err != nil {
+		return nil, &fs.PathError{Op: "lstat", Path: path, Err: err}
+	}
+	if lst.Mode&syscall.S_IFMT != syscall.S_IFDIR {
+		return nil, &fs.PathError{Op: "readdir", Path: path, Err: errors.New("not a directory")}
+	}
+	if lst.Flags&uint32(unix.SF_DATALESS) != 0 {
+		return nil, &fs.PathError{Op: "readdir", Path: path, Err: errors.New("dataless: listing it would download it")}
+	}
+
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, &fs.PathError{Op: "open", Path: path, Err: err}
+	}
+	f := os.NewFile(uintptr(fd), path)
+	defer func() { _ = f.Close() }()
+
+	var fst unix.Stat_t
+	if err := unix.Fstat(fd, &fst); err != nil {
+		return nil, &fs.PathError{Op: "fstat", Path: path, Err: err}
+	}
+	if fst.Ino != lst.Ino || fst.Dev != lst.Dev {
+		return nil, &fs.PathError{Op: "readdir", Path: path, Err: errors.New("the path changed between the stat and the open")}
+	}
+
+	// One more than the limit, so a directory exactly at it still reads and
+	// one past it is detected rather than quietly cut short.
+	entries, err := f.ReadDir(MaxReadDir + 1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, &fs.PathError{Op: "readdir", Path: path, Err: err}
+	}
+	if len(entries) > MaxReadDir {
+		return nil, &fs.PathError{Op: "readdir", Path: path,
+			Err: fmt.Errorf("more than %d entries", MaxReadDir)}
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	return entries, nil
 }
 
 // Stat is how a detector asks whether a path exists. It never follows a final

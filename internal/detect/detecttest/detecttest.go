@@ -102,6 +102,7 @@ func (f *Fixture) Env(t *testing.T, fixture string) detect.Env {
 		Euid:     501,
 		LookPath: replay.LookPath,
 		ReadFile: detect.ReadFile,
+		ReadDir:  detect.ReadDir,
 		Stat:     detect.Stat,
 	}
 }

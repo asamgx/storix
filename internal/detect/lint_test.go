@@ -19,13 +19,15 @@ var forbidden = regexp.MustCompile(
 
 // allowed lists the file and the call each exception covers.
 //
-// There is one. Detectors do have to read a handful of small files — a
-// plist, an INSTALL_RECEIPT.json, a version marker — and readfile.go is the
-// single place where that happens, behind the lstat, the dataless check, the
-// size cap and the O_NOFOLLOW open that make it safe. Everything else goes
-// through Env.ReadFile and inherits those guarantees.
+// There is one file. Detectors do have to read a handful of small files — a
+// plist, an INSTALL_RECEIPT.json, a version marker — and to list a few
+// directories — the Caskroom, the launch agent folders, /Applications — and
+// readfile.go is the single place where both happen, behind the lstat, the
+// dataless check, the cap and the O_NOFOLLOW open that make them safe.
+// Everything else goes through Env.ReadFile and Env.ReadDir and inherits
+// those guarantees.
 var allowed = map[string]*regexp.Regexp{
-	"readfile.go": regexp.MustCompile(`\bunix\.Open\(path, unix\.O_RDONLY\|unix\.O_NOFOLLOW`),
+	"readfile.go": regexp.MustCompile(`\bunix\.Open\(path, unix\.O_RDONLY\|unix\.O_(NOFOLLOW|DIRECTORY)`),
 }
 
 // skipDirs are directories the rule does not cover: recorded fixtures, and
