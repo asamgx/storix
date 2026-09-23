@@ -76,6 +76,27 @@ BUCKETS  (what is inside each one)
             filesystem metadata, content of 4 unreadable directories, and unaccounted (4 unreadable
             paths)
 
+CONTAINERS & VMs  (what the host gave, what the runtime says it uses)
+  OrbStack
+  host    18.7 GB                       data.img.raw   245 GB apparent, 18.7 GB allocated
+  guest   9.85 GB   5.38 GB free (54%)  Images         36, 11 in use
+         135.7 MB  135.5 MB free (99%)  Containers     12, 2 in use
+          4.75 GB  938.7 MB free (19%)  Local Volumes  23, 3 in use
+          5.08 GB         4.64 GB free  Build Cache    72, 0 in use
+  total  19.83 GB        11.09 GB free                 reported by the daemon
+  context   orbstack
+  note      the daemon accounts for 19.83 GB inside an image the host has given 18.7 GB; the image
+            is sparse and its contents compress, so the guest's figure is the larger one
+
+DETECTORS
+  orbstack    ok         1.75s  3 commands
+  docker      missing *         no /Applications/Docker.app and no com.docker.docker container
+  colima      missing *         neither `colima` nor `limactl` is on the path
+  podman      missing *         `podman` is not on the path
+  vms         missing           no UTM, Parallels, VMware or VirtualBox directory exists
+  kubernetes  ok           2ms
+  * written from the tool's documentation; never yet run against a machine that had it
+
 VOLUME  /System/Volumes/Data
   scanned    allocated bytes, hard links counted once                 36.04 GB
   purgeable  freed when space runs short; may overlap scanned bytes    1.57 GB

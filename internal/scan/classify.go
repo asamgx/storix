@@ -36,7 +36,7 @@ func Classify(t *walk.Tree, cfg Config) *classify.Classification {
 // classifyContext describes the machine to the catalog: whose home "~" means,
 // which other homes the walk saw, and which code roots actually exist.
 func classifyContext(t *walk.Tree, cfg Config) classify.Context {
-	home := HomeDir()
+	home := homeOf(cfg)
 	return classify.Context{
 		Home:      home,
 		Users:     otherHomes(t, home),

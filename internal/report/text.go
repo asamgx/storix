@@ -98,6 +98,8 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 	t.header()
 	t.ledgerSection()
 	t.buckets()
+	t.containers()
+	t.detectors()
 	t.volume()
 	t.container()
 	t.topDirs()
@@ -126,6 +128,7 @@ func Unaccounted(w io.Writer, r *scan.Result, o Options) error {
 	t := &textReport{w: w, r: r, l: r.Ledger, o: o, st: newStyles(o.Color), u: o.Units}
 	t.volume()
 	t.container()
+	t.detectors()
 	t.skipped()
 	t.unreadable()
 	t.dataless()

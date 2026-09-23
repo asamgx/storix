@@ -10,6 +10,7 @@
   "timing": {
     "facts_ns": 310000000,
     "walk_ns": 19000000000,
+    "probe_ns": 1750000000,
     "finish_ns": 12000000,
     "classify_ns": 180000000,
     "ledger_ns": 4000000,

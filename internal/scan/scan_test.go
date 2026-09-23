@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/testutil"
 	"github.com/asamgx/storix/internal/volume"
@@ -175,7 +176,7 @@ func TestRunSendsProgressEvents(t *testing.T) {
 
 func TestExemptPrefixesOnlyApplyToTheDataVolume(t *testing.T) {
 	f := testutil.New(t)
-	opts := walkOptions(Config{}, f.Root, factsFor(t, f.Root))
+	opts := walkOptions(Config{}, f.Root, factsFor(t, f.Root), nil, classify.Context{})
 	if opts.ExemptPrefixes == nil || len(opts.ExemptPrefixes) != 0 {
 		t.Errorf("ExemptPrefixes = %v, want an empty non-nil slice under a partial root", opts.ExemptPrefixes)
 	}
@@ -183,7 +184,7 @@ func TestExemptPrefixesOnlyApplyToTheDataVolume(t *testing.T) {
 		t.Error("the mount guard is off, so a nested mount would be counted twice")
 	}
 
-	whole := walkOptions(Config{}, mac.DataRoot, factsFor(t, mac.DataRoot))
+	whole := walkOptions(Config{}, mac.DataRoot, factsFor(t, mac.DataRoot), nil, classify.Context{})
 	if whole.ExemptPrefixes != nil {
 		t.Errorf("ExemptPrefixes = %v, want nil (the walker's defaults) on the data volume", whole.ExemptPrefixes)
 	}

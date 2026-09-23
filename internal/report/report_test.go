@@ -169,13 +169,16 @@ func fakeScan() *scan.Result {
 	class := e.Run(tr, nil)
 	l := ledger.BuildClassified(f, tr, units.Decimal, class)
 	return &scan.Result{
-		Facts:  f,
-		Tree:   tr,
-		Ledger: l,
-		Class:  class,
+		Facts:     f,
+		Tree:      tr,
+		Ledger:    l,
+		Class:     class,
+		Detectors: fakeDetectors(),
+		Summaries: fakeSummaries(tr),
 		Timing: scan.Timing{
 			Facts:    310 * time.Millisecond,
 			Walk:     19 * time.Second,
+			Probe:    1_750 * time.Millisecond,
 			Finish:   12 * time.Millisecond,
 			Classify: 180 * time.Millisecond,
 			Ledger:   4 * time.Millisecond,

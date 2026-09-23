@@ -35,6 +35,7 @@ type scanOptions struct {
 	debug       bool
 	noCache     bool
 	fromCache   bool
+	disableDet  []string
 }
 
 // defaultMinSize is the smallest node the JSON tree carries by default.
@@ -76,6 +77,8 @@ versioned document, with the tree limited by --depth and --min-size unless
 	f.BoolVar(&o.debug, "debug", false, "print timings and memory statistics")
 	f.BoolVar(&o.noCache, "no-cache", false, "walk the disk and store nothing")
 	f.BoolVar(&o.fromCache, "from-cache", false, "render the stored scan instead of walking the disk")
+	f.StringArrayVar(&o.disableDet, "disable-detector", nil,
+		"switch off one tool detector by name; repeatable (the report still lists it, as disabled)")
 	return cmd
 }
 
@@ -171,6 +174,7 @@ func (o *scanOptions) resolve() (report.Options, scan.Config, error) {
 		Debug:              o.debug,
 		NoCache:            o.noCache,
 		FromCache:          o.fromCache,
+		DisabledDetectors:  o.disableDet,
 		Version:            BuildInfo(),
 	}
 	return ro, cfg, nil
@@ -351,6 +355,9 @@ func printDebug(out io.Writer, res *scan.Result) {
 	_, _ = fmt.Fprintf(out, "  timing   facts %s, walk %s, finish %s, classify %s, ledger %s, persist %s, total %s\n",
 		dur(res.Timing.Facts), dur(res.Timing.Walk), dur(res.Timing.Finish),
 		dur(res.Timing.Classify), dur(res.Timing.Ledger), dur(res.Timing.Persist), dur(res.Timing.Total))
+	// The probes run beside the walk, so their cost is only real if the
+	// slowest of them outlasted it.
+	_, _ = fmt.Fprintf(out, "  probes   slowest %s, walk %s\n", dur(res.Timing.Probe), dur(res.Timing.Walk))
 	_, _ = fmt.Fprintf(out, "  memory   %s heap, %s total allocated, %s from the OS, %d GCs\n",
 		u.Bytes(int64(ms.HeapAlloc)), u.Bytes(int64(ms.TotalAlloc)), u.Bytes(int64(ms.Sys)), ms.NumGC)
 	_, _ = fmt.Fprintf(out, "  workers  %d\n", res.Tree.Opts.Parallelism)
@@ -376,6 +383,9 @@ func reportSoftErrors(errOut io.Writer, res *scan.Result, o *scanOptions) {
 	}
 	if res.PersistErr != nil {
 		_, _ = fmt.Fprintf(errOut, "storix: the scan was not cached (%v)\n", res.PersistErr)
+	}
+	if res.RecordErr != nil {
+		_, _ = fmt.Fprintf(errOut, "storix: the probe fixtures were not written (%v)\n", res.RecordErr)
 	}
 	if o.debug && res.DatalessErr != nil {
 		_, _ = fmt.Fprintf(errOut, "storix: dataless materialization stays at its default (%v)\n", res.DatalessErr)
