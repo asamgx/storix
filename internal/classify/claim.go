@@ -78,10 +78,12 @@ type Claim struct {
 	// Evidence are verbatim lines for the why panel: the command that was
 	// run, the receipt that was read, the pattern that matched.
 	Evidence []string
-	// Depth and Shape are the specificity of the pattern that matched,
-	// carried on the claim so the resolver needs nothing else: Depth is the
-	// number of segments and Shape packs their classes, deepest first.
+	// Depth, Shape and Literals are the specificity of the pattern that
+	// matched, carried on the claim so the resolver needs nothing else:
+	// Depth is the number of segments, Shape packs their classes deepest
+	// first, and Literals is how much literal text they pin down.
 	Depth    uint16
+	Literals uint16
 	Shape    uint64
 	Priority int8
 	// NoInherit keeps the claim on its own node: the children of the node
@@ -114,8 +116,10 @@ const maxConflicts = 2000
 // segment by segment from the deepest one back towards the root. Depth alone
 // is not enough: "~/Library/Caches/*.ShipIt" and "~/Library/Caches/{bundleid}"
 // are the same depth over the same directory, and the first is plainly the
-// more specific answer. Two segments of the same class tie, and Priority is
-// what an author reaches for then.
+// more specific answer. Segments of the same class are then separated by how
+// much literal text they pin down, so "Install macOS *.app" outranks
+// "{name}.app" without either rule needing a hand-set priority; Priority is
+// only for the cases where even that ties.
 func better(a, b *Claim) bool {
 	switch {
 	case a.Source.Kind != b.Source.Kind:
@@ -124,6 +128,8 @@ func better(a, b *Claim) bool {
 		return a.Depth > b.Depth
 	case a.Shape != b.Shape:
 		return a.Shape > b.Shape
+	case a.Literals != b.Literals:
+		return a.Literals > b.Literals
 	case a.Priority != b.Priority:
 		return a.Priority > b.Priority
 	default:

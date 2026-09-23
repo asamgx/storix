@@ -2,6 +2,7 @@ package classify
 
 import (
 	"fmt"
+	"math"
 	"path"
 	"strings"
 )
@@ -79,6 +80,31 @@ const (
 	classLiteral
 )
 
+// literalChars is how much literal text the segment pins down. Two segments
+// of the same class can still differ in how much they constrain: both
+// "Install macOS *.app" and "{name}.app" carry literal text, and the first
+// pins down thirteen more characters of the name.
+func (s segment) literalChars() int {
+	switch s.kind {
+	case segLiteral:
+		return len(s.text)
+	case segAny:
+		return 0
+	case segGlob:
+		n := 0
+		for i := range len(s.text) {
+			switch s.text[i] {
+			case '*', '?', '[', ']':
+			default:
+				n++
+			}
+		}
+		return n
+	default:
+		return len(s.prefix) + len(s.suffix)
+	}
+}
+
 // class is the segment's specificity class.
 func (s segment) class() uint64 {
 	switch s.kind {
@@ -150,6 +176,9 @@ func (s segment) match(name string) (capture string, ok bool) {
 // pattern is a compiled Match: its segments and its specificity.
 type pattern struct {
 	segs []segment
+	// literals is the total literal text across the segments, the tie-break
+	// between two patterns whose segment classes agree.
+	literals uint16
 }
 
 // depth is the number of segments, the first term of specificity.
@@ -186,6 +215,11 @@ func parsePattern(s string) (pattern, error) {
 		seg, err := parseSegment(part)
 		if err != nil {
 			return pattern{}, fmt.Errorf("pattern %q: %w", s, err)
+		}
+		if n := p.literals + uint16(min(seg.literalChars(), math.MaxUint16)); n >= p.literals {
+			p.literals = n
+		} else {
+			p.literals = math.MaxUint16
 		}
 		p.segs = append(p.segs, seg)
 	}

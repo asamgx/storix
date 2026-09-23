@@ -31,16 +31,23 @@ func TestSpecificityRanksSegmentClasses(t *testing.T) {
 			alsoMatches: "/Users/andrew/Library/Caches/com.spotify.client",
 		},
 		{
-			// Two segments of the same class tie, and Priority is what
-			// separates them. The catalog sets it on exactly this rule,
-			// because "Install macOS Tahoe.app" is also a plain bundle
-			// name and no ordering of the classes can know which reading
-			// the author meant.
-			name:        "priority separates two segments of the same class",
-			winner:      Rule{ID: "z.installer", Match: "/Applications/Install macOS *.app", Bucket: BucketApps, Category: "macOS installer", Priority: 1},
+			// Both segments carry literal text, so the classes tie and the
+			// amount of literal text decides: "Install macOS *.app" pins
+			// down thirteen characters the bundle rule leaves open. Note
+			// that neither rule sets a Priority here — the catalog does,
+			// but this case exists to show the ordering stands without it.
+			name:        "more literal text beats less within a class",
+			winner:      Rule{ID: "z.installer", Match: "/Applications/Install macOS *.app", Bucket: BucketApps, Category: "macOS installer"},
 			loser:       Rule{ID: "a.bundle", Match: "/Applications/{name}.app", Bucket: BucketApps, Category: "Application"},
 			path:        "/Applications/Install macOS Tahoe.app",
 			alsoMatches: "/Applications/Arc.app",
+		},
+		{
+			name:        "an uncaptured updater glob beats a bare capture",
+			winner:      Rule{ID: "z.updater-glob", Match: "~/Library/Caches/*-updater", Bucket: BucketAppData, Category: "Updater cache"},
+			loser:       Rule{ID: "a.name", Match: "~/Library/Caches/{name}", Bucket: BucketAppData, Category: "Cache", Owner: "{name}"},
+			path:        "/Users/andrew/Library/Caches/notion-updater",
+			alsoMatches: "/Users/andrew/Library/Caches/Arc",
 		},
 		{
 			name:        "a constrained capture beats an unconstrained one",
@@ -87,6 +94,19 @@ func TestSpecificityRanksSegmentClasses(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestLiteralCharsSeparatesEqualClasses pins the tie-break itself.
+func TestLiteralCharsSeparatesEqualClasses(t *testing.T) {
+	more := mustPattern(t, "Applications/Install macOS *.app")
+	less := mustPattern(t, "Applications/{name}.app")
+	if more.shape() != less.shape() {
+		t.Fatalf("these two patterns should share a shape: %d vs %d", more.shape(), less.shape())
+	}
+	if more.literals <= less.literals {
+		t.Errorf("literal characters: %d vs %d, want the installer to pin down more",
+			more.literals, less.literals)
 	}
 }
 

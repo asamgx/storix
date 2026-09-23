@@ -166,6 +166,7 @@ func (e *Engine) Match(display string, isDir bool) (Claim, bool) {
 				Reclaim:   r.Reclaim,
 				Source:    Source{Kind: SourceRule, ID: r.ID},
 				Depth:     tm.depth,
+				Literals:  tm.literals,
 				Shape:     tm.shape,
 				Priority:  r.Priority,
 			})
@@ -370,6 +371,7 @@ func (e *Engine) candidates(dst []Claim, n *walk.Node, states []state) []Claim {
 				Source:    Source{Kind: SourceRule, ID: r.ID},
 				Evidence:  []string{"rule " + r.ID + " matched " + n.Display()},
 				Depth:     tm.depth,
+				Literals:  tm.literals,
 				Shape:     tm.shape,
 				Priority:  r.Priority,
 			}
