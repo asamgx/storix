@@ -3,7 +3,10 @@ package scan
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"slices"
+	"sort"
 	"testing"
 	"time"
 
@@ -24,8 +27,12 @@ func scannedFixture(t *testing.T) (*Result, Config, cache.Store) {
 	store := homedStore(t)
 	f := testutil.New(t)
 	f.File("Users/andrew/Library/Caches/pkg/blob", 400_000)
+	f.File("Users/andrew/Library/Preferences/com.example.plist", 300)
+	f.File("Users/andrew/Library/Application Support/Slack/data", 250_000)
 	f.File("Users/andrew/Documents/note.txt", 100)
 	f.File("Users/andrew/code/storix/main.go", 2_000)
+	f.File("Users/andrew/code/storix/node_modules/pkg/index.js", 60_000)
+	f.File("Applications/Thing.app/Contents/MacOS/thing", 500_000)
 
 	cfg := Config{
 		Roots:   []string{f.Root},
@@ -121,7 +128,13 @@ func TestTheRecomputedLedgerEqualsTheStoredOne(t *testing.T) {
 
 // TestALoadedScanReclassifies is the whole point of the two sections: the
 // loaded scan carries the same detector statuses, the same summaries and the
-// same buckets as the scan that was stored, without a probe having run.
+// same classification as the scan that was stored, without a probe having run.
+//
+// The classification is compared structurally rather than by its total. The
+// total is the sum of every bucket, which is the scanned bytes by
+// construction, so it matches whatever the engine decided and even matches
+// when the engine decided nothing at all: it is the one number about a
+// classification that cannot fail.
 func TestALoadedScanReclassifies(t *testing.T) {
 	live, cfg, _ := scannedFixture(t)
 
@@ -132,9 +145,17 @@ func TestALoadedScanReclassifies(t *testing.T) {
 	if loaded.Class == nil {
 		t.Fatal("the loaded scan has no classification")
 	}
-	if got, want := loaded.Class.Total(), live.Class.Total(); got != want {
-		t.Errorf("the loaded classification totals %d bytes, the live one %d", got, want)
+	if len(live.Class.Claims) == 0 {
+		t.Fatal("the fixture classified nothing, so comparing the two would assert nothing")
 	}
+	liveShape, loadedShape := classShape(t, live), classShape(t, loaded)
+	for _, part := range []string{"buckets", "owners", "conflicts", "unmatched", "rejected"} {
+		if liveShape[part] != loadedShape[part] {
+			t.Errorf("the reclassified %s differ\n live:   %s\n loaded: %s",
+				part, clipJSON(liveShape[part]), clipJSON(loadedShape[part]))
+		}
+	}
+	compareNodeClaims(t, live, loaded)
 	if len(loaded.Detectors) != len(live.Detectors) {
 		t.Fatalf("the loaded scan has %d detectors, the live one %d", len(loaded.Detectors), len(live.Detectors))
 	}
@@ -340,6 +361,97 @@ func TestTheRecomputedAppsReportEqualsTheStoredOne(t *testing.T) {
 	if got != want {
 		t.Errorf("the rebuilt inventory differs from the stored one (%d vs %d bytes)", len(got), len(want))
 	}
+}
+
+// classShape reduces a classification to the facts a reader depends on, one
+// JSON document per part so that a failure names which part moved: what each
+// bucket holds and how it splits, who owns what and under which join keys,
+// what disagreed, what nothing claimed, and what was refused.
+//
+// Node claims are left out and compared separately, because a single JSON
+// blob of every node would report "these two trees differ" and nothing more.
+func classShape(t *testing.T, r *Result) map[string]string {
+	t.Helper()
+	if r.Class == nil {
+		t.Fatal("the scan has no classification")
+	}
+	c := r.Class
+
+	buckets := make([]map[string]any, 0, len(classify.Buckets()))
+	for _, b := range classify.Buckets() {
+		bt := c.Buckets[b]
+		buckets = append(buckets, map[string]any{
+			"bucket": b.ID(), "bytes": bt.Bytes, "files": bt.Files,
+			"categories": bt.Categories, "by_reclaim": bt.ByReclaim,
+		})
+	}
+	owners := make(map[string]any, len(c.Owners))
+	for name, o := range c.Owners {
+		keys := slices.Clone(o.Keys)
+		sort.Strings(keys)
+		owners[name] = map[string]any{"bytes": o.Bytes, "by_bucket": o.ByBucket, "keys": keys}
+	}
+	conflicts := make([]string, 0, len(c.Conflicts))
+	for _, cf := range c.Conflicts {
+		conflicts = append(conflicts, fmt.Sprintf("%s: %s beat %s over %d bytes",
+			cf.Path, cf.Winner, cf.Loser, cf.Bytes))
+	}
+	unmatched := make([]string, 0, len(c.Unmatched))
+	for i, id := range c.Unmatched {
+		unmatched = append(unmatched, fmt.Sprintf("%s %d", r.Tree.Nodes[id].Display(), c.UnmatchedBytes(i)))
+	}
+	return map[string]string{
+		"buckets":   mustJSON(t, buckets),
+		"owners":    mustJSON(t, owners),
+		"conflicts": mustJSON(t, conflicts),
+		"unmatched": mustJSON(t, unmatched),
+		"rejected":  mustJSON(t, c.Rejected),
+	}
+}
+
+// compareNodeClaims checks that every node came back under the same effective
+// claim, joined on the display path rather than on the node id: the cache
+// format is free to renumber a preorder index, and a comparison that assumed
+// the numbering would be testing the numbering.
+func compareNodeClaims(t *testing.T, live, loaded *Result) {
+	t.Helper()
+	want := nodeClaims(live)
+	got := nodeClaims(loaded)
+	if len(got) != len(want) {
+		t.Errorf("the loaded tree holds %d nodes, the live one %d", len(got), len(want))
+	}
+	paths := make([]string, 0, len(want))
+	for p := range want {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	bad := 0
+	for _, p := range paths {
+		g, ok := got[p]
+		if ok && g == want[p] {
+			continue
+		}
+		if bad++; bad > 5 {
+			t.Errorf("…and %d more nodes", len(want)-5)
+			return
+		}
+		t.Errorf("%s: loaded as %q, live as %q", p, g, want[p])
+	}
+}
+
+// nodeClaims is every node's effective claim, keyed by display path.
+func nodeClaims(r *Result) map[string]string {
+	out := make(map[string]string, len(r.Tree.Nodes))
+	for _, n := range r.Tree.Nodes {
+		cl, ok := r.Class.OfNode(n)
+		if !ok {
+			out[n.Display()] = "other"
+			continue
+		}
+		out[n.Display()] = fmt.Sprintf("%s %s %s/%s %s",
+			cl.Bucket.ID(), cl.Source, cl.Category, cl.Owner, cl.Reclaim)
+	}
+	return out
 }
 
 // latestMeta reads the newest file in the store and its metadata.

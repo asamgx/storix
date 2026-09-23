@@ -112,14 +112,22 @@ const maxConflicts = 2000
 // then specificity, then priority, then the source id so that two runs over
 // the same tree always pick the same winner.
 //
-// Specificity is depth first and then shape, which compares the two patterns
-// segment by segment from the deepest one back towards the root. Depth alone
-// is not enough: "~/Library/Caches/*.ShipIt" and "~/Library/Caches/{bundleid}"
-// are the same depth over the same directory, and the first is plainly the
-// more specific answer. Segments of the same class are then separated by how
-// much literal text they pin down, so "Install macOS *.app" outranks
-// "{name}.app" without either rule needing a hand-set priority; Priority is
-// only for the cases where even that ties.
+// Depth is compared before shape, but it never decides anything here. Every
+// candidate for one node matched that node, so every rule claim carries the
+// same depth — the node's own — and a detector or apps claim is ranked by its
+// kind before the comparison reaches depth at all. What depth does is make
+// shape comparable: two shapes only ever meet when they pack the same number
+// of segments. The order that decides a real tie is therefore Kind, Shape,
+// Literals, Priority, ID.
+//
+// Shape compares the two patterns segment by segment from the deepest one
+// back towards the root, which is what a bare depth cannot do:
+// "~/Library/Caches/*.ShipIt" and "~/Library/Caches/{bundleid}" are the same
+// depth over the same directory, and the first is plainly the more specific
+// answer. Segments of the same class are then separated by how much literal
+// text they pin down, so "Install macOS *.app" outranks "{name}.app" without
+// either rule needing a hand-set priority; Priority is only for the cases
+// where even that ties.
 func better(a, b *Claim) bool {
 	switch {
 	case a.Source.Kind != b.Source.Kind:

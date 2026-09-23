@@ -19,6 +19,15 @@ import (
 // walk, which the flat cache format is free to renumber. Recomputing costs a
 // few hundred milliseconds against a walk of twenty seconds, and it is what
 // keeps `--from-cache` honest.
+//
+// The context the catalog is compiled against comes from this invocation, not
+// from the file. The home is the one storix is running as now, and the code
+// roots are --code-roots as passed on this command line, filtered against the
+// stored tree. So a scan taken under one account and read back under another
+// classifies as the reader's machine, and adding --code-roots to a
+// --from-cache run reclassifies the projects under it without a rescan. What
+// the file supplies is the tree and the detector facts; everything derived
+// from them is derived here.
 
 // reclassify rebuilds the derived halves of a cached result: the detector
 // statuses and summaries, the classification, and the application report.

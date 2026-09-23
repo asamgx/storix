@@ -19,17 +19,30 @@ import (
 //
 // Everything that is genuinely about this run rather than about the scan is
 // excluded: where the file is, how old it is, and how long each stage took.
+// The fixture is built under a home of its own, and Config.Home points at it.
+// Without that, nothing in the tree is anchored under "~" and the whole
+// classification is empty: the round trip would compare one document with no
+// claims in it against another, and pass whatever the engine did.
 func TestAScanRendersTheSameFromTheCache(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	f := testutil.New(t)
-	f.File("Library/Caches/pkg/blob", 400_000)
-	f.File("Library/Preferences/tiny.plist", 120)
-	f.File("Movies/holiday.mov", 2_000_000)
-	f.Sparse("Images/disk.img", 8<<20)
-	f.Hardlink("Movies/holiday.mov", "Movies/holiday-link.mov")
-	f.Symlink("holiday.mov", "Movies/latest.mov")
+	f.File("Users/andrew/Library/Caches/pkg/blob", 400_000)
+	f.File("Users/andrew/Library/Preferences/tiny.plist", 120)
+	f.File("Users/andrew/Library/Application Support/Slack/data", 300_000)
+	f.File("Users/andrew/Movies/holiday.mov", 2_000_000)
+	f.File("Users/andrew/Documents/notes.txt", 150_000)
+	f.File("Applications/Thing.app/Contents/MacOS/thing", 900_000)
+	f.Sparse("Users/andrew/Images/disk.img", 8<<20)
+	f.Hardlink("Users/andrew/Movies/holiday.mov", "Users/andrew/Movies/holiday-link.mov")
+	f.Symlink("holiday.mov", "Users/andrew/Movies/latest.mov")
 
-	cfg := scan.Config{Roots: []string{f.Root}, Units: units.Decimal, Version: "test-1.0", Parallelism: 4}
+	cfg := scan.Config{
+		Roots:       []string{f.Root},
+		Home:        f.Path("Users/andrew"),
+		Units:       units.Decimal,
+		Version:     "test-1.0",
+		Parallelism: 4,
+	}
 	cached, err := scan.WithCache(cfg)
 	if err != nil {
 		t.Fatalf("WithCache: %v", err)
@@ -37,6 +50,9 @@ func TestAScanRendersTheSameFromTheCache(t *testing.T) {
 	live, err := scan.Run(context.Background(), cached)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
+	}
+	if live.Class == nil || len(live.Class.Claims) == 0 {
+		t.Fatal("the fixture produced no claims, so the round trip would compare two empty classifications")
 	}
 	if live.PersistErr != nil {
 		t.Fatalf("the scan was not cached: %v", live.PersistErr)

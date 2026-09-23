@@ -12,6 +12,14 @@ type Rule struct {
 	// grammar; there is deliberately no "**", because anything that means
 	// "anywhere under X" is a detector's job, not a rule's.
 	Match string
+	// Anchor is a display path the machine supplied that Match is written
+	// relative to: a code root, which comes from a flag or from the
+	// directories the walk found rather than from the catalog. Its
+	// segments are matched literally and never read as pattern syntax, so
+	// a directory genuinely called "{project}" or "v*" anchors the rule at
+	// itself. It may begin with "~", which expands over the homes the same
+	// way a Match does. The static catalog leaves it empty.
+	Anchor string
 	// Bucket is where the matched bytes are counted.
 	Bucket Bucket
 	// Category is the sub-heading the bucket groups the bytes under, such

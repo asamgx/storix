@@ -16,6 +16,10 @@ type term struct {
 	depth    uint16
 	literals uint16
 	shape    uint64
+	// user is the account the variant's home anchor names, empty for a
+	// rule that is not home-anchored and for the "Users/*" catch-all. It
+	// is what lets a fixed owner label say whose Documents it counted.
+	user string
 }
 
 // trieEdge is a non-literal transition.
@@ -55,14 +59,15 @@ func (n *trieNode) child(seg segment) *trieNode {
 	return c
 }
 
-// insert adds one compiled pattern for rule.
-func (n *trieNode) insert(p pattern, rule int32) {
+// insert adds one compiled variant of a rule.
+func (n *trieNode) insert(v variant, rule int32) {
 	cur := n
-	for _, seg := range p.segs {
+	for _, seg := range v.pat.segs {
 		cur = cur.child(seg)
 	}
 	cur.terms = append(cur.terms, term{
-		rule: rule, depth: p.depth(), literals: p.literals, shape: p.shape(),
+		rule: rule, depth: v.pat.depth(), literals: v.pat.literals,
+		shape: v.pat.shape(), user: v.user,
 	})
 }
 

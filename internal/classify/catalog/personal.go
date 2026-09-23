@@ -23,8 +23,12 @@ var personalRules = []classify.Rule{
 		Explain: "{name} in the home folder",
 	},
 	{
+		// /Users/Shared is not an account's home, so the engine keeps the
+		// "~" rules off it (see notHomes) and this rule answers for the
+		// whole folder. Whatever an application dropped there is one of
+		// several accounts' data and nobody's cache to clear.
 		ID: "personal.shared", Match: "/Users/Shared", Bucket: personal,
-		Category: "Shared", Owner: "Shared", Reclaim: user,
+		Category: "Shared", Owner: "Shared folder", Reclaim: user,
 		Explain: "files shared between the accounts on this machine",
 	},
 

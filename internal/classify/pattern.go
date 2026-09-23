@@ -28,6 +28,12 @@ import (
 // A leading "~" is the scan user's home. It is expanded at compile time
 // against Context.Home, and a second copy anchored at "Users/*" is always
 // generated so another user's home classifies the same way.
+//
+// The grammar describes what the catalog writes. It never describes a path
+// the machine supplied: a home and a code root arrive as names on disk, and a
+// directory really called "{project}" or "v*" would otherwise be read as
+// syntax. Those are turned into literal segments directly by anchorSegments,
+// which is why Rule.Anchor exists beside Rule.Match.
 
 // segKind is what one pattern segment matches.
 type segKind uint8
@@ -54,6 +60,10 @@ type segment struct {
 	prefix, suffix string
 	// glob constrains a segTemplate capture; empty accepts anything.
 	glob string
+	// except are names a segAny refuses. The grammar cannot write one:
+	// it exists for the "Users/*" home anchor, which has to skip the
+	// directories under /Users that are not an account's home.
+	except []string
 	// literals records whether the segment carries literal text of its own,
 	// which is the first thing specificity looks at.
 	literals bool
@@ -111,6 +121,10 @@ func (s segment) class() uint64 {
 	case segLiteral:
 		return classLiteral
 	case segAny:
+		// An exclusion list does not promote the segment. It narrows what
+		// the wildcard accepts without pinning any name down, and letting
+		// it change the class would reorder specificity against rules
+		// that have nothing to do with homes.
 		return classAny
 	case segGlob:
 		if s.literals {
@@ -134,7 +148,10 @@ func (s segment) class() uint64 {
 func (s segment) key() string {
 	switch s.kind {
 	case segAny:
-		return "*"
+		if len(s.except) == 0 {
+			return "*"
+		}
+		return "*\x00" + strings.Join(s.except, "\x00")
 	case segGlob:
 		return "g\x00" + s.text
 	case segTemplate:
@@ -151,6 +168,11 @@ func (s segment) match(name string) (capture string, ok bool) {
 	case segLiteral:
 		return "", name == s.text
 	case segAny:
+		for _, x := range s.except {
+			if name == x {
+				return "", false
+			}
+		}
 		return "", true
 	case segGlob:
 		m, err := path.Match(s.text, name)
@@ -210,20 +232,81 @@ func parsePattern(s string) (pattern, error) {
 		return pattern{}, fmt.Errorf("pattern %q matches the root, which no rule may claim", s)
 	}
 	parts := strings.Split(clean, "/")
-	p := pattern{segs: make([]segment, 0, len(parts))}
+	segs := make([]segment, 0, len(parts))
 	for _, part := range parts {
 		seg, err := parseSegment(part)
 		if err != nil {
 			return pattern{}, fmt.Errorf("pattern %q: %w", s, err)
 		}
-		if n := p.literals + uint16(min(seg.literalChars(), math.MaxUint16)); n >= p.literals {
-			p.literals = n
-		} else {
-			p.literals = math.MaxUint16
-		}
-		p.segs = append(p.segs, seg)
+		segs = append(segs, seg)
 	}
-	return p, nil
+	return pattern{segs: segs, literals: sumLiterals(segs)}, nil
+}
+
+// sumLiterals is how much literal text a whole pattern pins down, saturating
+// rather than wrapping on a pattern long enough to overflow the counter.
+func sumLiterals(segs []segment) uint16 {
+	var total uint16
+	for _, seg := range segs {
+		if n := total + uint16(min(seg.literalChars(), math.MaxUint16)); n >= total {
+			total = n
+		} else {
+			return math.MaxUint16
+		}
+	}
+	return total
+}
+
+// anchorSegments turns a display path the machine supplied into literal
+// segments, bypassing the grammar on purpose.
+//
+// A home and a code root are names read off a disk, not patterns somebody
+// wrote: a directory really called "{project}", "v*" or "a[b" is a legal
+// directory, and feeding it to parseSegment would either fail the whole
+// catalog or silently anchor a rule at a wildcard. Matched literally, such a
+// directory matches itself and nothing else.
+func anchorSegments(display string) []segment {
+	trimmed := strings.Trim(path.Clean(display), "/")
+	if trimmed == "" || trimmed == "." {
+		return nil
+	}
+	parts := strings.Split(trimmed, "/")
+	segs := make([]segment, 0, len(parts))
+	for _, part := range parts {
+		segs = append(segs, segment{kind: segLiteral, text: part, literals: true})
+	}
+	return segs
+}
+
+// notHomes are the directories under /Users that are not an account's home.
+//
+// /Users/Shared is writable by every account, so anchoring the "~" rules at
+// it would file one person's bytes under another's owner totals and report a
+// shared drop folder as somebody's home. It has a rule of its own instead
+// (personal.shared), which claims it and everything under it for Personal.
+// /Users/Guest is deliberately not here: the guest account's home is a home,
+// and its Library classifies like any other.
+var notHomes = []string{"Shared"}
+
+// wildcardHome is the "Users/*" anchor: any home the context did not name,
+// minus the directories under /Users that are not homes at all.
+func wildcardHome() []segment {
+	return []segment{
+		{kind: segLiteral, text: "Users", literals: true},
+		{kind: segAny, except: notHomes},
+	}
+}
+
+// joinPattern builds one pattern from a machine-supplied literal anchor and
+// the segments the catalog's own pattern compiled to.
+func joinPattern(lead, tail []segment, src string) (pattern, error) {
+	if len(lead)+len(tail) == 0 {
+		return pattern{}, fmt.Errorf("pattern %q matches the root, which no rule may claim", src)
+	}
+	segs := make([]segment, 0, len(lead)+len(tail))
+	segs = append(segs, lead...)
+	segs = append(segs, tail...)
+	return pattern{segs: segs, literals: sumLiterals(segs)}, nil
 }
 
 // parseSegment compiles one segment.
@@ -306,21 +389,89 @@ func (p pattern) captureNames() []string {
 	return out
 }
 
-// variants expands one Match into the anchored patterns it stands for. A
-// pattern without "~" stands for itself; one with "~" is anchored once at the
-// scan user's home, once at every other home the tree showed, and once at
-// "Users/*" so a home nobody named still classifies.
-func variants(match string, ctx Context) []string {
-	if match != "~" && !strings.HasPrefix(match, "~/") {
-		return []string{match}
+// variant is one anchored pattern a rule compiles to, with the account its
+// anchor names. The account is empty for a rule that is not home-anchored and
+// for the "Users/*" catch-all, where no name is known until a path matches.
+type variant struct {
+	pat  pattern
+	user string
+}
+
+// variantsOf expands one rule into the anchored patterns it stands for.
+//
+// A plain Match stands for itself. A Match under Rule.Anchor is anchored at
+// the literal path the machine supplied. Either an Anchor or a Match may
+// begin with "~", and then the rule is anchored once at the scan user's home,
+// once at every other home the tree showed, and once at "Users/*" so a home
+// nobody named still classifies.
+func variantsOf(r *Rule, ctx Context) ([]variant, error) {
+	anchor, match, src := r.Anchor, r.Match, r.source()
+	if anchor != "" && isHomePath(match) {
+		return nil, fmt.Errorf("pattern %q is anchored at %q and at the home as well", match, anchor)
 	}
-	rest := strings.TrimPrefix(strings.TrimPrefix(match, "~"), "/")
-	homes := ctx.homePrefixes()
-	out := make([]string, 0, len(homes))
+	if anchor == "" && isHomePath(match) {
+		anchor, match = "~", strings.TrimPrefix(strings.TrimPrefix(match, "~"), "/")
+	}
+	tail, err := tailSegments(match, src)
+	if err != nil {
+		return nil, err
+	}
+	if !isHomePath(anchor) {
+		p, err := joinPattern(anchorSegments(anchor), tail, src)
+		if err != nil {
+			return nil, err
+		}
+		return []variant{{pat: p}}, nil
+	}
+
+	// Under the home: one variant per named home, then the catch-all.
+	rest := strings.TrimPrefix(strings.TrimPrefix(anchor, "~"), "/")
+	homes := ctx.homes()
+	out := make([]variant, 0, len(homes)+1)
 	for _, h := range homes {
-		out = append(out, path.Join(h, rest))
+		p, err := joinPattern(anchorSegments(path.Join(h, rest)), tail, src)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, variant{pat: p, user: path.Base(h)})
 	}
-	return out
+	p, err := joinPattern(append(wildcardHome(), anchorSegments(rest)...), tail, src)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, variant{pat: p}), nil
+}
+
+// isHomePath reports whether a path is written relative to "~".
+func isHomePath(p string) bool { return p == "~" || strings.HasPrefix(p, "~/") }
+
+// source is the rule's whole pattern, for an error message a reader can find
+// the rule from.
+func (r *Rule) source() string {
+	if r.Anchor == "" {
+		return r.Match
+	}
+	if r.Match == "" {
+		return r.Anchor
+	}
+	return r.Anchor + "/" + r.Match
+}
+
+// tailSegments compiles the part of a Match that follows an anchor. An empty
+// tail is legal — "~" and a bare code root are patterns in their own right —
+// and is what parsePattern alone cannot express.
+func tailSegments(rest, src string) ([]segment, error) {
+	if rest == "" {
+		return nil, nil
+	}
+	p, err := parsePattern(rest)
+	if err != nil {
+		if rest != src {
+			return nil, fmt.Errorf("in %q: %w", src, err)
+		}
+		return nil, err
+	}
+	return p.segs, nil
 }
 
 // capture is one bound capture, kept as a linked list so that the common case

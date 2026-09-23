@@ -203,22 +203,63 @@ func TestOwnerCaptures(t *testing.T) {
 // TestOwnerKeyPrefixes enforces R1: every owner key is prefixed, so a join
 // between an application's footprint and a rule's claim cannot accidentally
 // match a bundle id against a cask token.
+//
+// It can only walk the catalog. The other two lanes that mint owner keys —
+// the tool detectors and the application inventory — build theirs from what
+// they found on the machine, so there is no table to iterate and no cheap
+// fixture that produces one: internal/apps needs a walked tree and a set of
+// probe facts before it names a single owner. Their vocabulary is asserted
+// here instead, in the one place that states it, and the forms are checked
+// against the same rule the catalog's keys are.
 func TestOwnerKeyPrefixes(t *testing.T) {
-	allowed := map[string]bool{
-		"app": true, "team": true, "vendor": true, "cask": true,
-		"cli": true, "project": true, "product": true, "unknown": true,
-	}
 	for _, r := range catalog.Rules() {
 		for _, k := range r.OwnerKeys {
-			if k == "macos" {
-				continue
-			}
-			prefix, rest, found := cut(k)
-			if !found || !allowed[prefix] || rest == "" {
+			if !ownerKeyIsPrefixed(k) {
 				t.Errorf("%s: owner key %q is not one of the allowed prefixed forms", r.ID, k)
 			}
 		}
 	}
+
+	// The forms minted outside the catalog. "app:name:<basename>" is what
+	// internal/apps falls back to for a bundle whose Info.plist carries no
+	// identifier (see its bundleOwner): the bundle's own directory name,
+	// under a second prefix so it can never be read as a bundle id.
+	for _, k := range []string{
+		"app:com.microsoft.VSCode", "app:name:Claude Code URL Handler",
+		"team:HUAQ24HBR6", "cask:cursor", "cli:codex", "product:slack", "macos",
+	} {
+		if !ownerKeyIsPrefixed(k) {
+			t.Errorf("owner key %q, minted outside the catalog, is not one of the allowed prefixed forms", k)
+		}
+	}
+	for _, k := range []string{"", "Slack", "app:", "name:Thing", ":x"} {
+		if ownerKeyIsPrefixed(k) {
+			t.Errorf("owner key %q was accepted, and it names nothing a footprint can join on", k)
+		}
+	}
+}
+
+// ownerKeyIsPrefixed reports whether a key is one of the prefixed forms of
+// R1. "macos" is the one bare key: there is exactly one macOS.
+func ownerKeyIsPrefixed(k string) bool {
+	if k == "macos" {
+		return true
+	}
+	allowed := map[string]bool{
+		"app": true, "team": true, "vendor": true, "cask": true,
+		"cli": true, "project": true, "product": true, "unknown": true,
+	}
+	prefix, rest, found := cut(k)
+	if !found || !allowed[prefix] || rest == "" {
+		return false
+	}
+	// "app:name:<basename>" is the one two-level form.
+	if prefix == "app" {
+		if inner, name, nested := cut(rest); nested && inner == "name" {
+			return name != ""
+		}
+	}
+	return true
 }
 
 // cut splits an owner key at its first colon.

@@ -80,17 +80,25 @@ func otherHomes(t *walk.Tree, home string) []string {
 // rule for a directory that is not there costs nothing to match but does cost
 // a reader's attention when the catalog is listed, and the filter keeps the
 // rule count honest.
+//
+// It deduplicates as it goes. `--code-roots ~/code --code-roots ~/code`, and
+// the commoner case of a flag repeating one of the defaults, would otherwise
+// compile to two identical rules for every project under it: identical rules
+// match the same node with the same specificity, so each project would be
+// reported as a conflict between two rules that agree.
 func existingRoots(t *walk.Tree, configured []string, home string) []string {
 	want := configured
 	if want == nil {
 		want = classify.DefaultCodeRoots
 	}
 	out := make([]string, 0, len(want))
+	seen := make(map[string]bool, len(want))
 	for _, r := range want {
-		display := expandHome(r, home)
-		if display == "" {
+		display := strings.TrimRight(expandHome(r, home), "/")
+		if display == "" || seen[display] {
 			continue
 		}
+		seen[display] = true
 		if _, ok := t.Lookup(mac.DataRoot + display); ok {
 			out = append(out, display)
 		}
