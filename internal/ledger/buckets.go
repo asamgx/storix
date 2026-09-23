@@ -92,10 +92,7 @@ func (l *Ledger) fillWalkedBuckets(class *classify.Classification) {
 		o.Note = "not classified"
 		return
 	}
-	for _, b := range classify.Buckets() {
-		if b == classify.BucketMacOS || b == classify.BucketPurgeable || b == classify.BucketUnaccounted {
-			continue
-		}
+	for _, b := range walkedBuckets() {
 		t := class.Buckets[b]
 		row := l.bucket(b)
 		row.Bytes = t.Bytes
@@ -228,11 +225,34 @@ func sortLines(ls []Line) {
 // assert the equality.
 func (l *Ledger) WalkedBucketBytes() int64 {
 	var n int64
-	for _, b := range classify.Buckets() {
-		if b == classify.BucketMacOS || b == classify.BucketPurgeable || b == classify.BucketUnaccounted {
-			continue
-		}
+	for _, b := range walkedBuckets() {
 		n += l.bucket(b).Bytes
 	}
 	return n
+}
+
+// WalkedBucketFiles is the same sum over file counts. Every leaf the walk met
+// belongs to exactly one bucket, whether it was retained as a node or folded
+// into its parent's aggregate, so this equals Counters.Files.
+func (l *Ledger) WalkedBucketFiles() int64 {
+	var n int64
+	for _, b := range walkedBuckets() {
+		n += l.bucket(b).Files
+	}
+	return n
+}
+
+// walkedBuckets are the buckets whose contents came from the walk. The other
+// three are readings: the sibling volumes, the purgeable space and the
+// residual between what the walk saw and what the volume reports.
+func walkedBuckets() []classify.Bucket {
+	out := make([]classify.Bucket, 0, 9)
+	for _, b := range classify.Buckets() {
+		switch b {
+		case classify.BucketMacOS, classify.BucketPurgeable, classify.BucketUnaccounted:
+			continue
+		}
+		out = append(out, b)
+	}
+	return out
 }

@@ -149,7 +149,8 @@ func (r Reclaim) Reclaimable() bool {
 }
 
 // Confidence is how sure an owner attribution is. Rules never set it above
-// None; the apps detector fills it in when it links data to a bundle.
+// None; the apps detector fills it in when it links data to a bundle. It
+// qualifies Claim.Owner and Claim.OwnerKeys and nothing else.
 type Confidence uint8
 
 const (

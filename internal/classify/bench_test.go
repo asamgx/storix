@@ -30,9 +30,9 @@ var realTree = sync.OnceValue(func() *walk.Tree {
 
 // BenchmarkEngineRun measures one classification pass over a real tree.
 //
-// Measured 2026-09-23 on an Apple M4 over the whole data volume, 494 k
-// retained nodes: the 288 catalog rules compile in 0.34 ms and Run takes
-// 27 ms, allocating 10.9 MB in 71 k allocations and settling at about 410 B
+// Measured 2026-09-23 on an Apple M4 over the whole data volume, 495 k
+// retained nodes: the 288 catalog rules compile in 0.35 ms and Run takes
+// 29 ms, allocating 10.9 MB in 71 k allocations and settling at about 390 B
 // of heap per node. The plan budgets 300 ms, so the pass costs a tenth of its
 // budget and under 0.2 % of the 19 s walk it follows.
 func BenchmarkEngineRun(b *testing.B) {

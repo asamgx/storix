@@ -79,7 +79,7 @@ type Small struct {
 // Node is one retained entry of the tree. Leaves below the aggregation
 // threshold are folded into their parent's Small instead of getting a Node.
 //
-// The layout is deliberately lean (112 B on arm64) because a full scan retains
+// The layout is deliberately lean (120 B on arm64) because a full scan retains
 // on the order of a million of them; walk/mem_test.go guards the budget.
 type Node struct {
 	Name     string
@@ -90,10 +90,17 @@ type Node struct {
 	Files    uint32  // subtree leaves including aggregated ones; 1 for a leaf
 	Dirs     uint32  // subtree directories, excluding this one
 	Mtime    int64   // unix seconds
-	Kind     Kind
-	Flags    Flags
-	Errno    uint16 // syscall.Errno when FlagUnreadable is set
-	Small    Small
+	// ID is the node's index in Tree.Nodes, assigned by the preorder pass
+	// that builds it. It is the join key everything downstream uses: a
+	// classification, the JSON document and the TUI all carry per-node data
+	// in slices indexed by it, and a consumer holding a *Node can reach
+	// that data in one step instead of searching for its index. The cache
+	// re-derives the same preorder, so an ID survives a round trip.
+	ID    int32
+	Kind  Kind
+	Flags Flags
+	Errno uint16 // syscall.Errno when FlagUnreadable is set
+	Small Small
 }
 
 // IsDir reports whether the node is a directory.

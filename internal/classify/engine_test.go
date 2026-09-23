@@ -51,17 +51,21 @@ func run(t *testing.T, rules []Rule, tree *walk.Tree, extra ...Claim) *Classific
 // at looks a node up by display path and returns its id.
 func at(t *testing.T, tree *walk.Tree, display string) int32 {
 	t.Helper()
+	n := node(t, tree, display)
+	if tree.Nodes[n.ID] != n {
+		t.Fatalf("node %s carries id %d, which belongs to another node", display, n.ID)
+	}
+	return n.ID
+}
+
+// node looks a node up by display path.
+func node(t *testing.T, tree *walk.Tree, display string) *walk.Node {
+	t.Helper()
 	n, ok := tree.Lookup(mac.DataRoot + display)
 	if !ok {
 		t.Fatalf("no node at %s", display)
 	}
-	for i, m := range tree.Nodes {
-		if m == n {
-			return int32(i)
-		}
-	}
-	t.Fatalf("node %s is not in the preorder index", display)
-	return -1
+	return n
 }
 
 // claimAt is the effective claim at a display path.
@@ -101,9 +105,16 @@ func TestEngineInheritance(t *testing.T) {
 	if _, ok := c.ExplicitAt(at(t, tree, "/Users/andrew/Library/Caches/com.example.app/data")); ok {
 		t.Error("a descendant should only inherit")
 	}
-	from := c.InheritedFrom(tree, at(t, tree, "/Users/andrew/Library/Caches/com.example.app/data/blob"))
+	leaf := node(t, tree, "/Users/andrew/Library/Caches/com.example.app/data/blob")
+	from := c.InheritedFromNode(leaf)
 	if from == nil || from.Display() != "/Users/andrew/Library/Caches/com.example.app" {
 		t.Errorf("InheritedFrom = %v", from)
+	}
+	if byNode, ok := c.OfNode(leaf); !ok || byNode.Owner != "com.example.app" {
+		t.Errorf("OfNode = %+v, want the same claim the id lookup gives", byNode)
+	}
+	if c.InheritedFromNode(from) != nil {
+		t.Error("the node carrying the claim inherited nothing")
 	}
 	if got := c.ByOwnerKey("app:com.example.app"); len(got) != 1 {
 		t.Errorf("ByOwnerKey returned %d nodes, want 1", len(got))

@@ -9,11 +9,12 @@ package classify
 // path, plus a capture edge under a directory like ~/Library/Caches.
 
 // term is a rule that ends at a trie node, with the specificity of the path
-// that reached it.
+// that reached it: how many segments it took, and the packed classes of those
+// segments (see pattern.shape).
 type term struct {
-	rule     int32
-	depth    uint16
-	literals uint16
+	rule  int32
+	depth uint16
+	shape uint64
 }
 
 // trieEdge is a non-literal transition.
@@ -59,7 +60,7 @@ func (n *trieNode) insert(p pattern, rule int32) {
 	for _, seg := range p.segs {
 		cur = cur.child(seg)
 	}
-	cur.terms = append(cur.terms, term{rule: rule, depth: p.depth(), literals: p.literals})
+	cur.terms = append(cur.terms, term{rule: rule, depth: p.depth(), shape: p.shape()})
 }
 
 // state is one live position in the trie, with the captures bound on the way.

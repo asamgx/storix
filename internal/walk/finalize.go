@@ -63,6 +63,10 @@ func (w *walker) finalize(tree *Tree) {
 // preorder indexes the tree depth-first, left to right, sorting any child list
 // that is not already in name order. os.ReadDir sorts, so this normally only
 // verifies; a custom DirReader may not.
+//
+// Every node is stamped with its index as it is appended, so Node.ID and the
+// position in the returned slice can never disagree. internal/cache/reader.go
+// repeats this walk over a rebuilt tree and must stamp the same way.
 func preorder(root *Node) []*Node {
 	nodes := make([]*Node, 0, 64)
 	stack := []*Node{root}
@@ -70,6 +74,7 @@ func preorder(root *Node) []*Node {
 		i := len(stack) - 1
 		n := stack[i]
 		stack = stack[:i]
+		n.ID = int32(len(nodes))
 		nodes = append(nodes, n)
 		if len(n.Children) == 0 {
 			continue

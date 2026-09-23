@@ -8,7 +8,16 @@ import (
 
 // BucketTotal is one bucket's share of the scanned bytes.
 type BucketTotal struct {
+	// Bytes is the sum of the own bytes of every node in the bucket: a
+	// directory's total less its children's, which on APFS is exactly the
+	// leaves too small to have a node of their own. Summing own bytes
+	// rather than subtree totals is what makes the buckets a partition.
 	Bytes int64
+	// Files counts the same way: a directory contributes the leaves folded
+	// into it (n.Files less its children's, which is Small.Files) and a
+	// retained leaf contributes one. The bucket file counts therefore
+	// partition the walk's own file count exactly as the bytes partition
+	// the scanned bytes.
 	Files int64
 	// ByReclaim splits the bytes by reclaimability tag, indexed by Reclaim.
 	ByReclaim [numReclaim]int64
@@ -162,12 +171,23 @@ func mergeKeys(dst, add []string) []string {
 // maxUnmatched is how many unclassified subtree roots are kept for tuning.
 const maxUnmatched = 200
 
-// findUnmatched collects the roots of the wholly unclassified subtrees.
+// findUnmatched collects the roots of the wholly unclassified subtrees: the
+// top 200 by subtree bytes, which is the list the acceptance script prints the
+// head of and the list the next round of catalog rules is written from.
 //
-// Under inheritance an unclassified node always has an unclassified parent, so
-// "the node where Other begins" is not a useful question; the useful one is
-// "which whole subtrees did the catalog never touch", and that is what this
-// computes, bottom up over the preorder index.
+// The rule, stated precisely, is this. A node is unmatched when it has no
+// effective claim. Because an unclaimed node inherits its parent's claim, an
+// unmatched node always has an unmatched parent, so "unmatched whose parent is
+// unmatched too" describes every unmatched node and would list a directory
+// together with all of its unmatched descendants. An unmatched *root* is
+// therefore the topmost node of a region the catalog never touched: its whole
+// subtree carries no claim, and its parent's subtree does carry one somewhere.
+// That is what this computes, bottom up over the preorder index.
+//
+// The distinction matters on a real machine. /private carries no rule of its
+// own but nearly everything under it does, so listing /private would report
+// 2.7 GB as unclassified when the true figure is a few hundred kilobytes;
+// listing /private/tftpboot instead names the directory a rule is missing for.
 func (c *Classification) findUnmatched(t *walk.Tree) {
 	// untouched[i] is true while no node of i's subtree carries a claim.
 	// Preorder puts every parent before its children, so one backward pass
@@ -215,6 +235,33 @@ func (c *Classification) finish() {
 	c.Conflicts = sortConflicts(c.Conflicts)
 }
 
+// OfNode is Of for a caller holding the node rather than its id. Every
+// consumer downstream of the engine — the TUI's rows, the JSON encoder,
+// explain, the application footprints — has a *walk.Node in hand, and
+// Node.ID makes the lookup a single index rather than a search.
+func (c *Classification) OfNode(n *walk.Node) (Claim, bool) {
+	if n == nil {
+		return Claim{}, false
+	}
+	return c.Of(n.ID)
+}
+
+// ExplicitAtNode is ExplicitAt for a caller holding the node.
+func (c *Classification) ExplicitAtNode(n *walk.Node) (Claim, bool) {
+	if n == nil {
+		return Claim{}, false
+	}
+	return c.ExplicitAt(n.ID)
+}
+
+// InheritedFromNode is InheritedFrom for a caller holding the node.
+func (c *Classification) InheritedFromNode(n *walk.Node) *walk.Node {
+	if n == nil {
+		return nil
+	}
+	return c.InheritedFrom(n.ID)
+}
+
 // Of returns the effective claim of a node: the one it carries itself, or the
 // nearest ancestor's. The second result is false for a node in Other.
 func (c *Classification) Of(nodeID int32) (Claim, bool) {
@@ -251,12 +298,9 @@ func (c *Classification) NodeOf(claim int32) int32 {
 
 // InheritedFrom returns the node whose claim this node inherited, or nil when
 // the node carries its own claim or none.
-func (c *Classification) InheritedFrom(t *walk.Tree, nodeID int32) *walk.Node {
+func (c *Classification) InheritedFrom(nodeID int32) *walk.Node {
 	cl, ok := c.Of(nodeID)
-	if !ok || t == nil || int(nodeID) >= len(t.Nodes) {
-		return nil
-	}
-	if cl.Node == t.Nodes[nodeID] {
+	if !ok || c.NodeOf(c.Effective[nodeID]) == nodeID {
 		return nil
 	}
 	return cl.Node

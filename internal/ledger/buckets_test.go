@@ -195,3 +195,89 @@ func TestBucketsFromRealWalk(t *testing.T) {
 		t.Errorf("Other = %d, want the unclassified directory's %d", got, stray.Bytes)
 	}
 }
+
+// TestBucketFilesPartitionTheWalk is the byte identity's twin: every leaf the
+// walk met, retained or folded into its parent's aggregate, is counted in
+// exactly one bucket. A bucket's file count is the sum of its nodes' own
+// files, which is Small.Files for a directory and one for a leaf.
+func TestBucketFilesPartitionTheWalk(t *testing.T) {
+	root := &walk.Node{Name: mac.DataRoot, Kind: walk.KindDir}
+	apps := &walk.Node{Name: "Applications", Kind: walk.KindDir, Parent: root}
+	arc := &walk.Node{Name: "Arc.app", Kind: walk.KindDir, Parent: apps, Flags: walk.FlagBundle}
+	// A bundle is a directory the walker descends into, so its own bytes
+	// are only the small files directly inside it; the rest arrives from
+	// its children, which inherit the bundle's claim.
+	arc.Small = walk.Small{Files: 4, Bytes: 12_000}
+	contents := &walk.Node{Name: "Contents", Kind: walk.KindDir, Parent: arc}
+	contents.Small = walk.Small{Files: 9, Bytes: 40_000}
+	binary := &walk.Node{Name: "Arc", Kind: walk.KindFile, Parent: contents, Bytes: 900_000_000, Files: 1}
+
+	users := &walk.Node{Name: "Users", Kind: walk.KindDir, Parent: root}
+	home := &walk.Node{Name: "u", Kind: walk.KindDir, Parent: users}
+	docs := &walk.Node{Name: "Documents", Kind: walk.KindDir, Parent: home}
+	docs.Small = walk.Small{Files: 31, Bytes: 5_000_000}
+	stray := &walk.Node{Name: "strange", Kind: walk.KindDir, Parent: root}
+	stray.Small = walk.Small{Files: 2, Bytes: 7_000_000}
+
+	root.Children = []*walk.Node{apps, users, stray}
+	apps.Children = []*walk.Node{arc}
+	arc.Children = []*walk.Node{contents}
+	contents.Children = []*walk.Node{binary}
+	users.Children = []*walk.Node{home}
+	home.Children = []*walk.Node{docs}
+
+	// Sum the way the walker's finalize pass does.
+	order := []*walk.Node{contents, arc, apps, docs, home, users, stray, root}
+	for _, n := range order {
+		if !n.IsDir() {
+			continue
+		}
+		n.Bytes += n.Small.Bytes
+		n.Files += n.Small.Files
+		for _, c := range n.Children {
+			n.Bytes += c.Bytes
+			n.Files += c.Files
+		}
+	}
+	tr := &walk.Tree{
+		Root:     root,
+		Nodes:    []*walk.Node{root, apps, arc, contents, binary, users, home, docs, stray},
+		Started:  before,
+		Finished: after,
+	}
+
+	e, err := classify.New([]classify.Rule{
+		{ID: "apps.bundle", Match: "/Applications/{name}.app", Bucket: classify.BucketApps,
+			Category: "Application", Owner: "{name}", Reclaim: classify.UserData},
+		{ID: "personal.documents", Match: "~/Documents", Bucket: classify.BucketPersonal,
+			Category: "Documents", Owner: "Documents", Reclaim: classify.UserData},
+	}, classify.Context{Home: "/Users/u", CodeRoots: []string{}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	class := e.Run(tr, nil)
+	l := BuildClassified(fakeFacts(mac.DataRoot, dataUsed, dataUsed, known(0)), tr, units.Decimal, class)
+
+	if got, want := l.WalkedBucketFiles(), int64(l.Counters.Files); got != want {
+		t.Errorf("bucket file counts sum to %d, the walk counted %d", got, want)
+	}
+	if got, want := l.WalkedBucketBytes(), l.Scanned.Bytes; got != want {
+		t.Errorf("bucket bytes sum to %d, scanned is %d", got, want)
+	}
+	// The bundle is claimed at its own node and everything inside it
+	// inherits, so the whole subtree is in Applications even though the
+	// walker descended into it.
+	appsBucket := l.bucket(classify.BucketApps)
+	if appsBucket.Bytes != arc.Bytes {
+		t.Errorf("Applications = %d, want the whole bundle %d", appsBucket.Bytes, arc.Bytes)
+	}
+	if appsBucket.Files != int64(arc.Files) {
+		t.Errorf("Applications counts %d files, want the bundle's %d", appsBucket.Files, arc.Files)
+	}
+	if _, ok := class.ExplicitAtNode(arc); !ok {
+		t.Error("the bundle node should carry the claim its subtree inherits")
+	}
+	if class.InheritedFromNode(binary) != arc {
+		t.Error("a file inside the bundle should inherit the bundle's claim")
+	}
+}

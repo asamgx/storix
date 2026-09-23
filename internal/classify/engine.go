@@ -166,7 +166,7 @@ func (e *Engine) Match(display string, isDir bool) (Claim, bool) {
 				Reclaim:   r.Reclaim,
 				Source:    Source{Kind: SourceRule, ID: r.ID},
 				Depth:     tm.depth,
-				Literals:  tm.literals,
+				Shape:     tm.shape,
 				Priority:  r.Priority,
 			})
 		}
@@ -287,6 +287,12 @@ func (e *Engine) assign(t *walk.Tree, extras map[*walk.Node][]Claim, c *Classifi
 	c.parent = make([]int32, len(t.Nodes))
 
 	for i, n := range t.Nodes {
+		// Node.ID is the node's index in this slice by definition, and
+		// every consumer of the classification joins on it. A walk and a
+		// cache read both stamp it; restamping here costs one store per
+		// node and makes the invariant hold for a tree assembled by hand
+		// in a test as well.
+		n.ID = int32(i)
 		for len(stack) > 0 && stack[len(stack)-1].n != n.Parent {
 			stack = stack[:len(stack)-1]
 		}
@@ -364,7 +370,7 @@ func (e *Engine) candidates(dst []Claim, n *walk.Node, states []state) []Claim {
 				Source:    Source{Kind: SourceRule, ID: r.ID},
 				Evidence:  []string{"rule " + r.ID + " matched " + n.Display()},
 				Depth:     tm.depth,
-				Literals:  tm.literals,
+				Shape:     tm.shape,
 				Priority:  r.Priority,
 			}
 			dst = keepBest(dst, cl)

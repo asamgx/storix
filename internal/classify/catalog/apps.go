@@ -4,8 +4,12 @@ import "github.com/asamgx/storix/internal/classify"
 
 // appRules put application bundles in bucket 2 wherever they are installed.
 //
-// A bundle is a directory macOS presents as one object, so one claim on the
-// bundle covers everything inside it. The owner captured here is the bundle's
+// A bundle is a directory macOS presents as one object, but the walker still
+// descends into it: a .app node has children and its own bytes are only the
+// small files directly inside it. What puts the whole bundle in this bucket is
+// inheritance — the claim lands on the bundle node and every node beneath it
+// inherits — so these rules must match the bundle directory itself and never
+// assume its Small aggregate is the whole of it. The owner captured here is the bundle's
 // file name, not its identifier: reading Info.plist is the apps detector's
 // job (Part B), and it replaces these owners with real bundle ids at a higher
 // precedence. The Caskroom rules are placeholders in the same sense — the

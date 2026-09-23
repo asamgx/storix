@@ -1,8 +1,6 @@
 package scan
 
 import (
-	"os"
-	"os/user"
 	"path"
 	"strings"
 
@@ -46,24 +44,16 @@ func classifyContext(t *walk.Tree, cfg Config) classify.Context {
 	}
 }
 
-// HomeDir is the invoking user's home as a display path.
-//
-// Under sudo that is the user who ran sudo, not root: a scan run with sudo is
-// still a scan of someone's machine, and classifying /var/root as "the home
-// folder" would put every one of their caches in Other.
+// HomeDir is the invoking user's home as a display path, sudo-aware; see
+// mac.InvokingHome. A failed lookup yields the empty string, which leaves the
+// "~" rules anchored at "Users/*" alone: every home still classifies, just
+// without one of them being singled out as the scan user's.
 func HomeDir() string {
-	if _, _, viaSudo := mac.InvokingUser(); viaSudo {
-		if name := os.Getenv("SUDO_USER"); name != "" {
-			if u, err := user.Lookup(name); err == nil && u.HomeDir != "" {
-				return mac.DisplayPath(u.HomeDir)
-			}
-			return "/Users/" + name
-		}
+	_, home, _ := mac.InvokingHome()
+	if home == "" {
+		return ""
 	}
-	if h, err := os.UserHomeDir(); err == nil && h != "" {
-		return mac.DisplayPath(h)
-	}
-	return ""
+	return mac.DisplayPath(home)
 }
 
 // otherHomes lists the homes under /Users that are not the scan user's. They

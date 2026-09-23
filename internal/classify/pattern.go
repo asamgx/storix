@@ -53,9 +53,54 @@ type segment struct {
 	prefix, suffix string
 	// glob constrains a segTemplate capture; empty accepts anything.
 	glob string
-	// literal records whether the segment carries literal text, which is
-	// what specificity counts.
-	literal bool
+	// literals records whether the segment carries literal text of its own,
+	// which is the first thing specificity looks at.
+	literals bool
+}
+
+// Segment classes, from the most constrained to the least. Specificity ranks
+// segments by class rather than by a bare count of literal segments, because
+// two patterns of equal depth can hold the same number of literals and still
+// differ in how tightly they match: "~/Library/Caches/*.ShipIt" and
+// "~/Library/Caches/{bundleid}" both have three literal segments, and without
+// a class the winner between them would be whichever rule id sorts first.
+const (
+	// classAny is "*": one segment, any name at all.
+	classAny uint64 = iota
+	// classCapture is "{name}": captured, otherwise unconstrained.
+	classCapture
+	// classGlobbed is a capture constrained by a glob ("{name:v*}") or a
+	// glob made only of metacharacters.
+	classGlobbed
+	// classLiteralText is a segment carrying literal text beside its
+	// wildcard: "*.ShipIt", "{bundleid}.ShipIt", "Install macOS *.app".
+	classLiteralText
+	// classLiteral is an exact name.
+	classLiteral
+)
+
+// class is the segment's specificity class.
+func (s segment) class() uint64 {
+	switch s.kind {
+	case segLiteral:
+		return classLiteral
+	case segAny:
+		return classAny
+	case segGlob:
+		if s.literals {
+			return classLiteralText
+		}
+		return classGlobbed
+	default:
+		switch {
+		case s.literals:
+			return classLiteralText
+		case s.glob != "":
+			return classGlobbed
+		default:
+			return classCapture
+		}
+	}
 }
 
 // key identifies a segment for trie edge deduplication. Two edges with the
@@ -104,12 +149,29 @@ func (s segment) match(name string) (capture string, ok bool) {
 
 // pattern is a compiled Match: its segments and its specificity.
 type pattern struct {
-	segs     []segment
-	literals uint16
+	segs []segment
 }
 
 // depth is the number of segments, the first term of specificity.
 func (p pattern) depth() uint16 { return uint16(len(p.segs)) }
+
+// shapeSegments is how many segments fit in a packed shape at three bits
+// each. No catalog pattern comes close; a deeper one is ranked on its deepest
+// twenty-one segments, which are the ones that decide anything.
+const shapeSegments = 21
+
+// shape packs the segment classes into one comparable number, deepest segment
+// in the most significant bits, so that comparing two shapes compares their
+// segments right to left. Depth is compared before shape, so two shapes are
+// only ever compared when they describe the same number of segments.
+func (p pattern) shape() uint64 {
+	var out uint64
+	d := len(p.segs)
+	for j := 0; j < d && j < shapeSegments; j++ {
+		out |= p.segs[d-1-j].class() << (3 * (shapeSegments - 1 - j))
+	}
+	return out
+}
 
 // parsePattern compiles one anchored pattern. The leading "~" must already
 // have been expanded; see variants.
@@ -124,9 +186,6 @@ func parsePattern(s string) (pattern, error) {
 		seg, err := parseSegment(part)
 		if err != nil {
 			return pattern{}, fmt.Errorf("pattern %q: %w", s, err)
-		}
-		if seg.literal {
-			p.literals++
 		}
 		p.segs = append(p.segs, seg)
 	}
@@ -148,9 +207,9 @@ func parseSegment(part string) (segment, error) {
 		if _, err := path.Match(part, ""); err != nil {
 			return segment{}, fmt.Errorf("segment %q is not a valid glob: %w", part, err)
 		}
-		return segment{kind: segGlob, text: part, literal: true}, nil
+		return segment{kind: segGlob, text: part, literals: hasLiteralText(part)}, nil
 	default:
-		return segment{kind: segLiteral, text: part, literal: true}, nil
+		return segment{kind: segLiteral, text: part, literals: true}, nil
 	}
 }
 
@@ -185,8 +244,21 @@ func parseTemplate(part string) (segment, error) {
 	if strings.ContainsAny(seg.name, "*?[]/") {
 		return segment{}, fmt.Errorf("segment %q has an invalid capture name %q", part, seg.name)
 	}
-	seg.literal = seg.prefix != "" || seg.suffix != ""
+	seg.literals = seg.prefix != "" || seg.suffix != ""
 	return seg, nil
+}
+
+// hasLiteralText reports whether a glob constrains anything beyond its
+// metacharacters. "*.ShipIt" does; "*?" does not.
+func hasLiteralText(glob string) bool {
+	for i := range len(glob) {
+		switch glob[i] {
+		case '*', '?', '[', ']':
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // captureNames lists the captures a pattern binds, in order.

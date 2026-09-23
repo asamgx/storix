@@ -288,3 +288,33 @@ func TestNodeRecordSizeMatchesTheFieldList(t *testing.T) {
 		t.Errorf("header/trailer sizes changed: %d/%d", headerSize, trailerSize)
 	}
 }
+
+// TestRoundTripNodeIDs is the invariant every per-node consumer depends on:
+// a node's ID is its index in Tree.Nodes, and it is the same index after the
+// cache has taken the tree apart into arrays and rebuilt it. A classification
+// keyed by ID would silently point at the wrong directories if this drifted.
+func TestRoundTripNodeIDs(t *testing.T) {
+	tree := fixtureTree(t)
+	for i, n := range tree.Nodes {
+		if n.ID != int32(i) {
+			t.Fatalf("a fresh walk left node %q with id %d at index %d", n.Name, n.ID, i)
+		}
+	}
+
+	raw := encode(t, testMeta(), tree)
+	_, got, err := Read(bytes.NewReader(raw), int64(len(raw)))
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if len(got.Nodes) != len(tree.Nodes) {
+		t.Fatalf("the round trip returned %d nodes, want %d", len(got.Nodes), len(tree.Nodes))
+	}
+	for i, n := range got.Nodes {
+		if n.ID != int32(i) {
+			t.Errorf("node %q has id %d at index %d after a round trip", n.Name, n.ID, i)
+		}
+		if n.Path() != tree.Nodes[i].Path() {
+			t.Errorf("id %d is %s after a round trip, was %s", i, n.Path(), tree.Nodes[i].Path())
+		}
+	}
+}
