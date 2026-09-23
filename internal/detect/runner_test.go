@@ -59,7 +59,8 @@ func (d *fake) RetainLeaf(cx classify.Context) func(string, *walk.Entry) bool {
 // every tool is missing, which is the right default for a unit test.
 func testEnv() Env {
 	replay := probe.NewReplay(nil)
-	return Env{Runner: replay, Home: "/Users/andrew", LookPath: replay.LookPath, ReadFile: ReadFile, Stat: Stat}
+	return Env{Runner: replay, Home: "/Users/andrew", LookPath: replay.LookPath,
+		ReadFile: ReadFile, ReadDir: ReadDir, Stat: Stat}
 }
 
 // byName finds one outcome.
