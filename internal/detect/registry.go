@@ -19,10 +19,24 @@ import (
 // runs several of them or blocks somewhere else.
 const DefaultTimeout = 20 * time.Second
 
-// DefaultGrace is how long scan waits for probes still running when the walk
-// has finished. The walk takes twenty seconds on a full volume and every probe
-// here takes under two, so the grace is a backstop rather than a budget.
+// DefaultGrace is the floor under how long scan waits for probes still
+// running when the walk has finished.
+//
+// It is a floor and not a ceiling because the slow probes are slower than it:
+// homebrew takes 13.3 seconds on a machine with a large cellar and the
+// application inventory 11.6, against a walk that is twenty seconds on a full
+// volume and under one on a partial root. A ceiling of two seconds threw both
+// of them away on every short scan, although each was inside the budget it was
+// given. Wait therefore holds on until a probe has finished or spent its own
+// timeout, and the grace only keeps it from returning the instant the walk
+// does. DefaultTimeout is what bounds the wait.
 const DefaultGrace = 2 * time.Second
+
+// probeSettle is the moment Wait allows a probe after its own deadline has
+// passed, so that the detector records its own timeout, with the commands it
+// ran, rather than being collected as a straggler one tick before it would
+// have said so itself.
+const probeSettle = 250 * time.Millisecond
 
 // registered is the detector table the detector packages fill in from their
 // own init functions, the way internal/cli's commands register themselves.
@@ -175,6 +189,13 @@ type Run struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 	done   chan struct{}
+	// started is when the probes were launched, which is what a straggler's
+	// duration is measured from.
+	started time.Time
+	// deadlines is when each probe's own timeout expires. Wait holds on
+	// until the last one that is still running has reached it. They are
+	// written before any probe starts and never again.
+	deadlines []time.Time
 
 	mu       sync.Mutex
 	outs     []Outcome
@@ -192,7 +213,7 @@ func (r *Registry) Start(ctx context.Context, env Env, timeouts map[string]time.
 		ctx = context.Background()
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	run := &Run{reg: r, cancel: cancel, done: make(chan struct{})}
+	run := &Run{reg: r, cancel: cancel, done: make(chan struct{}), started: time.Now()}
 	if r == nil {
 		close(run.done)
 		return run
@@ -200,12 +221,15 @@ func (r *Registry) Start(ctx context.Context, env Env, timeouts map[string]time.
 
 	run.outs = make([]Outcome, len(r.dets))
 	run.finished = make([]bool, len(r.dets))
+	run.deadlines = make([]time.Time, len(r.dets))
 	for i, det := range r.dets {
 		run.outs[i] = Outcome{Detector: det, Status: Status{Name: det.Name(), Verified: verified(det)}}
+		timeout := timeoutFor(det.Name(), timeouts)
+		run.deadlines[i] = run.started.Add(timeout)
 		run.wg.Add(1)
 		go func(i int, det Detector) {
 			defer run.wg.Done()
-			out := probeOne(runCtx, det, env, timeoutFor(det.Name(), timeouts))
+			out := probeOne(runCtx, det, env, timeout)
 			run.mu.Lock()
 			run.outs[i], run.finished[i] = out, true
 			run.mu.Unlock()
@@ -263,9 +287,17 @@ func probeOne(ctx context.Context, det Detector, env Env, timeout time.Duration)
 	return out
 }
 
-// Wait collects the probes, giving any still running the grace period before
-// calling them timed out. It cancels the stragglers on its way out, so that
-// nothing is still talking to the machine while the engine classifies.
+// Wait collects the probes. A probe still running when the walk finished is
+// given the rest of its own timeout, and the grace on top of that if its
+// timeout has already passed. It cancels the stragglers on its way out, so
+// that nothing is still talking to the machine while the engine classifies.
+//
+// The grace is the floor rather than the ceiling because the walk and the
+// probes are not the same length. A walk of a partial root, or a rescan from
+// the interface, is over in under a second, and cutting the probes off two
+// seconds later threw away a detector that was going to answer in thirteen
+// and had been given twenty. What bounds this wait is the budget the
+// detectors were started with, not the walk they were hidden behind.
 func (run *Run) Wait(grace time.Duration) []Outcome {
 	if run == nil {
 		return nil
@@ -273,7 +305,11 @@ func (run *Run) Wait(grace time.Duration) []Outcome {
 	if grace <= 0 {
 		grace = DefaultGrace
 	}
-	timer := time.NewTimer(grace)
+	deadline := time.Now().Add(grace)
+	if last := run.lastDeadline(); last.After(deadline) {
+		deadline = last
+	}
+	timer := time.NewTimer(time.Until(deadline))
 	defer timer.Stop()
 	select {
 	case <-run.done:
@@ -289,8 +325,8 @@ func (run *Run) Wait(grace time.Duration) []Outcome {
 		if !run.finished[i] {
 			out[i].Facts = nil
 			out[i].Status.State = Timeout
-			out[i].Status.Reason = "still running when the walk finished"
-			out[i].Status.Duration = grace
+			out[i].Status.Reason = "still running when its own timeout ran out"
+			out[i].Status.Duration = time.Since(run.started)
 		}
 	}
 	if run.reg != nil {
@@ -302,6 +338,28 @@ func (run *Run) Wait(grace time.Duration) []Outcome {
 		}
 	}
 	return out
+}
+
+// lastDeadline is when the last probe that is still running spends its own
+// timeout, with a moment on top for it to record that itself. It is the zero
+// time when every probe has finished, which is what leaves Wait with nothing
+// but the grace to consider.
+func (run *Run) lastDeadline() time.Time {
+	run.mu.Lock()
+	defer run.mu.Unlock()
+	var last time.Time
+	for i := range run.outs {
+		if run.finished[i] || i >= len(run.deadlines) {
+			continue
+		}
+		if d := run.deadlines[i]; d.After(last) {
+			last = d
+		}
+	}
+	if last.IsZero() {
+		return last
+	}
+	return last.Add(probeSettle)
 }
 
 // stopGrace bounds how long Stop waits for a detector that ignores its

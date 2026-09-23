@@ -101,14 +101,17 @@ func TestRunCompletesThroughEveryFailure(t *testing.T) {
 		}},
 	)
 
-	run := reg.Start(context.Background(), testEnv(), map[string]time.Duration{"hangs": time.Hour})
+	// The hanging detector's own budget is what ends the wait: Wait holds
+	// on until a probe has finished or spent its timeout, so a detector
+	// given an hour would be waited on for an hour.
+	run := reg.Start(context.Background(), testEnv(), map[string]time.Duration{"hangs": 300 * time.Millisecond})
 	defer run.Stop()
 
 	start := time.Now()
 	outs := run.Wait(200 * time.Millisecond)
 	elapsed := time.Since(start)
 	if elapsed > 3*time.Second {
-		t.Errorf("Wait took %s for a 200ms grace", elapsed)
+		t.Errorf("Wait took %s for a probe with a 300ms timeout", elapsed)
 	}
 	if len(outs) != 5 {
 		t.Fatalf("outcomes = %d, want 5", len(outs))
@@ -466,5 +469,87 @@ func TestALeafHookThatPanicsWhileBeingBuiltIsContained(t *testing.T) {
 	}
 	if !strings.Contains(out.Status.Reason, "a bug in the constructor") {
 		t.Errorf("the reason does not say what happened: %q", out.Status.Reason)
+	}
+}
+
+// TestASlowProbeKeepsTheBudgetItWasGiven is the short-walk case: the probes
+// are hidden behind the walk, and a walk of a partial root or a rescan from
+// the interface is over long before a slow detector is.
+//
+// A grace that was a ceiling threw those answers away — homebrew takes
+// thirteen seconds against a twenty-second budget — so the detector must
+// still be Ok here, and the wait must end when it answers rather than when
+// its budget runs out.
+func TestASlowProbeKeepsTheBudgetItWasGiven(t *testing.T) {
+	const (
+		probeTakes = 600 * time.Millisecond
+		budget     = 2 * time.Second
+	)
+	slow := &fake{name: "slow", probe: func(ctx context.Context, _ Env) (Facts, error) {
+		select {
+		case <-time.After(probeTakes):
+			return &fakeFacts{Kind_: "slow"}, nil
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}}
+
+	run := New(slow).Start(t.Context(), testEnv(), map[string]time.Duration{"slow": budget})
+	defer run.Stop()
+
+	start := time.Now()
+	// The walk took no time at all, so the grace is all the caller offers.
+	outs := run.Wait(10 * time.Millisecond)
+	elapsed := time.Since(start)
+
+	out, ok := byName(outs, "slow")
+	if !ok {
+		t.Fatal("the slow detector produced no outcome")
+	}
+	if out.Status.State != Ok {
+		t.Errorf("a detector inside its own budget is %s (%q), want ok",
+			out.Status.State, out.Status.Reason)
+	}
+	if out.Facts == nil {
+		t.Error("the facts of a detector that answered in time were thrown away")
+	}
+	if elapsed < probeTakes {
+		t.Errorf("Wait returned in %s, before the probe could have answered", elapsed)
+	}
+	if elapsed >= budget {
+		t.Errorf("Wait took %s: it waited out the budget rather than the answer", elapsed)
+	}
+}
+
+// TestWaitStopsAtTheProbesOwnDeadline is the other end of the same rule: the
+// budget the detectors were started with is what bounds the wait, so a probe
+// that ignores its context does not hold the scan open past it.
+func TestWaitStopsAtTheProbesOwnDeadline(t *testing.T) {
+	const budget = 300 * time.Millisecond
+	deaf := &fake{name: "deaf", probe: func(context.Context, Env) (Facts, error) {
+		time.Sleep(1200 * time.Millisecond) // a probe blocked in a syscall
+		return &fakeFacts{Kind_: "deaf"}, nil
+	}}
+
+	run := New(deaf).Start(t.Context(), testEnv(), map[string]time.Duration{"deaf": budget})
+	defer run.Stop()
+
+	start := time.Now()
+	outs := run.Wait(10 * time.Millisecond)
+	elapsed := time.Since(start)
+
+	out, ok := byName(outs, "deaf")
+	if !ok {
+		t.Fatal("the deaf detector produced no outcome")
+	}
+	if out.Status.State != Timeout {
+		t.Errorf("a detector that spent its budget is %s (%q), want timeout",
+			out.Status.State, out.Status.Reason)
+	}
+	if elapsed < budget {
+		t.Errorf("Wait returned in %s, inside the %s the detector was given", elapsed, budget)
+	}
+	if elapsed > budget+probeSettle+500*time.Millisecond {
+		t.Errorf("Wait took %s: a probe that ignores its context held the scan open", elapsed)
 	}
 }
