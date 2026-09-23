@@ -11,6 +11,7 @@
     "facts_ns": 310000000,
     "walk_ns": 19000000000,
     "finish_ns": 12000000,
+    "classify_ns": 180000000,
     "ledger_ns": 4000000,
     "persist_ns": 0,
     "total_ns": 19700000000
@@ -18,7 +19,7 @@
   "ledger": {
     "root": "/",
     "partial_root": false,
-    "reason": "the 156.57 GB residual exceeds the 132 MB of drift; APFS directory inodes report zero blocks, so several gigabytes of filesystem metadata are invisible to any lstat-based sum and land here",
+    "reason": "the 143.43 GB residual exceeds the 132 MB of drift; APFS directory inodes report zero blocks, so several gigabytes of filesystem metadata are invisible to any lstat-based sum and land here",
     "volume": {
       "mount_point": "/System/Volumes/Data",
       "used_before": 180914386688,
@@ -38,7 +39,7 @@
     "scanned": {
       "id": "scanned",
       "label": "scanned",
-      "bytes": 22900049152,
+      "bytes": 36040169152,
       "known": true,
       "note": "allocated bytes, hard links counted once"
     },
@@ -52,7 +53,7 @@
     "residual": {
       "id": "residual",
       "label": "filesystem metadata, content of 4 unreadable directories, and unaccounted",
-      "bytes": 156572595712,
+      "bytes": 143432475712,
       "known": true
     },
     "overhead": {
@@ -68,6 +69,325 @@
       "bytes": 181046386688,
       "known": true
     },
+    "buckets": [
+      {
+        "id": "macos",
+        "label": "macOS",
+        "bytes": 28127600640,
+        "files": 0,
+        "known": true,
+        "note": "sealed system, Preboot, VM, Update and Recovery volumes, read from statfs",
+        "reclaimable": 0
+      },
+      {
+        "id": "apps",
+        "label": "Applications",
+        "bytes": 1400000000,
+        "files": 1,
+        "known": true,
+        "reclaimable": 0,
+        "by_reclaim": [
+          {
+            "id": "user-data",
+            "label": "user-data",
+            "bytes": 1400000000,
+            "known": true
+          }
+        ],
+        "categories": [
+          {
+            "id": "Application",
+            "label": "Application",
+            "bytes": 1400000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ],
+        "owners": [
+          {
+            "id": "Arc",
+            "label": "Arc",
+            "bytes": 1400000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ]
+      },
+      {
+        "id": "app-data",
+        "label": "App data",
+        "bytes": 7000000000,
+        "files": 1,
+        "known": true,
+        "reclaimable": 7000000000,
+        "by_reclaim": [
+          {
+            "id": "regenerable",
+            "label": "regenerable",
+            "bytes": 7000000000,
+            "known": true
+          }
+        ],
+        "categories": [
+          {
+            "id": "Cache",
+            "label": "Cache",
+            "bytes": 7000000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ],
+        "owners": [
+          {
+            "id": "com.spotify.client",
+            "label": "com.spotify.client",
+            "bytes": 7000000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ]
+      },
+      {
+        "id": "developer",
+        "label": "Developer",
+        "bytes": 4680120000,
+        "files": 3,
+        "known": true,
+        "reclaimable": 4680000000,
+        "by_reclaim": [
+          {
+            "id": "regenerable",
+            "label": "regenerable",
+            "bytes": 4680000000,
+            "known": true
+          },
+          {
+            "id": "user-data",
+            "label": "user-data",
+            "bytes": 120000,
+            "known": true
+          }
+        ],
+        "categories": [
+          {
+            "id": "Build cache",
+            "label": "Build cache",
+            "bytes": 4200000000,
+            "known": true,
+            "note": "90% of the bucket"
+          },
+          {
+            "id": "Build artifacts",
+            "label": "Build artifacts",
+            "bytes": 480000000,
+            "known": true,
+            "note": "10% of the bucket"
+          },
+          {
+            "id": "Project source",
+            "label": "Project source",
+            "bytes": 120000,
+            "known": true,
+            "note": "0% of the bucket"
+          }
+        ],
+        "owners": [
+          {
+            "id": "Go",
+            "label": "Go",
+            "bytes": 4200000000,
+            "known": true,
+            "note": "90% of the bucket"
+          },
+          {
+            "id": "storix",
+            "label": "storix",
+            "bytes": 480120000,
+            "known": true,
+            "note": "10% of the bucket"
+          }
+        ]
+      },
+      {
+        "id": "containers",
+        "label": "Containers \u0026 VMs",
+        "bytes": 18700000000,
+        "files": 1,
+        "known": true,
+        "reclaimable": 18700000000,
+        "by_reclaim": [
+          {
+            "id": "tool-managed",
+            "label": "tool-managed",
+            "bytes": 18700000000,
+            "known": true
+          }
+        ],
+        "categories": [
+          {
+            "id": "OrbStack",
+            "label": "OrbStack",
+            "bytes": 18700000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ],
+        "owners": [
+          {
+            "id": "OrbStack",
+            "label": "OrbStack",
+            "bytes": 18700000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ]
+      },
+      {
+        "id": "personal",
+        "label": "Personal files",
+        "bytes": 49152,
+        "files": 13,
+        "known": true,
+        "reclaimable": 0,
+        "by_reclaim": [
+          {
+            "id": "user-data",
+            "label": "user-data",
+            "bytes": 49152,
+            "known": true
+          }
+        ],
+        "categories": [
+          {
+            "id": "Desktop",
+            "label": "Desktop",
+            "bytes": 49152,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ],
+        "owners": [
+          {
+            "id": "Desktop",
+            "label": "Desktop",
+            "bytes": 49152,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ]
+      },
+      {
+        "id": "backups",
+        "label": "Backups",
+        "bytes": 3100000000,
+        "files": 1,
+        "known": true,
+        "reclaimable": 0,
+        "by_reclaim": [
+          {
+            "id": "user-data",
+            "label": "user-data",
+            "bytes": 3100000000,
+            "known": true
+          }
+        ],
+        "categories": [
+          {
+            "id": "Device backup",
+            "label": "Device backup",
+            "bytes": 3100000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ],
+        "owners": [
+          {
+            "id": "00008110-000C4D2E0A30801E",
+            "label": "00008110-000C4D2E0A30801E",
+            "bytes": 3100000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ]
+      },
+      {
+        "id": "system-caches",
+        "label": "System caches \u0026 logs",
+        "bytes": 0,
+        "files": 0,
+        "known": true,
+        "reclaimable": 0
+      },
+      {
+        "id": "trash",
+        "label": "Trash",
+        "bytes": 900000000,
+        "files": 1,
+        "known": true,
+        "reclaimable": 900000000,
+        "by_reclaim": [
+          {
+            "id": "tool-managed",
+            "label": "tool-managed",
+            "bytes": 900000000,
+            "known": true
+          }
+        ],
+        "categories": [
+          {
+            "id": "Trash",
+            "label": "Trash",
+            "bytes": 900000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ],
+        "owners": [
+          {
+            "id": "Trash",
+            "label": "Trash",
+            "bytes": 900000000,
+            "known": true,
+            "note": "100% of the bucket"
+          }
+        ]
+      },
+      {
+        "id": "purgeable",
+        "label": "Purgeable",
+        "bytes": 1573741824,
+        "files": 0,
+        "known": true,
+        "note": "freed when space runs short; may overlap scanned bytes",
+        "reclaimable": 1573741824
+      },
+      {
+        "id": "other",
+        "label": "Other",
+        "bytes": 260000000,
+        "files": 1,
+        "known": true,
+        "note": "scanned but matched no rule; a large Other means the catalog needs work",
+        "reclaimable": 0,
+        "by_reclaim": [
+          {
+            "id": "unknown",
+            "label": "unknown",
+            "bytes": 260000000,
+            "known": true
+          }
+        ]
+      },
+      {
+        "id": "unaccounted",
+        "label": "Unreadable / unaccounted",
+        "bytes": 143432475712,
+        "files": 0,
+        "known": true,
+        "note": "filesystem metadata, content of 4 unreadable directories, and unaccounted (4 unreadable paths)",
+        "reclaimable": 0
+      }
+    ],
     "macos": [
       {
         "id": "/",
@@ -192,9 +512,9 @@
       }
     ],
     "counters": {
-      "files": 15,
-      "dirs": 10,
-      "nodes": 14,
+      "files": 22,
+      "dirs": 25,
+      "nodes": 36,
       "link_groups": 1284,
       "link_bytes_saved": 2300000000,
       "errors": 4,
@@ -415,9 +735,9 @@
     }
   },
   "counters": {
-    "files": 15,
-    "dirs": 10,
-    "nodes": 14,
+    "files": 22,
+    "dirs": 25,
+    "nodes": 36,
     "link_groups": 1284,
     "link_bytes_saved": 2300000000,
     "errors": 4,
@@ -475,42 +795,116 @@
   "tree": {
     "path": "/",
     "kind": "dir",
-    "bytes": 22900049152,
-    "apparent": 251200041003,
-    "files": 15,
-    "dirs": 10,
+    "bytes": 36040169152,
+    "apparent": 264340161003,
+    "files": 22,
+    "dirs": 25,
     "mtime": "2026-09-22T10:00:00Z",
     "children": [
       {
+        "path": "/Applications",
+        "kind": "dir",
+        "bytes": 1400000000,
+        "apparent": 1400000000,
+        "files": 1,
+        "dirs": 1,
+        "mtime": "2026-09-22T10:00:00Z",
+        "children": [
+          {
+            "path": "/Applications/Arc.app",
+            "kind": "dir",
+            "bytes": 1400000000,
+            "apparent": 1400000000,
+            "files": 1,
+            "dirs": 0,
+            "mtime": "2026-09-22T10:00:00Z",
+            "flags": [
+              "bundle"
+            ],
+            "children": [
+              {
+                "path": "/Applications/Arc.app/Arc",
+                "kind": "file",
+                "bytes": 1400000000,
+                "apparent": 1400000000,
+                "files": 1,
+                "dirs": 0,
+                "mtime": "2026-09-22T10:00:00Z"
+              }
+            ]
+          }
+        ]
+      },
+      {
         "path": "/Users",
         "kind": "dir",
-        "bytes": 22900049152,
-        "apparent": 251200041003,
-        "files": 15,
-        "dirs": 6,
+        "bytes": 34380169152,
+        "apparent": 262680161003,
+        "files": 20,
+        "dirs": 18,
         "mtime": "2026-09-22T10:00:00Z",
         "children": [
           {
             "path": "/Users/u",
             "kind": "dir",
-            "bytes": 22900049152,
-            "apparent": 251200041003,
-            "files": 15,
-            "dirs": 5,
+            "bytes": 34380169152,
+            "apparent": 262680161003,
+            "files": 20,
+            "dirs": 17,
             "mtime": "2026-09-22T10:00:00Z",
             "children": [
               {
                 "path": "/Users/u/Library",
                 "kind": "dir",
-                "bytes": 22900000000,
-                "apparent": 251200000000,
-                "files": 3,
-                "dirs": 3,
+                "bytes": 33000000000,
+                "apparent": 261300000000,
+                "files": 5,
+                "dirs": 11,
                 "mtime": "2026-09-22T10:00:00Z",
-                "children_omitted": 3
+                "children_omitted": 4
+              },
+              {
+                "path": "/Users/u/.Trash",
+                "kind": "dir",
+                "bytes": 900000000,
+                "apparent": 900000000,
+                "files": 1,
+                "dirs": 0,
+                "mtime": "2026-09-22T10:00:00Z",
+                "children_omitted": 1
+              },
+              {
+                "path": "/Users/u/code",
+                "kind": "dir",
+                "bytes": 480120000,
+                "apparent": 480120000,
+                "files": 2,
+                "dirs": 2,
+                "mtime": "2026-09-22T10:00:00Z",
+                "children_omitted": 1
               }
             ],
             "children_omitted": 1
+          }
+        ]
+      },
+      {
+        "path": "/weird-vendor-drop",
+        "kind": "dir",
+        "bytes": 260000000,
+        "apparent": 260000000,
+        "files": 1,
+        "dirs": 0,
+        "mtime": "2026-09-22T10:00:00Z",
+        "children": [
+          {
+            "path": "/weird-vendor-drop/blob",
+            "kind": "file",
+            "bytes": 260000000,
+            "apparent": 260000000,
+            "files": 1,
+            "dirs": 0,
+            "mtime": "2026-09-22T10:00:00Z"
           }
         ]
       }

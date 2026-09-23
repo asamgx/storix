@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/ledger"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/units"
@@ -48,6 +49,11 @@ type Config struct {
 	// phase 1a it changes no path: those directories are attempted either
 	// way and land in the unreadable list when they are denied.
 	System bool
+	// CodeRoots are the directories holding the user's projects, as display
+	// paths. Nil selects classify.DefaultCodeRoots; whichever list is used,
+	// only the roots that exist in the walked tree are passed to the
+	// classifier, so a machine without ~/Projects gets no rules for it.
+	CodeRoots []string
 	// Units selects decimal or binary formatting for the text the ledger
 	// builds into its verdict.
 	Units units.Format
@@ -70,12 +76,13 @@ type Config struct {
 // inside walk.Walk and is not separable from it without instrumenting the
 // walker for a number nobody acts on.
 type Timing struct {
-	Facts   time.Duration `json:"facts_ns"`
-	Walk    time.Duration `json:"walk_ns"`
-	Finish  time.Duration `json:"finish_ns"`
-	Ledger  time.Duration `json:"ledger_ns"`
-	Persist time.Duration `json:"persist_ns"`
-	Total   time.Duration `json:"total_ns"`
+	Facts    time.Duration `json:"facts_ns"`
+	Walk     time.Duration `json:"walk_ns"`
+	Finish   time.Duration `json:"finish_ns"`
+	Classify time.Duration `json:"classify_ns"`
+	Ledger   time.Duration `json:"ledger_ns"`
+	Persist  time.Duration `json:"persist_ns"`
+	Total    time.Duration `json:"total_ns"`
 }
 
 // Result is a finished scan.
@@ -84,6 +91,12 @@ type Result struct {
 	Facts  *volume.Facts
 	Tree   *walk.Tree
 	Ledger *ledger.Ledger
+
+	// Class is the classification of the tree: which bucket every node's
+	// bytes belong to and why. It is recomputed on every scan and on every
+	// cache load rather than stored, because the catalog lives in the
+	// binary and the answer must follow the binary, not the cache file.
+	Class *classify.Classification
 
 	// CachePath is where Persist stored the result, empty when it did not
 	// run. FromCache and CacheAge are set by the loader, not by Run.
@@ -155,7 +168,11 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 	res.Timing.Finish = time.Since(t0)
 
 	t0 = time.Now()
-	res.Ledger = ledger.Build(facts, tree, cfg.Units)
+	res.Class = Classify(tree, cfg)
+	res.Timing.Classify = time.Since(t0)
+
+	t0 = time.Now()
+	res.Ledger = ledger.BuildClassified(facts, tree, cfg.Units, res.Class)
 	res.Timing.Ledger = time.Since(t0)
 
 	if cfg.Persist != nil && !cfg.NoCache {

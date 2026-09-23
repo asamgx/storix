@@ -159,6 +159,7 @@ func (o *scanOptions) resolve() (report.Options, scan.Config, error) {
 		Full:    o.full,
 		Color:   useColor(),
 		Top:     sentinel(o.top),
+		Debug:   o.debug,
 		Version: BuildInfo(),
 	}
 	cfg = scan.Config{
@@ -347,9 +348,9 @@ func printDebug(out io.Writer, res *scan.Result) {
 	runtime.ReadMemStats(&ms)
 	u := units.Decimal
 	_, _ = fmt.Fprintln(out, "\nDEBUG")
-	_, _ = fmt.Fprintf(out, "  timing   facts %s, walk %s, finish %s, ledger %s, persist %s, total %s\n",
+	_, _ = fmt.Fprintf(out, "  timing   facts %s, walk %s, finish %s, classify %s, ledger %s, persist %s, total %s\n",
 		dur(res.Timing.Facts), dur(res.Timing.Walk), dur(res.Timing.Finish),
-		dur(res.Timing.Ledger), dur(res.Timing.Persist), dur(res.Timing.Total))
+		dur(res.Timing.Classify), dur(res.Timing.Ledger), dur(res.Timing.Persist), dur(res.Timing.Total))
 	_, _ = fmt.Fprintf(out, "  memory   %s heap, %s total allocated, %s from the OS, %d GCs\n",
 		u.Bytes(int64(ms.HeapAlloc)), u.Bytes(int64(ms.TotalAlloc)), u.Bytes(int64(ms.Sys)), ms.NumGC)
 	_, _ = fmt.Fprintf(out, "  workers  %d\n", res.Tree.Opts.Parallelism)
