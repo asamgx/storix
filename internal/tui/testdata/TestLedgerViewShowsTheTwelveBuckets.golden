@@ -1,0 +1,40 @@
+LEDGER  every byte of used space, in one of twelve buckets                                                  14.8 MB used
+  bucket                                       size      %               free note
+   1 macOS                 ░░░░░░░░░░░░░░   unknown   0.0%                    no APFS container owns the scanned volume…
+   2 Applications          ███░░░░░░░░░░░    2.8 MB  19.0%
+   3 App data              ███░░░░░░░░░░░    3.4 MB  23.1% ███░░░░░    1.2 MB
+   4 Developer             ████░░░░░░░░░░    4.0 MB  27.1% ████████    4.0 MB
+   5 Containers & VMs      ░░░░░░░░░░░░░░       0 B   0.0%
+   6 Personal files        ███░░░░░░░░░░░    3.5 MB  23.7%
+   7 Backups               ░░░░░░░░░░░░░░       0 B   0.0%
+   8 System caches & logs  █░░░░░░░░░░░░░    152 KB   1.0% ████████    152 KB
+   9 Trash                 █░░░░░░░░░░░░░    901 KB   6.1% ████████    901 KB
+  10 Purgeable             ░░░░░░░░░░░░░░   unknown   0.0%
+  11 Other                 ░░░░░░░░░░░░░░       0 B   0.0%
+  12 Unreadable / unaccou… ░░░░░░░░░░░░░░       0 B   0.0%                    nothing unaccounted
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑/k up • ↓/j down • enter/l open • bksp/h parent • s sort by size • / filter • w why • tab switch view • ? help • q quit

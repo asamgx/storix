@@ -1,0 +1,40 @@
+CONTAINERS & VMs  (what the host gave, what the runtime says it uses)                                                   
+  OrbStack                                                                                                              
+  host   18 MB                  data image                                                                              
+  guest  12 MB  5 MB free (0%)  Images      9, 0 in use                                                                 
+  machines  docker                                                                                                      
+  note      the image is sparse; the daemon counts what is inside it                                                    
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+
+
+↑/k up • ↓/j down • enter/l open • bksp/h parent • s sort by size • / filter • w why • tab switch view • ? help • q quit

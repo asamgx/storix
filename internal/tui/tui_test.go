@@ -167,10 +167,10 @@ func screen(m *Model) []byte {
 	return []byte(strings.ReplaceAll(m.View().Content, "\r\n", "\n"))
 }
 
-// TestProgressViewCountsAndSwitchesToBrowse drives the progress view from a
-// fake event channel: the counters have to appear while the walk runs, and
-// the finished scan has to bring up the browser by itself.
-func TestProgressViewCountsAndSwitchesToBrowse(t *testing.T) {
+// TestProgressViewCountsAndSwitchesToTheLedger drives the progress view from
+// a fake event channel: the counters have to appear while the walk runs, and
+// the finished scan has to bring up the ledger by itself.
+func TestProgressViewCountsAndSwitchesToTheLedger(t *testing.T) {
 	m := newTestModel(t, nil)
 	events := make(chan walk.Event, 1)
 	result := make(chan scanOutcome, 1)
@@ -189,11 +189,11 @@ func TestProgressViewCountsAndSwitchesToBrowse(t *testing.T) {
 
 	result <- scanOutcome{res: fixtureResult(t)}
 	close(events)
-	waitFor(t, tm, "/fixture")
+	waitFor(t, tm, "LEDGER")
 
 	final := finish(t, tm)
-	if final.view != viewBrowse {
-		t.Errorf("the interface stayed on view %d, want the browser", final.view)
+	if final.view != viewLedger {
+		t.Errorf("the interface stayed on view %d, want the ledger", final.view)
 	}
 	if final.progress.ticks < 5 {
 		t.Errorf("the progress view took %d updates, want every one of the 5 events", final.progress.ticks)
@@ -226,6 +226,7 @@ func TestProgressViewRendersItsCounters(t *testing.T) {
 func TestBrowseNavigatesSortsAndFilters(t *testing.T) {
 	res := fixtureResult(t)
 	m := newTestModel(t, res)
+	m.view = viewBrowse
 	tm := start(t, m)
 	waitFor(t, tm, "Movies/")
 
@@ -320,13 +321,13 @@ func TestUnaccountedViewShowsTheLedgerSections(t *testing.T) {
 	res := fixtureResult(t)
 	m := newTestModel(t, res)
 	tm := start(t, m)
-	waitFor(t, tm, "/fixture")
+	waitFor(t, tm, "LEDGER")
 
-	press(tm, "2")
+	press(tm, "6")
 	waitFor(t, tm, "VOLUME")
-	press(tm, "tab") // back to the browser
+	press(tm, "2") // back to the browser
 	waitFor(t, tm, "Applications/")
-	press(tm, "tab") // and out again
+	press(tm, "u") // and out again by the alias
 	waitFor(t, tm, "VOLUME")
 
 	final := finish(t, tm)
@@ -339,6 +340,7 @@ func TestUnaccountedViewShowsTheLedgerSections(t *testing.T) {
 // TestHelpOverlayOpensAndCloses checks the overlay and the key that closes it.
 func TestHelpOverlayOpensAndCloses(t *testing.T) {
 	m := newTestModel(t, fixtureResult(t))
+	m.view = viewBrowse
 	tm := start(t, m)
 	waitFor(t, tm, "/fixture")
 	press(tm, "?")
@@ -382,8 +384,8 @@ func TestQuitDuringAScanCancelsItAndShowsThePartialTree(t *testing.T) {
 	waitFor(t, tm, "INCOMPLETE")
 
 	final := finish(t, tm)
-	if final.view != viewBrowse {
-		t.Errorf("an interrupted scan ended on view %d, want the browser", final.view)
+	if final.view != viewLedger {
+		t.Errorf("an interrupted scan ended on view %d, want the ledger", final.view)
 	}
 }
 
