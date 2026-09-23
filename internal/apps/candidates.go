@@ -339,10 +339,19 @@ func lookupDisplay(t *walk.Tree, display string) (*walk.Node, bool) {
 	return t.Lookup(mac.ScanPath(display))
 }
 
-// pathsFor reads the scan root and the user's home out of the context, with
-// the options' Root override for the corpus tests.
+// pathsFor reads where the scan is rooted and whose home it is.
+//
+// The root is derived from the home rather than configured, for the same
+// reason the probe derives its own: the home is the only thing that says
+// where a scan sits. A home of "/Users/andrewsam" is an ordinary machine and
+// the root is empty, so "/Applications" means what it says; a home inside a
+// fixture makes "/Applications" mean the fixture's. Options.Root overrides
+// the derivation for a test that needs to be explicit about it.
 func pathsFor(cx classify.Context, opts Options) Paths {
 	p := Paths{Root: opts.Root, Home: cx.Home}
+	if p.Root == "" {
+		p.Root = volumeRootOf(cx.Home)
+	}
 	if p.Home != "" {
 		p.User = path.Base(p.Home)
 	}

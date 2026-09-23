@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/asamgx/storix/internal/apps"
 	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/detect"
 	"github.com/asamgx/storix/internal/ledger"
@@ -132,6 +133,13 @@ type Result struct {
 	// into the ledger, whose arithmetic stays in internal/ledger.
 	Summaries map[string]detect.Summary
 
+	// Apps is the application inventory: what is installed, what each
+	// application costs across the buckets, and whose data is left behind.
+	// It is nil for a cache written before the inventory existed; read it
+	// through Apps rather than directly, which distinguishes that case
+	// from a machine with no applications.
+	Apps *apps.Report
+
 	// CachePath is where Persist stored the result, empty when it did not
 	// run. FromCache and CacheAge are set by the loader, not by Run.
 	CachePath string
@@ -223,6 +231,12 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 
 	res.Class = classifyWith(tree, cfg, claims)
 	res.Timing.Classify = time.Since(t0)
+
+	// The application report is built from the claims that won their node,
+	// so it runs after the engine and before the ledger. It never fails:
+	// a scan that could not attribute its applications is still a correct
+	// scan of the disk.
+	res.Apps = appsReport(tree, outcomes, res.Class, classifyContext(tree, cfg))
 
 	t0 = time.Now()
 	res.Ledger = ledger.BuildClassified(facts, tree, cfg.Units, res.Class)

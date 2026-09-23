@@ -124,6 +124,16 @@ func (a *Analysis) dataClaims() []classify.Claim {
 			continue
 		}
 		m := a.Matches[i]
+		if m.Owner.Kind == KindUnknown {
+			// A claim that only says "I could not attribute this" adds
+			// nothing over the catalog rule for the same path, and it
+			// would outrank it: an apps claim beats a rule by source.
+			// The rule at least knows that a group container under an
+			// unresolved team id is a container. The unknown owner is
+			// still reported and still logged for tuning; it simply
+			// does not take the bytes off a rule that knows more.
+			continue
+		}
 		v := a.Verdicts[m.Owner.Key]
 
 		category := c.Loc.Category

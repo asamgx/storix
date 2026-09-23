@@ -26,9 +26,18 @@ import (
 
 	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/detect"
+	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/probe"
 	"github.com/asamgx/storix/internal/walk"
 )
+
+// init registers the detector.
+//
+// The order puts apps after the container and developer-tool detectors, so it
+// appears last in the detectors table and probes last. It does not decide
+// precedence: an apps claim carries classify.SourceApps, which loses to any
+// detector claim and beats a catalog rule whatever the registry order is.
+func init() { detect.Register(300, New()) }
 
 // Detector is the apps detector. It satisfies detect.Detector.
 type Detector struct {
@@ -81,7 +90,7 @@ const maxSpotlightBundles = 200
 func (d *Detector) Probe(ctx context.Context, env detect.Env) (detect.Facts, error) {
 	f := &Facts{TeamIDs: map[string]string{}}
 	p := &prober{d: d, env: env, f: f, paths: Paths{
-		Root: d.Opts.Root,
+		Root: volumeRootOf(env.Home),
 		Home: env.Home,
 		User: path.Base(env.Home),
 	}}
@@ -94,6 +103,15 @@ func (d *Detector) Probe(ctx context.Context, env detect.Env) (detect.Facts, err
 	p.groupContainers()
 	p.teamIDs(ctx)
 
+	// A probe that learned nothing at all is reporting a machine with no
+	// applications to inventory, which is an answer rather than a failure:
+	// a scan rooted at a directory that holds no /Applications, no
+	// Caskroom and no receipts has nothing for this detector to say.
+	// Calling that degraded would put a permanent warning on every partial
+	// scan.
+	if f.empty() {
+		return f, detect.Missingf("no applications, casks, receipts or launch items under %s", env.Home)
+	}
 	if len(f.Degraded) > 0 {
 		reasons := make([]string, 0, len(f.Degraded))
 		for _, deg := range f.Degraded {
@@ -147,12 +165,22 @@ type prober struct {
 	d   *Detector
 	env detect.Env
 	f   *Facts
-	// paths anchors the absolute directories the probe looks in. A real
-	// scan leaves Root empty and they mean what they say; the corpus test
-	// sets it, and the probe then stays inside the fixture instead of
-	// reading the machine's own /Applications.
+	// paths anchors the absolute directories the probe reads, in the
+	// filesystem's own coordinates.
+	//
+	// A scan of the data volume reads "/System/Volumes/Data/Applications",
+	// not "/Applications", and a scan of a fixture reads the fixture's.
+	// Both are derived from the home the scan was given, which is the only
+	// thing that says where the scan is rooted. Reading the absolute paths
+	// as written instead meant a scan of a temporary directory quietly
+	// inventoried the host's own applications and casks.
 	paths Paths
 }
+
+// display converts a path the probe read into the form the walked tree uses,
+// so that Facts are in one coordinate system whoever reads them: the tree,
+// the analysis, the cache and the report.
+func (p *prober) display(full string) string { return mac.DisplayPath(full) }
 
 // degrade records a probe that could not run.
 func (p *prober) degrade(name, reason string) {
@@ -186,7 +214,7 @@ func (p *prober) casks(ctx context.Context) {
 		p.degrade("brew", "no Caskroom directory found")
 		return
 	}
-	p.f.CaskroomDir = dir
+	p.f.CaskroomDir = p.display(dir)
 	tokens, err := p.readDir(dir)
 	if err != nil {
 		p.degrade("brew", "listing "+dir+": "+err.Error())
@@ -201,12 +229,12 @@ func (p *prober) casks(ctx context.Context) {
 		data, readErr := p.env.ReadFile(receipt)
 		if readErr != nil {
 			p.f.Casks = append(p.f.Casks, Cask{
-				Token: token, Dir: path.Join(dir, token), ReceiptErr: readErr.Error(),
+				Token: token, Dir: p.display(path.Join(dir, token)), ReceiptErr: readErr.Error(),
 			})
 			continue
 		}
 		c, decErr := DecodeReceipt(token, data)
-		c.Dir = path.Join(dir, token)
+		c.Dir = p.display(path.Join(dir, token))
 		if decErr != nil {
 			p.degrade("brew", "receipt for "+token+": "+decErr.Error())
 		}
@@ -258,7 +286,7 @@ func (p *prober) receipts(ctx context.Context) {
 		if rec.PkgID == "" {
 			continue
 		}
-		rec.LocationExists = rec.InstallPath() != "" && p.env.Exists(rec.InstallPath())
+		rec.LocationExists = rec.InstallPath() != "" && p.env.Exists(p.paths.Resolve(rec.InstallPath()))
 		// The file listing is evidence only for a receipt whose install
 		// location is gone, and it is the one command here that can be
 		// slow, so it is run for those receipts alone.
@@ -284,7 +312,7 @@ func (p *prober) receiptFiles(ctx context.Context, rec *Receipt) {
 	files := ParsePkgFiles(res.Stdout)
 	rec.FilesTotal, rec.FilesChecked = len(files), true
 	for _, rel := range files {
-		if p.env.Exists(path.Join(vol, rel)) {
+		if p.env.Exists(p.paths.Resolve(path.Join(vol, rel))) {
 			rec.FilesPresent++
 		}
 	}
@@ -305,7 +333,7 @@ func (p *prober) registry(ctx context.Context) {
 		p.degrade("lsregister", "dump yielded only "+itoa(len(entries))+" entries; format may have changed")
 	}
 	for i := range entries {
-		entries[i].Exists = p.env.Exists(entries[i].Path)
+		entries[i].Exists = p.env.Exists(p.paths.Resolve(entries[i].Path))
 	}
 	p.f.Registry = entries
 }
@@ -336,12 +364,12 @@ func (p *prober) launchItems() {
 			data, readErr := p.env.ReadFile(full)
 			if readErr != nil {
 				p.f.LaunchItems = append(p.f.LaunchItems, LaunchItem{
-					Path: full, Label: strings.TrimSuffix(name, ".plist"), System: d.system,
+					Path: p.display(full), Label: strings.TrimSuffix(name, ".plist"), System: d.system,
 				})
 				continue
 			}
-			item, _ := ParseLaunchPlist(full, data, d.system)
-			item.ProgramExists = item.Program != "" && p.env.Exists(item.Program)
+			item, _ := ParseLaunchPlist(p.display(full), data, d.system)
+			item.ProgramExists = item.Program != "" && p.env.Exists(p.paths.Resolve(item.Program))
 			p.f.LaunchItems = append(p.f.LaunchItems, item)
 		}
 	}
@@ -376,7 +404,7 @@ func (p *prober) bundleDirs() []bundleDir {
 		dirs = append(dirs, bundleDir{filepath.Join(p.env.Home, "Applications"), 1})
 	}
 	if p.f.CaskroomDir != "" {
-		dirs = append(dirs, bundleDir{p.f.CaskroomDir, 3})
+		dirs = append(dirs, bundleDir{p.paths.Resolve(p.f.CaskroomDir), 3})
 	}
 	return dirs
 }
@@ -429,10 +457,11 @@ func (p *prober) readBundlesIn(dir string, depth int, seen map[string]bool) {
 // receipt beside it. A bundle whose plist will not parse still yields an
 // entry: a name-only application is installed just as much as a named one.
 func (p *prober) readBundle(bundlePath string) BundleInfo {
-	info := BundleInfo{Path: bundlePath, DisplayName: BundleBaseName(bundlePath)}
+	display := p.display(bundlePath)
+	info := BundleInfo{Path: display, DisplayName: BundleBaseName(display)}
 	data, err := p.env.ReadFile(filepath.Join(bundlePath, "Contents", "Info.plist"))
 	if err == nil {
-		if parsed, parseErr := ParseInfoPlist(bundlePath, data); parseErr == nil {
+		if parsed, parseErr := ParseInfoPlist(display, data); parseErr == nil {
 			info = parsed
 		}
 	}
@@ -505,6 +534,25 @@ func (p *prober) teamIDs(ctx context.Context) {
 	if len(p.f.TeamIDs) == 0 {
 		p.degrade("codesign", "no signatures could be read")
 	}
+}
+
+// volumeRootOf derives where a scan is rooted from the home it was given.
+//
+// A home of "/System/Volumes/Data/Users/andrewsam" says the scan is rooted at
+// the data volume, so "/Applications" means
+// "/System/Volumes/Data/Applications". A home of "/tmp/fixture/Users/andrew"
+// says the same about a fixture. A home directly under "/Users" leaves the
+// root empty, which is an unrooted machine and the ordinary case.
+func volumeRootOf(home string) string {
+	dir := path.Dir(path.Clean(home))
+	if path.Base(dir) != "Users" {
+		return ""
+	}
+	root := path.Dir(dir)
+	if root == "/" || root == "." {
+		return ""
+	}
+	return root
 }
 
 // isBundleDir reports whether a directory name is a bundle of any kind, which

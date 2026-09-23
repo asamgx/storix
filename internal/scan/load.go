@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/asamgx/storix/internal/apps"
 	"github.com/asamgx/storix/internal/cache"
 	"github.com/asamgx/storix/internal/ledger"
 	"github.com/asamgx/storix/internal/walk"
@@ -119,6 +120,15 @@ func resultFromCache(cfg Config, meta cache.Meta, tree *walk.Tree, path string) 
 		}
 		tree.SkippedMounts = skipped
 	}
+
+	// A cache written before the application inventory existed simply has
+	// no such section, and the field stays nil. Callers ask Apps() rather
+	// than reading the field, and it tells them to rescan.
+	var appsReport *apps.Report
+	if err := section(meta, SectionApps, &appsReport); err != nil {
+		return nil, err
+	}
+	res.Apps = appsReport
 	return res, nil
 }
 

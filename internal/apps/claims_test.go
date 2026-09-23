@@ -134,8 +134,6 @@ func TestClaimsReclaimFollowsTheVerdict(t *testing.T) {
 			"a cask-only owner's data is orphaned"},
 		{c.Home + "/Library/Application Support/dev.warp.Warp-Stable", classify.Orphaned,
 			"an orphan-likely owner's data is orphaned"},
-		{c.Home + "/Library/Caches/SomethingNobodyKnows", classify.Unknown,
-			"an unknown owner's data is not claimed to be anything"},
 		{c.Home + "/Library/Application Support/mochi", classify.UserData,
 			"the user's own build is their data"},
 	}
@@ -153,6 +151,25 @@ func TestClaimsReclaimFollowsTheVerdict(t *testing.T) {
 				t.Errorf("Reclaim = %v, want %v because %s", cl.Reclaim, tc.reclaim, tc.why)
 			}
 		})
+	}
+}
+
+// TestClaimsLeaveUnknownOwnersToTheCatalog is the precedence rule stated from
+// the claim side. An apps claim outranks a catalog rule, so a claim that knows
+// nothing would replace a rule that knows something.
+func TestClaimsLeaveUnknownOwnersToTheCatalog(t *testing.T) {
+	t.Parallel()
+	c := buildCorpus(t)
+	_, a := c.analyze(t)
+	claims := claimsByPath(t, a)
+
+	if cl, found := claims[c.Home+"/Library/Caches/SomethingNobodyKnows"]; found {
+		t.Errorf("an unattributed directory was claimed as %q", cl.Owner)
+	}
+	// It is still in the report, which is where a reader and the tuning
+	// log look for it.
+	if _, ok := a.Verdicts["unknown:SomethingNobodyKnows"]; !ok {
+		t.Error("the unknown owner vanished from the analysis")
 	}
 }
 

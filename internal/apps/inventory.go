@@ -98,6 +98,12 @@ type Facts struct {
 // Kind identifies the facts in the cache section and the detector registry.
 func (Facts) Kind() string { return "apps" }
 
+// empty reports whether the probe learned nothing about the machine.
+func (f *Facts) empty() bool {
+	return len(f.Casks) == 0 && len(f.Receipts) == 0 && len(f.Registry) == 0 &&
+		len(f.LaunchItems) == 0 && len(f.AppDirBundles) == 0 && len(f.Spotlight) == 0
+}
+
 // Paths says where the scan is rooted.
 //
 // Root exists so that nothing in this package hard-codes an absolute system
@@ -116,13 +122,21 @@ type Paths struct {
 	User string
 }
 
-// Resolve turns a location's directory into an absolute display path,
-// expanding "~" to the scan user's home and anchoring everything else at Root.
+// Resolve turns a location's directory into an absolute path under Root,
+// expanding "~" to the scan user's home.
+//
+// It is idempotent: a path already under Root is returned unchanged. Callers
+// mix paths from several places — the location table, an installer receipt,
+// a Spotlight result — and some of them are already anchored, so a Resolve
+// that anchored unconditionally produced "<root>/<root>/Applications".
 func (p Paths) Resolve(dir string) string {
 	if dir == "~" || strings.HasPrefix(dir, "~/") {
 		return expandTilde(dir, p.Home)
 	}
-	if p.Root == "" || p.Root == "/" {
+	if p.Root == "" || p.Root == "/" || dir == p.Root {
+		return dir
+	}
+	if strings.HasPrefix(dir, p.Root+"/") {
 		return dir
 	}
 	return path.Join(p.Root, dir)

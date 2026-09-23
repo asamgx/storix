@@ -20,6 +20,12 @@ const (
 	SectionLedger  = "ledger"
 	SectionErrors  = "errors"
 	SectionSkipped = "skipped"
+	// SectionApps is the application inventory's report. It is stored
+	// rather than recomputed because rebuilding it needs the detector's
+	// probe results, and a cached scan has not probed anything: the point
+	// of the cache is that `storix apps --from-cache` answers without
+	// running codesign, pkgutil and lsregister again.
+	SectionApps = "apps"
 )
 
 // Cacher saves finished scans to a store and is the Persist hook Run calls.
@@ -110,7 +116,7 @@ func (c Cacher) meta(res *Result) (cache.Meta, error) {
 // a reader of the file should not have to know which of the two places is
 // authoritative. They are a few hundred entries even on a full volume.
 func sections(res *Result) (map[string]json.RawMessage, error) {
-	out := make(map[string]json.RawMessage, 4)
+	out := make(map[string]json.RawMessage, 5)
 	add := func(name string, v any) error {
 		b, err := json.Marshal(v)
 		if err != nil {
@@ -130,6 +136,11 @@ func sections(res *Result) (map[string]json.RawMessage, error) {
 	}
 	if err := add(SectionSkipped, orEmptyMounts(res.Tree.SkippedMounts)); err != nil {
 		return nil, err
+	}
+	if res.Apps != nil {
+		if err := add(SectionApps, res.Apps); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
