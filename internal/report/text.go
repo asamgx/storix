@@ -98,6 +98,7 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 	t.header()
 	t.ledgerSection()
 	t.buckets()
+	t.developer()
 	t.containers()
 	t.detectors()
 	t.volume()

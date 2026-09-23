@@ -1,0 +1,66 @@
+[
+  {
+    "cmd": {
+      "Name": "npm",
+      "Args": [
+        "config",
+        "get",
+        "cache"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "undefined\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "pnpm",
+      "Args": [
+        "store",
+        "path"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "ERR_PNPM_NO_STORE  no store found\n",
+      "exit_code": 1
+    }
+  },
+  {
+    "cmd": {
+      "Name": "yarn",
+      "Args": [
+        "--version"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "yarn",
+      "Args": [
+        "cache",
+        "dir"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": 1
+    }
+  }
+]

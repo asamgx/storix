@@ -1,0 +1,95 @@
+[
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--prefix"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "Error: unknown command\n",
+      "exit_code": 1
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--cellar"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": 1
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--caskroom"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": 1
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "--cache"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": 1
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "list",
+        "--formula",
+        "--versions"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "\n\n   \n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "brew",
+      "Args": [
+        "cleanup",
+        "-n"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "==> This operation would free approximately of disk space.\n",
+      "exit_code": 0
+    }
+  }
+]

@@ -215,6 +215,15 @@ type Summary struct {
 	Tools    []Tool    `json:"tools,omitempty"`
 	Projects []Project `json:"projects,omitempty"`
 	Runtimes []Runtime `json:"runtimes,omitempty"`
+	// Reclaimable is what the tool itself says it could free, when the
+	// tool will say. It is not derived from the tree and is never summed
+	// into the ledger: `brew cleanup -n` knows about superseded kegs and
+	// stale downloads that no path pattern can distinguish, and that
+	// figure is Homebrew's answer rather than storix's arithmetic.
+	Reclaimable int64 `json:"reclaimable,omitempty"`
+	// ReclaimNote says which command produced Reclaimable, so a reader
+	// knows whose claim the number is.
+	ReclaimNote string `json:"reclaim_note,omitempty"`
 }
 
 // Empty reports whether the summary has nothing to render.

@@ -76,6 +76,17 @@ BUCKETS  (what is inside each one)
             filesystem metadata, content of 4 unreadable directories, and unaccounted (4 unreadable
             paths)
 
+DEVELOPER  (what your toolchains keep, and what they would give back)
+  homebrew
+  reclaim   148.7 MB — `brew cleanup -n` would free 148.7 MB (148.6 MB across 5 entries)
+
+  go
+  4.2 GB  regen    build cache  /Users/u/Library/Caches/go-build
+  reclaim   4.2 GB across the directories listed above
+
+  projects
+  480 MB  build artifacts  git  /Users/u/code/storix  (last touched 2026-06-14)
+
 CONTAINERS & VMs  (what the host gave, what the runtime says it uses)
   OrbStack
   host    18.7 GB                       data.img.raw   245 GB apparent, 18.7 GB allocated
@@ -95,6 +106,10 @@ DETECTORS
   podman      missing *         `podman` is not on the path
   vms         missing           no UTM, Parallels, VMware or VirtualBox directory exists
   kubernetes  ok           2ms
+  homebrew    ok         900ms
+  node        ok         620ms
+  go          ok          11ms
+  projects    ok         340ms
   * written from the tool's documentation; never yet run against a machine that had it
 
 VOLUME  /System/Volumes/Data

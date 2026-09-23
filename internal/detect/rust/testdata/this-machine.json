@@ -1,0 +1,19 @@
+[
+  {
+    "cmd": {
+      "Name": "rustup",
+      "Args": [
+        "toolchain",
+        "list"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "stable-aarch64-apple-darwin (active, default)\n",
+      "exit_code": 0,
+      "duration_ns": 110958583
+    }
+  }
+]

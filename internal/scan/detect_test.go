@@ -16,11 +16,14 @@ import (
 // cannot assert about itself: the detector packages register themselves from
 // their init functions, and the list of which ones a scan knows about lives
 // in this package's blank imports.
+// The container detectors register first, so they are asserted as the head of
+// the list rather than as the whole of it: later milestones add detectors
+// behind them and must not have to come back and edit this.
 func TestDefaultRegistryHoldsTheContainerDetectors(t *testing.T) {
 	names := detect.Default().Names()
 	want := []string{"orbstack", "docker", "colima", "podman", "vms", "kubernetes"}
-	if len(names) != len(want) {
-		t.Fatalf("default registry = %v, want %v", names, want)
+	if len(names) < len(want) {
+		t.Fatalf("default registry = %v, want it to start with %v", names, want)
 	}
 	for i, n := range want {
 		if names[i] != n {
@@ -29,10 +32,25 @@ func TestDefaultRegistryHoldsTheContainerDetectors(t *testing.T) {
 	}
 }
 
+// perUserDetectors are the detectors whose whole idea of the machine is the
+// fixture: they look under the home the config names and at the commands the
+// recording answers, and nothing else.
+//
+// They are listed because the others are not like that. The xcode, jvm and
+// ruby detectors also look at directories that belong to the machine rather
+// than to a user — /Library/Developer, /Library/Java, /Library/Ruby/Gems —
+// and those exist on any real macOS install whatever a fixture says. A
+// detector reporting them is right, so the blanket "everything is Missing"
+// assertion holds only for the ones below.
+var perUserDetectors = map[string]bool{
+	"orbstack": true, "docker": true, "colima": true,
+	"podman": true, "vms": true, "kubernetes": true,
+}
+
 // TestScanWithoutAnyTools is the degradation gate. A machine with none of the
 // tools installed — which is what an empty fixture set means — must produce a
-// complete scan whose detectors are all Missing, with the static catalog
-// rules doing the bucketing.
+// complete scan with the static catalog rules doing the bucketing, every
+// detector statused, and none of them in a state that means a bug.
 func TestScanWithoutAnyTools(t *testing.T) {
 	f := testutil.New(t)
 	f.File("Users/andrew/Documents/note.txt", 100)
@@ -52,15 +70,18 @@ func TestScanWithoutAnyTools(t *testing.T) {
 	if res.Tree == nil || res.Ledger == nil {
 		t.Fatal("the scan did not complete")
 	}
-	if len(res.Detectors) != 6 {
-		t.Fatalf("detectors = %d, want all six statused", len(res.Detectors))
+	if want := len(detect.Default().Names()); len(res.Detectors) != want {
+		t.Fatalf("detectors = %d, want all %d statused", len(res.Detectors), want)
 	}
 	for _, st := range res.Detectors {
-		if st.State != detect.Missing {
+		if perUserDetectors[st.Name] && st.State != detect.Missing {
 			t.Errorf("%s = %s (%q), want missing on a machine with no tools", st.Name, st.State, st.Reason)
 		}
-		if st.Reason == "" {
-			t.Errorf("%s is missing without saying why", st.Name)
+		if st.State == detect.Panic || st.State == detect.Timeout {
+			t.Errorf("%s = %s (%q); an absent tool is not a failure", st.Name, st.State, st.Reason)
+		}
+		if st.State != detect.Ok && st.Reason == "" {
+			t.Errorf("%s is %s without saying why", st.Name, st.State)
 		}
 	}
 	if len(res.Summaries) != 0 {

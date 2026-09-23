@@ -17,7 +17,10 @@ import (
 // fakeDetectors is the detectors table the golden files describe: the run
 // this machine really produces, with one of each interesting state.
 func fakeDetectors() []detect.Status {
-	return []detect.Status{
+	// The toolchain detectors register after these and are described in
+	// developer_test.go, so that each section's fixture lives beside the
+	// section it feeds.
+	return append([]detect.Status{
 		{
 			Name: "orbstack", State: detect.Ok, Duration: 1_750 * time.Millisecond, Verified: true,
 			Commands: []probe.Record{
@@ -34,7 +37,7 @@ func fakeDetectors() []detect.Status {
 		{Name: "podman", State: detect.Missing, Verified: false, Reason: "`podman` is not on the path"},
 		{Name: "vms", State: detect.Missing, Verified: true, Reason: "no UTM, Parallels, VMware or VirtualBox directory exists"},
 		{Name: "kubernetes", State: detect.Ok, Duration: 2 * time.Millisecond, Verified: true},
-	}
+	}, developerDetectors()...)
 }
 
 // fakeSummaries is the containers view the golden files describe: OrbStack's
@@ -52,7 +55,7 @@ func fakeSummaries(tr *walk.Tree) map[string]detect.Summary {
 	if image != nil {
 		host.Path, host.Node, host.Bytes = image.Display(), image.ID, image.Bytes
 	}
-	return map[string]detect.Summary{
+	out := map[string]detect.Summary{
 		"orbstack": {
 			Tools: []detect.Tool{host},
 			Runtimes: []detect.Runtime{{
@@ -70,6 +73,10 @@ func fakeSummaries(tr *walk.Tree) map[string]detect.Summary {
 			}},
 		},
 	}
+	for name, sum := range developerSummaries(tr) {
+		out[name] = sum
+	}
+	return out
 }
 
 // nodeAt finds a node by display path by scanning the preorder index.

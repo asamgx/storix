@@ -88,6 +88,15 @@ type Target struct {
 	Version string
 	Current bool
 	Note    string
+	// Priority breaks a tie between two detectors that claimed the same
+	// node; higher wins and zero is the default.
+	//
+	// It exists for the detectors that claim a directory by pattern rather
+	// than by knowledge — every subdirectory of ~/.cache, say. A negative
+	// priority there means that any detector which recognised the same
+	// directory by name wins it, so ~/.local/share/nvim belongs to Neovim
+	// rather than to a rule that read the directory's spelling.
+	Priority int8
 	// Evidence are extra why-panel lines, beyond the one naming the
 	// detector and the path.
 	Evidence []string
@@ -115,8 +124,18 @@ func Claims(t *walk.Tree, detector string, targets []Target) ([]classify.Claim, 
 }
 
 // Claim builds one detector claim about one node.
+//
+// The target's Explain is the first evidence line rather than a field of its
+// own: a classify.Claim carries no Explain, because the sentence a rule
+// writes in advance and the sentences a detector gathers from the machine are
+// the same kind of thing to the reader of a why panel, and keeping them in
+// one ordered list is what lets the panel print them without knowing which is
+// which.
 func Claim(n *walk.Node, detector string, tg Target) classify.Claim {
-	ev := make([]string, 0, len(tg.Evidence)+1)
+	ev := make([]string, 0, len(tg.Evidence)+2)
+	if tg.Explain != "" {
+		ev = append(ev, tg.Explain)
+	}
 	ev = append(ev, "detector "+detector+" claimed "+n.Display())
 	ev = append(ev, tg.Evidence...)
 	return classify.Claim{
@@ -129,6 +148,7 @@ func Claim(n *walk.Node, detector string, tg Target) classify.Claim {
 		Source:    classify.Source{Kind: classify.SourceDetector, ID: detector, Detector: detector},
 		Evidence:  ev,
 		Depth:     depthOf(tg.Path),
+		Priority:  tg.Priority,
 	}
 }
 
