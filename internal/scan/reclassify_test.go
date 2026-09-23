@@ -371,9 +371,14 @@ func TestTheRecomputedAppsReportEqualsTheStoredOne(t *testing.T) {
 	}
 }
 
-// realCacheEnv opts a test in to reading the cache of the machine it runs on,
-// and says which storix wrote it.
-const realCacheEnv = "STORIX_TEST_REAL_CACHE"
+// realCacheEnv opts a test in to reading the cache of the machine it runs on.
+// Its value is the version that wrote the cache, not a flag: the gate is
+// meta.Storix against it, and no test in this package can work that version
+// out for itself. internal/cli holds it, set by an ldflag, and internal/cli
+// imports this package; a test binary is not stamped with the VCS revision
+// that BuildInfo appends either, so reproducing the string here would produce
+// a different one and skip every time.
+const realCacheEnv = "STORIX_REAL_CACHE_TEST"
 
 // TestTheRecomputedAppsReportEqualsThisMachinesCache is the same promise
 // against a real inventory of real applications, which a fixture cannot be.
@@ -382,7 +387,7 @@ const realCacheEnv = "STORIX_TEST_REAL_CACHE"
 // by the build under test, and nothing in this package can ask what that
 // build calls itself. So the version is supplied along with the opt-in:
 //
-//	STORIX_TEST_REAL_CACHE="$(storix version | cut -d' ' -f2-)" \
+//	STORIX_REAL_CACHE_TEST="$(storix version | cut -d' ' -f2-)" \
 //	  go test ./internal/scan/ -run ThisMachinesCache
 //
 // A cache written by anything else is skipped rather than failed. Comparing
