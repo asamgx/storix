@@ -7,6 +7,7 @@ import (
 
 	"github.com/asamgx/storix/internal/apps"
 	"github.com/asamgx/storix/internal/mac"
+	"github.com/asamgx/storix/internal/report"
 	"github.com/asamgx/storix/internal/scan"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/walk"
@@ -523,15 +524,8 @@ func firstSource(e apps.Entry) string {
 	}
 }
 
-// confidenceText is the word the chip shows. It is the report's wording:
-// "corroborating" is accurate and unreadable, and "possible" says the same
-// thing to the person deciding whether to look.
-func confidenceText(conf string) string {
-	if conf == "corroborating" {
-		return "possible"
-	}
-	return conf
-}
+// confidenceText is the word the chip shows, the report's own wording.
+func confidenceText(conf string) string { return report.OrphanGrade(conf) }
 
 // abs is the magnitude of a cursor step.
 func abs(n int) int {

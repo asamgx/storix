@@ -315,6 +315,7 @@ func doctorPID(pid int) string {
 // Missing.
 var doctorDetectorTools = map[string][]string{
 	"aimodels": {"ollama"},
+	"apps":     {"pkgutil", "codesign"},
 	"colima":   {"colima", "limactl"},
 	"docker":   {"docker"},
 	"go":       {"go"},

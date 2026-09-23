@@ -3,9 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
-	"sort"
+	"strings"
 
-	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/scan"
 )
 
@@ -18,59 +17,33 @@ func printClassifyDebug(out io.Writer, res *scan.Result) {
 	if res == nil || res.Class == nil {
 		return
 	}
-	printConflictKinds(out, res.Class.Conflicts)
+	printConflictKinds(out, res)
 	printUnmatchedDebug(out, res)
 }
 
-// conflictKindOrder is the pair order docs/03 names: same-tier disagreement
-// among rules, then every tier beating a rule, then a detector beating the
-// application inventory or another detector. Under the precedence rule
-// (Detector > Apps > Rule) nothing else should occur; a pair outside this
-// list is printed anyway, after it, rather than folded away, because that
-// would be the interesting bug.
-var conflictKindOrder = [][2]classify.SourceKind{
-	{classify.SourceRule, classify.SourceRule},
-	{classify.SourceDetector, classify.SourceRule},
-	{classify.SourceApps, classify.SourceRule},
-	{classify.SourceDetector, classify.SourceApps},
-	{classify.SourceDetector, classify.SourceDetector},
-}
-
 // printConflictKinds prints how many claims lost to another on the same
-// node, tallied by (winner kind, loser kind).
-func printConflictKinds(out io.Writer, conflicts []classify.Conflict) {
-	if len(conflicts) == 0 {
+// node, tallied by (winner kind, loser kind) through scan.ConflictCounts so
+// --debug, the JSON and the acceptance script share one definition. Under
+// the precedence rule (Detector > Apps > Rule) a rule never outranks a
+// detector or the apps inventory; such a pair is printed and flagged rather
+// than folded away, because that would be the interesting bug.
+func printConflictKinds(out io.Writer, res *scan.Result) {
+	counts := scan.ConflictCounts(res.Class)
+	if len(counts) == 0 {
 		_, _ = fmt.Fprintln(out, "\n  conflicts  none")
 		return
 	}
-	counts := make(map[[2]classify.SourceKind]int, len(conflictKindOrder))
-	for _, c := range conflicts {
-		counts[[2]classify.SourceKind{c.Winner.Kind, c.Loser.Kind}]++
+	total := 0
+	for _, c := range counts {
+		total += c.Count
 	}
-	_, _ = fmt.Fprintf(out, "\n  conflicts  %d total\n", len(conflicts))
-
-	seen := make(map[[2]classify.SourceKind]bool, len(conflictKindOrder))
-	for _, key := range conflictKindOrder {
-		seen[key] = true
-		if n := counts[key]; n > 0 {
-			_, _ = fmt.Fprintf(out, "    %s>%s  %d\n", key[0], key[1], n)
+	_, _ = fmt.Fprintf(out, "\n  conflicts  %d total\n", total)
+	for _, c := range counts {
+		note := ""
+		if strings.HasPrefix(c.Kind, "rule-over-") && c.Kind != "rule-over-rule" {
+			note = "  (unexpected: a rule should never outrank a detector or the apps inventory)"
 		}
-	}
-	var extra [][2]classify.SourceKind
-	for key := range counts {
-		if !seen[key] {
-			extra = append(extra, key)
-		}
-	}
-	sort.Slice(extra, func(i, j int) bool {
-		if extra[i][0] != extra[j][0] {
-			return extra[i][0] < extra[j][0]
-		}
-		return extra[i][1] < extra[j][1]
-	})
-	for _, key := range extra {
-		_, _ = fmt.Fprintf(out, "    %s>%s  %d  (unexpected: a rule should never outrank a detector or the apps inventory)\n",
-			key[0], key[1], counts[key])
+		_, _ = fmt.Fprintf(out, "    %-24s %d%s\n", c.Kind, c.Count, note)
 	}
 }
 

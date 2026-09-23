@@ -177,7 +177,7 @@ func (a *appsReport) orphans() {
 		tbl.add(
 			cell{e.Label, a.st.label}, a.bytes(e.Footprint.Total),
 			cell{lastWrite(e.LastWrite), a.st.note},
-			cell{orphanGrade(e.Confidence), a.confidenceStyle(e.Confidence)},
+			cell{OrphanGrade(e.Confidence), a.confidenceStyle(e.Confidence)},
 		)
 	}
 	tbl.render(a.w)
@@ -348,10 +348,10 @@ func lastWrite(t time.Time) string {
 	return t.Format("2006-01-02")
 }
 
-// orphanGrade is the word the report prints for an orphan's confidence.
+// OrphanGrade is the word the report and the TUI print for an orphan's confidence.
 // "corroborating" is accurate and unreadable; "possible" says the same thing
 // to the person deciding whether to look.
-func orphanGrade(conf string) string {
+func OrphanGrade(conf string) string {
 	if conf == "corroborating" {
 		return "possible"
 	}
