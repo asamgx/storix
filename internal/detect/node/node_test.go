@@ -316,3 +316,36 @@ func TestMalformedOutput(t *testing.T) {
 		t.Error("nothing was claimed; the documented defaults should still have been")
 	}
 }
+
+// TestYarnCacheInsideProjectIsNotClaimed: `yarn config get cacheFolder` run
+// inside a Berry project answers that project's .yarn/cache, which is often
+// committed. A tool-reported path under a code root is source, not a cache,
+// so it is not claimed Regenerable and the static default is used instead.
+func TestYarnCacheInsideProjectIsNotClaimed(t *testing.T) {
+	proj := home + "/code/app/.yarn/cache"
+	f := detecttest.Build(t, map[string]int64{
+		proj + "/pkg-a.zip":               5_000,
+		home + "/code/app/package.json":   100,
+		home + "/code/app/.npm/x":         100,
+		home + "/.npm/_cacache/a":         100,
+		home + "/.yarn/berry/cache/a.zip": 5_000,
+	})
+	facts := &node.Facts{Home: home, YarnVersion: "4.5.3", YarnCache: proj, NpmCache: home + "/code/app/.npm"}
+	claims, _ := node.New().Classify(f.Tree, facts, f.Context)
+	for _, p := range []string{proj, home + "/code/app/.npm"} {
+		if c, ok := detecttest.ClaimAt(claims, p); ok {
+			t.Errorf("%s was claimed %s from a tool's answer inside a code root", p, c.Reclaim)
+		}
+	}
+	c, ok := detecttest.ClaimAt(claims, home+"/.npm")
+	if !ok {
+		t.Fatal("the npm cache did not fall back to its static default")
+	}
+	found := false
+	for _, e := range c.Evidence {
+		found = found || strings.Contains(e, "code root")
+	}
+	if !found {
+		t.Errorf("no evidence note for the rejected path: %v", c.Evidence)
+	}
+}

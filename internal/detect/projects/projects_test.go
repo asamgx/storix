@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,9 +79,16 @@ func build(t *testing.T, files map[string]int64) *fixture {
 	}
 }
 
-// env is an environment whose git answers instantly with a fixed commit time.
+// env is an environment whose git answers instantly with a fixed commit time
+// and tracks nothing.
 func (f *fixture) env(withGit bool) (detect.Env, *probe.Recorder) {
-	rec := probe.NewRecorder(gitStub{})
+	return f.envTracking(withGit, nil)
+}
+
+// envTracking is env with git reporting the given files as tracked, keyed by
+// the project directory's base name.
+func (f *fixture) envTracking(withGit bool, tracked map[string][]string) (detect.Env, *probe.Recorder) {
+	rec := probe.NewRecorder(gitStub{tracked: tracked})
 	env := detect.Env{
 		Runner: rec, Home: f.real, Euid: 501,
 		ReadFile: detect.ReadFile, ReadDir: detect.ReadDir, Stat: detect.Stat,
@@ -94,12 +102,21 @@ func (f *fixture) env(withGit bool) (detect.Env, *probe.Recorder) {
 	return env, rec
 }
 
-// gitStub answers every `git log` with the same timestamp.
-type gitStub struct{}
+// gitStub answers every `git log` with the same timestamp and every `git
+// ls-files` with the files tracked lists for that project.
+type gitStub struct{ tracked map[string][]string }
 
-func (gitStub) Run(_ context.Context, c probe.Cmd) probe.Result {
-	if c.Name != "git" {
+func (g gitStub) Run(_ context.Context, c probe.Cmd) probe.Result {
+	if c.Name != "git" || len(c.Args) < 3 {
 		return probe.Result{Missing: true, ErrText: "not git"}
+	}
+	if c.Args[2] == "ls-files" {
+		var out strings.Builder
+		for _, f := range g.tracked[filepath.Base(c.Args[1])] {
+			out.WriteString(f)
+			out.WriteByte(0)
+		}
+		return probe.Result{Stdout: out.String()}
 	}
 	return probe.Result{Stdout: strconv.FormatInt(lastCommit, 10) + "\n"}
 }
@@ -247,8 +264,10 @@ func TestProbeFindsTheProjects(t *testing.T) {
 			t.Errorf("%s last commit = %d, want %d", p.Rel, p.LastCommit, lastCommit)
 		}
 	}
-	if n := len(rec.Records()); n != len(want) {
-		t.Errorf("%d git calls for %d projects", n, len(want))
+	// Two calls per project: `git log` for the date and `git ls-files`
+	// for which build-directory names git tracks.
+	if n := len(rec.Records()); n != 2*len(want) {
+		t.Errorf("%d git calls for %d projects, want two each", n, len(want))
 	}
 	// The submodule is inside a project, so it is never discovered as one
 	// and never dated: that is the double-attribution guard.
@@ -490,4 +509,117 @@ func trimNewline(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// TestBuildNamesNeedEvidence is the D34 guard for directories that are named
+// like build output and are not. A Terraform folder called env, a Go package
+// called build and a committed dist are all source, and a name alone is not
+// evidence that a tool made them.
+func TestBuildNamesNeedEvidence(t *testing.T) {
+	const u = "Users/andrew/"
+	f := build(t, map[string]int64{
+		// A Terraform tree with an env folder and no pyvenv.cfg: the
+		// case found on the machine this was written against.
+		u + "code/infra/.git/config":           400,
+		u + "code/infra/iac/app/env/main.tf":   120_000,
+		u + "code/infra/iac/app/env/vars.tf":   100,
+		u + "code/infra/iac/app/versions.tf":   100,
+		u + "code/infra/iac/app/venv/notes.md": 90_000,
+
+		// A Go module with a package called build and a root build
+		// folder of packaging scripts; nothing Go writes is called build.
+		u + "code/goproj/go.mod":                      100,
+		u + "code/goproj/internal/build/build.go":     110_000,
+		u + "code/goproj/build/package/Dockerfile":    80_000,
+		u + "code/goproj/cmd/target/main.go":          70_000,
+		u + "code/goproj/internal/coverage/report.go": 60_000,
+		u + "code/goproj/internal/out/writer.go":      50_000,
+		u + "code/goproj/internal/node_modules/x.js":  40_000,
+
+		// A real virtualenv: pyvenv.cfg is what `python -m venv` writes.
+		u + "code/py/pyproject.toml":                 100,
+		u + "code/py/.venv/pyvenv.cfg":               80,
+		u + "code/py/.venv/lib/python3.12/site/x.py": 200_000,
+		u + "code/py/dist/py-1.0.tar.gz":             30_000,
+
+		// A node project whose dist is committed.
+		u + "code/web/.git/config":     400,
+		u + "code/web/package.json":    200,
+		u + "code/web/dist/index.js":   150_000,
+		u + "code/web/build/out.js":    140_000,
+		u + "code/rust/Cargo.toml":     100,
+		u + "code/rust/target/debug/x": 300_000,
+	})
+	env, _ := f.envTracking(true, map[string][]string{"web": {"dist/index.js", "src/app.ts"}})
+	facts, err := detecttest.Probe(t, projects.New(), env)
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	claims, _ := projects.New().Classify(f.tree, facts, f.cx)
+
+	source := []string{
+		home + "/code/infra/iac/app/env",
+		home + "/code/infra/iac/app/venv",
+		home + "/code/goproj/internal/build",
+		home + "/code/goproj/build",
+		home + "/code/goproj/cmd/target",
+		home + "/code/goproj/internal/coverage",
+		home + "/code/goproj/internal/out",
+		home + "/code/web/dist",
+	}
+	for _, p := range source {
+		c, ok := detecttest.ClaimAt(claims, p)
+		if !ok {
+			t.Errorf("no claim at %s; a catalog rule for its name would decide it", p)
+			continue
+		}
+		if c.Reclaim != classify.UserData {
+			t.Errorf("%s = %q / %s, want user data: nothing says a tool made it", p, c.Category, c.Reclaim)
+		}
+	}
+
+	built := map[string]classify.Reclaim{
+		home + "/code/py/.venv":                     classify.ToolManaged,
+		home + "/code/py/dist":                      classify.Regenerable,
+		home + "/code/web/build":                    classify.Regenerable,
+		home + "/code/rust/target":                  classify.Regenerable,
+		home + "/code/goproj/internal/node_modules": classify.Regenerable,
+	}
+	for p, want := range built {
+		c, ok := detecttest.ClaimAt(claims, p)
+		if !ok {
+			t.Errorf("no claim at %s", p)
+			continue
+		}
+		if c.Category != "Build artifacts" || c.Reclaim != want {
+			t.Errorf("%s = %q / %s, want build artifacts / %s", p, c.Category, c.Reclaim, want)
+		}
+	}
+}
+
+// TestTrackedCheckFallsBackToEvidence: when git could not be asked, a
+// directory that passes the evidence rules is still claimed, because the
+// evidence rules alone are what the budget falls back to.
+func TestTrackedCheckFallsBackToEvidence(t *testing.T) {
+	f := build(t, map[string]int64{
+		"Users/andrew/code/web/.git/config":   400,
+		"Users/andrew/code/web/package.json":  200,
+		"Users/andrew/code/web/dist/index.js": 150_000,
+	})
+	claims, _ := projects.New().Classify(f.tree, &projects.Facts{}, f.cx)
+	c, ok := detecttest.ClaimAt(claims, home+"/code/web/dist")
+	if !ok || c.Reclaim != classify.Regenerable {
+		t.Errorf("dist next to package.json with no git answer = %+v, want regenerable", c)
+	}
+}
+
+// TestRetainLeafKeepsPyvenvCfg: the file that proves a virtualenv is a few
+// dozen bytes, so without the hook it is folded away and no venv could ever
+// be told apart from a folder called env.
+func TestRetainLeafKeepsPyvenvCfg(t *testing.T) {
+	hook := projects.New().RetainLeaf(classify.Context{Home: home, CodeRoots: []string{home + "/code"}})
+	e := &walk.Entry{Name: "pyvenv.cfg", Kind: walk.KindFile, Size: 80}
+	if !hook(mac.ScanPath(home+"/code/py/.venv"), e) {
+		t.Error("pyvenv.cfg under a code root was not retained")
+	}
 }

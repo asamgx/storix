@@ -193,3 +193,68 @@ func contains(list []string, want string) bool {
 	}
 	return false
 }
+
+// TestExecTruncatedIsNotOK checks that output past the cap is reported: a
+// listing with its tail cut off is incomplete evidence, and a parser that
+// read it as the whole answer would conclude things are absent that were
+// merely dropped.
+func TestExecTruncatedIsNotOK(t *testing.T) {
+	res := testExec().Run(context.Background(), Cmd{
+		Name: "sh", Args: []string{"-c", "printf '0123456789abcdef'"}, MaxStdout: 8,
+	})
+	if !res.Truncated {
+		t.Fatalf("output past the cap was not marked truncated: %+v", res)
+	}
+	if res.OK() {
+		t.Error("OK() is true for truncated output")
+	}
+	if res.Stdout != "01234567" {
+		t.Errorf("stdout = %q, want the first 8 bytes", res.Stdout)
+	}
+	if !strings.Contains(res.Reason(), "truncated") {
+		t.Errorf("Reason() = %q, want it to mention the truncation", res.Reason())
+	}
+
+	whole := testExec().Run(context.Background(), Cmd{
+		Name: "sh", Args: []string{"-c", "printf '01234567'"}, MaxStdout: 8,
+	})
+	if whole.Truncated || !whole.OK() {
+		t.Errorf("output exactly at the cap was marked truncated: %+v", whole)
+	}
+}
+
+// TestExecTimeoutKillsGrandchildren checks that a command whose child keeps
+// stdout open does not hold Run past its deadline. Killing only the direct
+// child left the grandchild writing into the pipe, and Run waited for it.
+func TestExecTimeoutKillsGrandchildren(t *testing.T) {
+	start := time.Now()
+	res := testExec().Run(context.Background(), Cmd{
+		Name: "sh", Args: []string{"-c", "sleep 4 & wait"}, Timeout: 200 * time.Millisecond,
+	})
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("Run took %s past a 200ms timeout; the grandchild outlived it", elapsed)
+	}
+	if !res.TimedOut {
+		t.Errorf("the command was not reported timed out: %+v", res)
+	}
+}
+
+// TestExecEmptyDirRunsInHome checks that a probe without a directory runs in
+// the user's home rather than wherever storix was started: yarn, pnpm and
+// pyenv read configuration relative to the working directory, and a scan run
+// from inside a project would otherwise report that project's settings.
+func TestExecEmptyDirRunsInHome(t *testing.T) {
+	home := t.TempDir()
+	e := &Exec{Path: []string{"/bin", "/usr/bin"}, Home: home}
+	res := e.Run(context.Background(), Cmd{Name: "pwd", Args: []string{"-P"}})
+	if !res.OK() {
+		t.Fatalf("pwd: %+v", res)
+	}
+	want, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(res.Stdout); got != want {
+		t.Errorf("working directory = %q, want the home %q", got, want)
+	}
+}

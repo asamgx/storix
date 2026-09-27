@@ -176,6 +176,13 @@ func Stat(path string) (FileInfo, error) {
 	return FileInfo{Name: fi.Name(), Size: fi.Size(), Mode: fi.Mode(), IsDir: fi.IsDir()}, nil
 }
 
+// Readlink is how a detector reads where a symbolic link points. It reads the
+// link itself and nothing it names: no open, no follow, so it cannot be the
+// thing that materializes a file.
+func Readlink(path string) (string, error) {
+	return os.Readlink(path)
+}
+
 // Lookup answers the question Exists cannot: whether a path is there, and,
 // when that is not knowable, why.
 //

@@ -91,11 +91,15 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 	if home == "" {
 		return nil, detect.Summary{}
 	}
-	measured := func(m, fallback string) string {
+	var m *detect.Measure
+	if facts != nil {
+		m = detect.NewMeasure(facts.Home, cx)
+	}
+	measured := func(p, fallback string) string {
 		if facts == nil {
 			return fallback
 		}
-		return detect.Prefer(t, detect.Rebase(m, facts.Home, home), fallback)
+		return m.At(t, p, fallback)
 	}
 	get := func(sel func(*Facts) string) string {
 		if facts == nil {
@@ -129,10 +133,14 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Explain: "binaries `go install` wrote; reinstalling rebuilds them",
 		},
 	}
+	ev := evidence(facts)
+	if m != nil {
+		ev = append(ev, m.Notes...)
+	}
 	for i := range targets {
 		targets[i].Bucket = classify.BucketDeveloper
 		targets[i].OwnerKeys = []string{"cli:go"}
-		targets[i].Evidence = evidence(facts)
+		targets[i].Evidence = ev
 	}
 
 	claims, tools := detect.Claims(t, Name, targets)

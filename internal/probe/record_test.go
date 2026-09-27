@@ -92,3 +92,22 @@ func TestCmdKey(t *testing.T) {
 		}
 	}
 }
+
+// TestFixtureRoundTripsTruncated checks that a truncated result stays not-OK
+// through a recording, so a replayed detector sees the same incomplete
+// evidence the live one did.
+func TestFixtureRoundTripsTruncated(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rec.json")
+	c := Cmd{Name: "lsregister", Args: []string{"-dump"}, MaxStdout: 64 << 20}
+	if err := WriteFixture(path, []Record{{Cmd: c, Result: Result{Stdout: "head", Truncated: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	rp, err := LoadFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := rp.Run(context.Background(), c)
+	if !res.Truncated || res.OK() {
+		t.Errorf("replayed result = %+v, want Truncated and not OK", res)
+	}
+}

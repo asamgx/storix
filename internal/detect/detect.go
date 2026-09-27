@@ -107,6 +107,12 @@ type Env struct {
 	// Stat is how a detector asks whether a path exists without reading
 	// it. It never follows a final symlink.
 	Stat func(string) (FileInfo, error)
+	// Readlink is how a detector reads where a symbolic link points,
+	// without following it or opening anything. Homebrew's opt links are
+	// the answer to which keg of a formula is in use. Nil means the
+	// question cannot be asked, and a detector treats the answer as
+	// unknown.
+	Readlink func(string) (string, error)
 }
 
 // Tool is one directory a detector recognised: a cache, a toolchain, a set of

@@ -4,6 +4,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/walk"
 )
 
@@ -73,4 +74,89 @@ func ChildNames(t *walk.Tree, display string) []string {
 		names = append(names, c.Name)
 	}
 	return names
+}
+
+// CodeRoots are the context's code roots as absolute display paths, with "~"
+// resolved against the context's own home rather than the process's.
+func CodeRoots(cx classify.Context) []string {
+	roots := cx.CodeRoots
+	if roots == nil {
+		roots = classify.DefaultCodeRoots
+	}
+	out := make([]string, 0, len(roots))
+	for _, r := range roots {
+		switch {
+		case r == "":
+		case r == "~":
+			if cx.Home != "" {
+				out = append(out, cx.Home)
+			}
+		case strings.HasPrefix(r, "~/"):
+			if cx.Home != "" {
+				out = append(out, path.Join(cx.Home, r[2:]))
+			}
+		default:
+			out = append(out, path.Clean(r))
+		}
+	}
+	return out
+}
+
+// Measure moves the paths a probe reported into Classify's home and refuses
+// the ones that land inside a code root.
+//
+// A tool asked for its cache answers relative to its configuration, and its
+// configuration can come from a project: `yarn config get cacheFolder` inside
+// a Berry project names that project's .yarn/cache, which is often committed.
+// A path under a code root is the user's source until something proves
+// otherwise, so a measurement that lands there is dropped and the caller
+// falls back to its static default, and Notes says why for the why panel.
+type Measure struct {
+	// From is the home the probe ran against; To is Classify's.
+	From, To string
+	// Notes are the evidence lines for the measurements refused.
+	Notes []string
+
+	roots []string
+}
+
+// NewMeasure builds a Measure for one Classify call.
+func NewMeasure(from string, cx classify.Context) *Measure {
+	m := &Measure{From: from, To: cx.Home}
+	for _, r := range CodeRoots(cx) {
+		// A root that is the home or above it would refuse every
+		// measurement, including the defaults it would fall back to;
+		// such a root says where projects are, not that the whole home
+		// is source.
+		if r == "/" || r == cx.Home || strings.HasPrefix(cx.Home, strings.TrimRight(r, "/")+"/") {
+			continue
+		}
+		m.roots = append(m.roots, r)
+	}
+	return m
+}
+
+// Path is a measured path rebased into Classify's home, or "" when there was
+// no measurement or it lies inside a code root.
+func (m *Measure) Path(measured string) string {
+	if m == nil {
+		return measured
+	}
+	p := Rebase(measured, m.From, m.To)
+	if p == "" {
+		return ""
+	}
+	for _, r := range m.roots {
+		if p == r || strings.HasPrefix(p, strings.TrimRight(r, "/")+"/") {
+			m.Notes = append(m.Notes, "a tool reported "+p+", which is inside the code root "+r+
+				"; it is treated as project source and the default location is used instead")
+			return ""
+		}
+	}
+	return p
+}
+
+// At is Prefer over the measured path and a fallback.
+func (m *Measure) At(t *walk.Tree, measured, fallback string) string {
+	return Prefer(t, m.Path(measured), fallback)
 }

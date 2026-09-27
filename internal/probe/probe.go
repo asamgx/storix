@@ -23,9 +23,11 @@ import (
 // will wait before deciding storix has hung.
 const DefaultTimeout = 5 * time.Second
 
-// MaxStdout is how much of a command's output is kept. Eight megabytes is
-// larger than any listing a detector asks for and small enough that a command
-// that decides to stream cannot exhaust memory.
+// MaxStdout is how much of a command's output is kept when Cmd.MaxStdout is
+// zero. Eight megabytes covers the ordinary listings and is small enough that
+// a command that decides to stream cannot exhaust memory; a probe that knows
+// its answer is larger (`lsregister -dump` is tens of megabytes) raises its
+// own cap, and one that overflows it anyway is marked Truncated.
 const MaxStdout = 8 << 20
 
 // MaxStderr is how much of a command's error output is kept. It is only ever
@@ -44,10 +46,17 @@ type Cmd struct {
 	// a probe that dropped the whole environment would lose the locale,
 	// the temporary directory and the proxy settings the tool needs.
 	Env []string
-	// Dir is the working directory; empty means the process's own.
+	// Dir is the working directory; empty means the invoking user's home,
+	// never storix's own working directory: yarn, pnpm and pyenv read
+	// configuration relative to it, and a scan started inside a project
+	// must not report that project's settings as the machine's.
 	Dir string
 	// Timeout bounds the run; zero selects DefaultTimeout.
 	Timeout time.Duration
+	// MaxStdout caps the output kept, in bytes; zero selects MaxStdout.
+	// It is not part of Key: the cap is how much of the answer to keep,
+	// not which question was asked.
+	MaxStdout int64 `json:",omitempty"`
 }
 
 // Key identifies a command in a fixture file. It is the name and the
@@ -75,6 +84,11 @@ type Result struct {
 	// Missing is set when the executable was not found on the path. It is
 	// the ordinary answer for a tool the machine does not have.
 	Missing bool `json:"missing,omitempty"`
+	// Truncated is set when stdout ran past the cap and its tail was
+	// dropped. The head is still in Stdout, but a listing without its end
+	// is incomplete evidence, so OK is false: a parser that took it for
+	// the whole answer would conclude that what was dropped does not exist.
+	Truncated bool `json:"truncated,omitempty"`
 	// Err is why the command could not be run or did not finish. A
 	// non-zero exit is not an error: the exit code carries that.
 	Err error `json:"-"`
@@ -85,7 +99,7 @@ type Result struct {
 
 // OK reports whether the command ran to a zero exit.
 func (r Result) OK() bool {
-	return !r.Missing && !r.TimedOut && r.Err == nil && r.ExitCode == 0
+	return !r.Missing && !r.TimedOut && !r.Truncated && r.Err == nil && r.ExitCode == 0
 }
 
 // Reason is a one-line description of a result that is not OK, for a status
@@ -100,6 +114,8 @@ func (r Result) Reason() string {
 		return "timed out after " + r.Duration.Round(time.Millisecond).String()
 	case r.Err != nil:
 		return r.Err.Error()
+	case r.Truncated && r.ExitCode == 0:
+		return "output truncated at " + itoa(len(r.Stdout)) + " bytes"
 	}
 	if line := firstLine(r.Stderr); line != "" {
 		return line

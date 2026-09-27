@@ -309,11 +309,15 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 	if home == "" {
 		return nil, detect.Summary{}
 	}
+	var m *detect.Measure
+	if facts != nil {
+		m = detect.NewMeasure(facts.Home, cx)
+	}
 	at := func(measured, fallback string) string {
 		if facts == nil {
 			return fallback
 		}
-		return detect.Prefer(t, detect.Rebase(measured, facts.Home, home), fallback)
+		return m.At(t, measured, fallback)
 	}
 	ev := evidence(facts)
 
@@ -386,9 +390,12 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Explain: "node versions fnm installed",
 		},
 	}
-	targets = append(targets, pnpmStores(t, facts, home)...)
-	targets = append(targets, nvmTargets(t, facts, home)...)
-	targets = append(targets, yarnMeasured(t, facts, home)...)
+	targets = append(targets, pnpmStores(t, facts, m, home)...)
+	targets = append(targets, nvmTargets(t, facts, m, home)...)
+	targets = append(targets, yarnMeasured(t, facts, m, home)...)
+	if m != nil {
+		ev = append(ev, m.Notes...)
+	}
 	for i := range targets {
 		targets[i].Bucket = classify.BucketDeveloper
 		targets[i].Evidence = append(append([]string(nil), ev...), targets[i].Evidence...)
@@ -415,11 +422,14 @@ func npmCacheOf(f *Facts) string {
 // Yarn 1 answers ~/Library/Caches/Yarn/v6: the parent is the cache and the
 // child is the cache format in use, so both are worth a row and the deeper
 // one carries the version.
-func yarnMeasured(t *walk.Tree, f *Facts, home string) []detect.Target {
+func yarnMeasured(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect.Target {
 	if f == nil || f.YarnCache == "" {
 		return nil
 	}
-	cache := detect.Rebase(f.YarnCache, f.Home, home)
+	cache := m.Path(f.YarnCache)
+	if cache == "" {
+		return nil
+	}
 	if _, ok := detect.Lookup(t, cache); !ok {
 		return nil
 	}
@@ -445,7 +455,7 @@ func yarnMeasured(t *walk.Tree, f *Facts, home string) []detect.Target {
 // as superseded. Which is live is pnpm's answer and nothing else: the
 // directory names sort v10 before v11 and before v3, and on this machine the
 // live one is v10.
-func pnpmStores(t *walk.Tree, f *Facts, home string) []detect.Target {
+func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect.Target {
 	root := path.Join(home, "Library/pnpm")
 	out := []detect.Target{
 		{
@@ -465,7 +475,7 @@ func pnpmStores(t *walk.Tree, f *Facts, home string) []detect.Target {
 
 	live := ""
 	if f != nil {
-		live = detect.Rebase(f.PnpmStore, f.Home, home)
+		live = m.Path(f.PnpmStore)
 	}
 	gens := generationPaths(t, live, home)
 	for _, gen := range gens {
@@ -510,10 +520,10 @@ func generationPaths(t *walk.Tree, live, home string) []string {
 }
 
 // nvmTargets describes nvm's directory and every node version in it.
-func nvmTargets(t *walk.Tree, f *Facts, home string) []detect.Target {
+func nvmTargets(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect.Target {
 	nvm := path.Join(home, ".nvm")
 	if f != nil && f.NvmDir != "" {
-		nvm = detect.Prefer(t, detect.Rebase(f.NvmDir, f.Home, home), nvm)
+		nvm = m.At(t, f.NvmDir, nvm)
 	}
 	out := []detect.Target{
 		{

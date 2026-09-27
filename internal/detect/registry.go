@@ -29,7 +29,9 @@ const DefaultTimeout = 20 * time.Second
 // of them away on every short scan, although each was inside the budget it was
 // given. Wait therefore holds on until a probe has finished or spent its own
 // timeout, and the grace only keeps it from returning the instant the walk
-// does. DefaultTimeout is what bounds the wait.
+// does. The wait is bounded by the largest timeout passed to Start for a probe
+// still running, which is DefaultTimeout only for detectors given no timeout
+// of their own.
 const DefaultGrace = 2 * time.Second
 
 // probeSettle is the moment Wait allows a probe after its own deadline has
@@ -91,7 +93,9 @@ func New(dets ...Detector) *Registry {
 	return &Registry{dets: append([]Detector(nil), dets...)}
 }
 
-// Default is every registered detector, in registration order.
+// Default is every registered detector, sorted by the order it registered
+// with and then by name, so the list is the same whatever order the package
+// init functions happened to run in.
 func Default() *Registry {
 	registered.mu.Lock()
 	defer registered.mu.Unlock()
@@ -287,10 +291,12 @@ func probeOne(ctx context.Context, det Detector, env Env, timeout time.Duration)
 	return out
 }
 
-// Wait collects the probes. A probe still running when the walk finished is
-// given the rest of its own timeout, and the grace on top of that if its
-// timeout has already passed. It cancels the stragglers on its way out, so
-// that nothing is still talking to the machine while the engine classifies.
+// Wait collects the probes. It waits until every probe has finished or until
+// max(now+grace, the latest deadline of a probe still running + probeSettle),
+// whichever comes first: a running probe is given the rest of its own
+// timeout, and the grace is a floor under the wait, never added on top of a
+// deadline. It cancels the stragglers on its way out, so that nothing is still
+// talking to the machine while the engine classifies.
 //
 // The grace is the floor rather than the ceiling because the walk and the
 // probes are not the same length. A walk of a partial root, or a rescan from

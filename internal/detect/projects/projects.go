@@ -27,9 +27,20 @@
 //
 // A manifest is a few kilobytes, so the walker folds it into its parent and
 // the tree never sees it. This is the one detector that implements
-// [detect.LeafRetainer] for that reason: the hook retains manifests and `.git`
-// files under the code roots and nothing else, at a cost of one name
-// comparison per small file and one prefix comparison per name that matches.
+// [detect.LeafRetainer] for that reason: the hook retains manifests, `.git`
+// files and the two files that prove a build directory's origin (a venv's
+// pyvenv.cfg, a Go vendor's modules.txt) under the code roots and nothing
+// else, at a cost of one name comparison per small file and one prefix
+// comparison per name that matches.
+//
+// # A name is not evidence
+//
+// A directory called env, build or target is build output only when
+// something beside it says a tool made it: a virtualenv holds pyvenv.cfg,
+// Cargo's target sits next to Cargo.toml, a bundler's dist next to
+// package.json. One without that evidence, or one git tracks files in, is
+// the user's source and is claimed as such, which also keeps a catalog rule
+// for the bare name from deciding it (D34).
 package projects
 
 import (
@@ -97,6 +108,16 @@ const gitMarker = ".git"
 // vendor` reproduces; without it, somebody put those files there.
 const vendorModules = "modules.txt"
 
+// pyvenvCfg is the file `python -m venv` and virtualenv write at the top of
+// every environment. A directory called env or venv without it is not one.
+const pyvenvCfg = "pyvenv.cfg"
+
+// gitLsFilesMax caps the answer to `git ls-files` over the build-directory
+// names. A project that commits a large dist lists every file in it; past
+// this the answer is truncated, the probe treats the project as unchecked
+// and the evidence rules alone decide.
+const gitLsFilesMax = 16 << 20
+
 // Detector finds source projects under the code roots.
 type Detector struct{}
 
@@ -118,6 +139,12 @@ type Found struct {
 	// LastCommit is the unix time of the most recent commit, zero when
 	// git could not say.
 	LastCommit int64 `json:"last_commit,omitempty"`
+	// GitChecked is set when `git ls-files` answered in full for the
+	// build-directory names, so Tracked is the whole list.
+	GitChecked bool `json:"git_checked,omitempty"`
+	// Tracked are the project-relative directories, named like build
+	// output, that git tracks at least one file in.
+	Tracked []string `json:"tracked,omitempty"`
 }
 
 // Facts are what the probe learned: the project roots it found and when each
@@ -164,7 +191,7 @@ func (*Detector) RetainLeaf(cx classify.Context) func(dir string, e *walk.Entry)
 // and allocates nothing, which is the requirement the walker imposes.
 func isMarkerName(name string) bool {
 	switch name {
-	case gitMarker, vendorModules,
+	case gitMarker, vendorModules, pyvenvCfg,
 		"package.json", "go.mod", "Cargo.toml", "pyproject.toml", "Package.swift",
 		"pom.xml", "build.gradle", "build.gradle.kts", "pubspec.yaml", "Gemfile",
 		"composer.json":
@@ -183,7 +210,7 @@ func isMarkerName(name string) bool {
 // one extra string comparison for a file that is already known to be a
 // manifest.
 func retainPrefixes(cx classify.Context) []string {
-	roots := codeRoots(cx)
+	roots := detect.CodeRoots(cx)
 	out := make([]string, 0, len(roots)*2)
 	seen := make(map[string]bool, len(roots)*2)
 	add := func(p string) {
@@ -196,32 +223,6 @@ func retainPrefixes(cx classify.Context) []string {
 	for _, r := range roots {
 		add(strings.TrimRight(path.Clean(r), "/") + "/")
 		add(strings.TrimRight(mac.ScanPath(r), "/") + "/")
-	}
-	return out
-}
-
-// codeRoots are the context's code roots as absolute display paths, with "~"
-// resolved against the context's own home rather than the process's.
-func codeRoots(cx classify.Context) []string {
-	roots := cx.CodeRoots
-	if roots == nil {
-		roots = classify.DefaultCodeRoots
-	}
-	out := make([]string, 0, len(roots))
-	for _, r := range roots {
-		switch {
-		case r == "":
-		case r == "~":
-			if cx.Home != "" {
-				out = append(out, cx.Home)
-			}
-		case strings.HasPrefix(r, "~/"):
-			if cx.Home != "" {
-				out = append(out, path.Join(cx.Home, r[2:]))
-			}
-		default:
-			out = append(out, path.Clean(r))
-		}
 	}
 	return out
 }
@@ -330,33 +331,82 @@ func isManifest(name string) bool {
 	return false
 }
 
-// dateProjects runs `git log` over the found projects within one shared
-// budget, newest-looking first is not knowable in advance so they are taken
-// in discovery order and the budget simply stops the loop.
+// dateProjects asks git two things about each found project within one
+// shared budget: when it was last committed to, and which of its
+// build-directory names git tracks files in. The order is discovery order,
+// and the budget simply stops the loop; a project it never reached is dated
+// from its directory and judged by the evidence rules alone.
 func dateProjects(ctx context.Context, env detect.Env, dirs []string, f *Facts) {
 	deadline := time.Now().Add(gitBudget)
+	timeout := func() time.Duration {
+		return min(gitCallTimeout, time.Until(deadline))
+	}
 	for i, dir := range dirs {
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			f.Budget = i < len(dirs)
+		if timeout() <= 0 {
+			f.Budget = true
 			return
-		}
-		timeout := gitCallTimeout
-		if remaining < timeout {
-			timeout = remaining
 		}
 		res := env.Runner.Run(ctx, probe.Cmd{
 			Name:    "git",
 			Args:    []string{"-C", dir, "log", "-1", "--format=%ct"},
-			Timeout: timeout,
+			Timeout: timeout(),
 		})
-		if !res.OK() {
-			continue
+		if res.OK() {
+			if secs := parseUnix(res.Stdout); secs > 0 {
+				f.Projects[i].LastCommit = secs
+			}
 		}
-		if secs := parseUnix(res.Stdout); secs > 0 {
-			f.Projects[i].LastCommit = secs
+
+		if timeout() <= 0 {
+			f.Budget = true
+			return
+		}
+		res = env.Runner.Run(ctx, probe.Cmd{
+			Name:      "git",
+			Args:      append([]string{"-C", dir, "ls-files", "-z", "--"}, trackedPathspecs...),
+			Timeout:   timeout(),
+			MaxStdout: gitLsFilesMax,
+		})
+		// A project that is not a repository, a git that failed, and an
+		// answer cut off at the cap all leave the project unchecked.
+		if res.OK() {
+			f.Projects[i].GitChecked = true
+			f.Projects[i].Tracked = trackedDirs(res.Stdout)
 		}
 	}
+}
+
+// trackedPathspecs select, in `git ls-files`, every file inside a directory
+// named like build output at any depth.
+var trackedPathspecs = func() []string {
+	out := make([]string, 0, len(artifacts)+1)
+	for name := range artifacts {
+		out = append(out, ":(glob)**/"+name+"/**")
+	}
+	sort.Strings(out)
+	return append(out, ":(glob)**/*"+eggInfoSuffix+"/**")
+}()
+
+// trackedDirs are the build-output-named directories that hold the files a
+// NUL-separated `git ls-files` listing names, each once.
+func trackedDirs(out string) []string {
+	seen := map[string]bool{}
+	var dirs []string
+	for file := range strings.SplitSeq(out, "\x00") {
+		parts := strings.Split(file, "/")
+		for j := 0; j < len(parts)-1; j++ {
+			if !isArtifactName(parts[j]) {
+				continue
+			}
+			d := strings.Join(parts[:j+1], "/")
+			if !seen[d] {
+				seen[d] = true
+				dirs = append(dirs, d)
+			}
+		}
+	}
+	sort.Strings(dirs)
+	return dirs
 }
 
 // parseUnix reads the unix timestamp `git log --format=%ct` prints.
@@ -400,7 +450,8 @@ type artifact struct {
 
 // artifacts are the directory names docs/04 lists as build output, with what
 // each one is. Everything here is regenerable except `vendor`, which is
-// decided per directory by [vendorArtifact].
+// decided per directory by [vendorArtifact]; the generic names among them
+// are only build output with evidence beside them, see [producers].
 var artifacts = map[string]artifact{
 	"node_modules":  {classify.Regenerable, "installed npm dependencies; the package manager reinstalls them from the lockfile"},
 	".pnpm-store":   {classify.Regenerable, "a project-local pnpm store, refilled on the next install"},
@@ -438,6 +489,61 @@ var artifacts = map[string]artifact{
 	".direnv":       {classify.Regenerable, "direnv's materialised environment, rebuilt on the next entry"},
 	".devenv":       {classify.Regenerable, "devenv's materialised environment"},
 	"vendor":        {classify.UserData, "vendored dependencies"},
+}
+
+// producers are, for the build-directory names common enough to be source
+// too, the manifests of the ecosystems that write them. The directory counts
+// as build output only when one of these sits directly beside it; a Go
+// package called build or a Terraform folder called out has none.
+var producers = map[string][]string{
+	"target":        {"Cargo.toml", "pom.xml"},
+	"build":         {"package.json", "build.gradle", "build.gradle.kts", "pyproject.toml", "pubspec.yaml"},
+	"dist":          {"package.json", "pyproject.toml"},
+	"out":           {"package.json"},
+	".next":         {"package.json"},
+	".nuxt":         {"package.json"},
+	".svelte-kit":   {"package.json"},
+	".turbo":        {"package.json"},
+	".parcel-cache": {"package.json"},
+	".cache":        {"package.json"},
+	"coverage":      {"package.json"},
+	".nyc_output":   {"package.json"},
+}
+
+// venvNames are the directory names a Python virtual environment is
+// conventionally given, and each is only one when it holds pyvenv.cfg.
+var venvNames = map[string]bool{".venv": true, "venv": true, "env": true}
+
+// unproven says why a directory named like build output is not treated as
+// one, or "" when the evidence is there. parent is the directory holding it.
+func unproven(parent, n *walk.Node) string {
+	if venvNames[n.Name] {
+		if hasChild(n, pyvenvCfg) {
+			return ""
+		}
+		return "named " + n.Name + " but holds no pyvenv.cfg, so it is not a Python virtual environment; kept as source"
+	}
+	want, ok := producers[n.Name]
+	if !ok {
+		return ""
+	}
+	for _, m := range want {
+		if hasChild(parent, m) {
+			return ""
+		}
+	}
+	return "named " + n.Name + " but nothing beside it (" + strings.Join(want, ", ") +
+		") says a build tool made it; kept as source"
+}
+
+// hasChild reports whether a directory's retained children include name.
+func hasChild(n *walk.Node, name string) bool {
+	for _, c := range n.Children {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // eggInfoSuffix is the one artifact name that is a pattern rather than a
@@ -482,11 +588,11 @@ func vendorArtifact(n *walk.Node) artifact {
 // Classify finds the projects in the tree and claims what they built.
 func (d *Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]classify.Claim, detect.Summary) {
 	facts, _ := f.(*Facts)
-	dates := dateIndex(facts)
+	idx := index(facts)
 
 	var targets []detect.Target
 	var found []detect.Project
-	for _, root := range codeRoots(cx) {
+	for _, root := range detect.CodeRoots(cx) {
 		n, ok := detect.Lookup(t, root)
 		if !ok || !n.IsDir() {
 			continue
@@ -496,7 +602,7 @@ func (d *Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) (
 			Owner: "Code root", Reclaim: classify.UserData,
 			Explain: "a code root: the projects under it are yours, their build output is not",
 		})
-		collect(n, root, cx.Home, dates, &targets, &found)
+		collect(n, root, cx.Home, idx, &targets, &found)
 	}
 	if len(targets) == 0 {
 		return nil, detect.Summary{}
@@ -510,16 +616,27 @@ func (d *Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) (
 	return claims, detect.Summary{Projects: found}
 }
 
-// dateIndex maps a home-relative project path to its last commit.
-func dateIndex(f *Facts) map[string]int64 {
+// index maps a home-relative project path to what the probe learned of it.
+func index(f *Facts) map[string]*Found {
 	if f == nil {
 		return nil
 	}
-	out := make(map[string]int64, len(f.Projects))
-	for _, p := range f.Projects {
-		if p.LastCommit > 0 {
-			out[p.Rel] = p.LastCommit
-		}
+	out := make(map[string]*Found, len(f.Projects))
+	for i := range f.Projects {
+		out[f.Projects[i].Rel] = &f.Projects[i]
+	}
+	return out
+}
+
+// tracked is the set of a project's build-named directories git tracks
+// files in, or nil when git was not asked or did not answer in full.
+func tracked(fd *Found) map[string]bool {
+	if fd == nil || !fd.GitChecked {
+		return nil
+	}
+	out := make(map[string]bool, len(fd.Tracked))
+	for _, d := range fd.Tracked {
+		out[d] = true
 	}
 	return out
 }
@@ -528,21 +645,21 @@ func dateIndex(f *Facts) map[string]int64 {
 // finds. It does not look inside a project for more projects: a monorepo's
 // packages and a repository's submodules are parts of the project that holds
 // them, which is what keeps a submodule's history from being counted twice.
-func collect(n *walk.Node, display, home string, dates map[string]int64,
+func collect(n *walk.Node, display, home string, idx map[string]*Found,
 	targets *[]detect.Target, found *[]detect.Project) {
 
 	if len(*found) >= maxProjects {
 		return
 	}
 	if isProject(n) {
-		describe(n, display, home, dates, targets, found)
+		describe(n, display, home, idx, targets, found)
 		return
 	}
 	for _, child := range n.Children {
 		if !child.IsDir() || isArtifactName(child.Name) {
 			continue
 		}
-		collect(child, path.Join(display, child.Name), home, dates, targets, found)
+		collect(child, path.Join(display, child.Name), home, idx, targets, found)
 	}
 }
 
@@ -558,7 +675,7 @@ func isProject(n *walk.Node) bool {
 }
 
 // describe emits one project's claims and its summary row.
-func describe(n *walk.Node, display, home string, dates map[string]int64,
+func describe(n *walk.Node, display, home string, idx map[string]*Found,
 	targets *[]detect.Target, found *[]detect.Project) {
 
 	name := n.Name
@@ -570,10 +687,11 @@ func describe(n *walk.Node, display, home string, dates map[string]int64,
 		Evidence: []string{"the nearest directory with a .git or a build manifest"},
 	})
 
+	fd := idx[relTo(home, display)]
 	p := detect.Project{Root: display, Node: n.ID, VCS: hasGit(n)}
-	gather(n, display, name, keys, 0, targets, &p)
+	gather(n, display, "", name, keys, tracked(fd), 0, targets, &p)
 
-	p.LastActivity = lastActivity(n, home, display, dates)
+	p.LastActivity = lastActivity(n, fd)
 	sort.SliceStable(p.Artifacts, func(i, j int) bool { return p.Artifacts[i].Bytes > p.Artifacts[j].Bytes })
 	*found = append(*found, p)
 }
@@ -590,8 +708,13 @@ func hasGit(n *walk.Node) bool {
 }
 
 // gather walks inside a project claiming its build directories and its
-// repository history, and stops descending at each one it claims.
-func gather(n *walk.Node, display, project string, keys []string, depth int,
+// repository history, and stops descending at each one it claims. rel is n's
+// path inside the project and git the directories git tracks files in.
+//
+// A directory named like build output without the evidence for it, or with
+// files git tracks, is claimed as source and descended into like any other:
+// the claim is what stops a catalog rule for the bare name from deciding it.
+func gather(n *walk.Node, display, rel, project string, keys []string, git map[string]bool, depth int,
 	targets *[]detect.Target, p *detect.Project) {
 
 	if depth > maxArtifactDepth {
@@ -599,6 +722,14 @@ func gather(n *walk.Node, display, project string, keys []string, depth int,
 	}
 	for _, child := range n.Children {
 		childPath := path.Join(display, child.Name)
+		childRel := path.Join(rel, child.Name)
+		why := ""
+		if child.IsDir() && isArtifactName(child.Name) {
+			why = unproven(n, child)
+			if why == "" && git[childRel] {
+				why = "git tracks files in " + child.Name + ", so it is source under version control, not build output"
+			}
+		}
 		switch {
 		case child.Name == gitMarker:
 			*targets = append(*targets, detect.Target{
@@ -608,6 +739,13 @@ func gather(n *walk.Node, display, project string, keys []string, depth int,
 			})
 		case !child.IsDir():
 			continue
+		case why != "":
+			*targets = append(*targets, detect.Target{
+				Path: childPath, Bucket: classify.BucketDeveloper, Category: "Project source",
+				Owner: project, OwnerKeys: keys, Reclaim: classify.UserData,
+				Explain: why,
+			})
+			gather(child, childPath, childRel, project, keys, git, depth+1, targets, p)
 		case isArtifactName(child.Name):
 			a := artifactFor(child)
 			*targets = append(*targets, detect.Target{
@@ -623,7 +761,7 @@ func gather(n *walk.Node, display, project string, keys []string, depth int,
 				Bytes: child.Bytes, Reclaim: a.reclaim, Note: a.explain,
 			})
 		default:
-			gather(child, childPath, project, keys, depth+1, targets, p)
+			gather(child, childPath, childRel, project, keys, git, depth+1, targets, p)
 		}
 	}
 }
@@ -638,11 +776,9 @@ func gitExplain(n *walk.Node, project string) string {
 
 // lastActivity is when a project was last touched: its most recent commit
 // when git could say, its directory's modification time otherwise.
-func lastActivity(n *walk.Node, home, display string, dates map[string]int64) time.Time {
-	if rel := relTo(home, display); rel != "" {
-		if secs, ok := dates[rel]; ok && secs > 0 {
-			return time.Unix(secs, 0)
-		}
+func lastActivity(n *walk.Node, fd *Found) time.Time {
+	if fd != nil && fd.LastCommit > 0 {
+		return time.Unix(fd.LastCommit, 0)
 	}
 	if n.Mtime > 0 {
 		return time.Unix(n.Mtime, 0)

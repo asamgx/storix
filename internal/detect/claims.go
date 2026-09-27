@@ -25,6 +25,7 @@ func DefaultEnv(runner probe.Runner, home string) Env {
 		ReadFile: ReadFile,
 		ReadDir:  ReadDir,
 		Stat:     Stat,
+		Readlink: Readlink,
 	}
 	if e, ok := runner.(*probe.Exec); ok {
 		env.LookPath = e.LookPath

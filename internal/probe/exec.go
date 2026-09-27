@@ -249,32 +249,57 @@ func (e *Exec) Run(ctx context.Context, c Cmd) Result {
 	defer cancel()
 
 	cmd := exec.CommandContext(runCtx, bin, c.Args...) //nolint:gosec // the name comes from a detector, never from user input
-	cmd.Dir = c.Dir
+	cmd.Dir = e.dir(c.Dir)
 	cmd.Env = append(append([]string(nil), e.env...), c.Env...)
 	// A probe reads; nothing should ever be waiting on its standard input,
 	// and a tool that asks a question must see the answer "no terminal"
 	// rather than block until the deadline.
 	cmd.Stdin = nil
+	// The command runs in a process group of its own, and the deadline
+	// kills the group. Killing only the direct child leaves a grandchild
+	// (a pyenv shim's python, corepack's node, xcrun's tool) holding the
+	// output pipes open, and Run would wait on it past the timeout while
+	// holding a slot. WaitDelay is the backstop for a descendant that left
+	// the group: the pipes are closed on it rather than waited for.
+	attr := &syscall.SysProcAttr{Setpgid: true}
 	if e.asUser {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Credential: &syscall.Credential{Uid: uint32(e.uid), Gid: uint32(e.gid)}, //nolint:gosec // ids come from the kernel via SUDO_UID
+		attr.Credential = &syscall.Credential{Uid: uint32(e.uid), Gid: uint32(e.gid)} //nolint:gosec // ids come from the kernel via SUDO_UID
+	}
+	cmd.SysProcAttr = attr
+	cmd.Cancel = func() error {
+		// The group id is the child's pid because of Setpgid. A kill
+		// of the group that fails (it already exited) falls back to the
+		// child itself so the error exec reports is the usual one.
+		if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err == nil {
+			return nil
 		}
+		return cmd.Process.Kill()
+	}
+	cmd.WaitDelay = waitDelay
+	limit := int64(MaxStdout)
+	if c.MaxStdout > 0 {
+		limit = c.MaxStdout
 	}
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &capped{w: &stdout, limit: MaxStdout}
+	out := &capped{w: &stdout, limit: limit}
+	cmd.Stdout = out
 	cmd.Stderr = &capped{w: &stderr, limit: MaxStderr}
 
 	start := time.Now()
 	err = cmd.Run()
 	res := Result{
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
-		Duration: time.Since(start),
+		Stdout:    stdout.String(),
+		Stderr:    stderr.String(),
+		Duration:  time.Since(start),
+		Truncated: out.dropped,
 	}
 
 	var ee *exec.ExitError
 	switch {
-	case err == nil:
+	case err == nil, errors.Is(err, exec.ErrWaitDelay):
+		// ErrWaitDelay means the command exited cleanly and a
+		// descendant was still holding the pipes when WaitDelay ran
+		// out; the command's own answer is complete.
 	case errors.As(err, &ee):
 		res.ExitCode = ee.ExitCode()
 	default:
@@ -298,19 +323,45 @@ func errResult(err error) Result {
 	return Result{Err: err, ErrText: err.Error()}
 }
 
-// capped is a writer that keeps the first limit bytes and silently drops the
-// rest. A command that decides to stream must not be able to exhaust memory,
-// and truncating is a better answer than killing it: the head of the output
-// is the part a parser reads.
+// waitDelay is how long Run waits for the output pipes to close after the
+// command has exited or been killed. A descendant that escaped the process
+// group can hold them open indefinitely; half a second is past any flush.
+const waitDelay = 500 * time.Millisecond
+
+// dir is the working directory a command runs in: the one it asked for, or
+// else the user's home, or else the root. It is never storix's own working
+// directory, because tools read configuration relative to it (see Cmd.Dir).
+func (e *Exec) dir(asked string) string {
+	if asked != "" {
+		return asked
+	}
+	if e.home != "" {
+		if fi, err := os.Stat(e.home); err == nil && fi.IsDir() {
+			return e.home
+		}
+	}
+	return "/"
+}
+
+// capped is a writer that keeps the first limit bytes and drops the rest,
+// remembering that it did. A command that decides to stream must not be able
+// to exhaust memory, and truncating is a better answer than killing it; but
+// the result must say so, because a listing without its tail is not the
+// whole answer (see Result.Truncated).
 type capped struct {
-	w     *bytes.Buffer
-	limit int
+	w       *bytes.Buffer
+	limit   int64
+	dropped bool
 }
 
 func (c *capped) Write(p []byte) (int, error) {
 	n := len(p)
-	if room := c.limit - c.w.Len(); room > 0 {
-		if len(p) > room {
+	room := c.limit - int64(c.w.Len())
+	if int64(len(p)) > room {
+		c.dropped = true
+	}
+	if room > 0 {
+		if int64(len(p)) > room {
 			p = p[:room]
 		}
 		if _, err := c.w.Write(p); err != nil {

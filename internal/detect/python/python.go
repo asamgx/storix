@@ -135,11 +135,15 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 	if home == "" {
 		return nil, detect.Summary{}
 	}
-	measured := func(m, fallback string) string {
+	var m *detect.Measure
+	if facts != nil {
+		m = detect.NewMeasure(facts.Home, cx)
+	}
+	measured := func(p, fallback string) string {
 		if facts == nil {
 			return fallback
 		}
-		return detect.Prefer(t, detect.Rebase(m, facts.Home, home), fallback)
+		return m.At(t, p, fallback)
 	}
 	get := func(sel func(*Facts) string) string {
 		if facts == nil {
@@ -203,8 +207,11 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Explain: "hook environments pre-commit built; `pre-commit clean` removes them",
 		},
 	}
-	targets = append(targets, condaTargets(facts, home)...)
+	targets = append(targets, condaTargets(facts, m, home)...)
 	targets = append(targets, interpreters(facts, pyenv, installed)...)
+	if m != nil {
+		ev = append(ev, m.Notes...)
+	}
 
 	for i := range targets {
 		targets[i].Bucket = classify.BucketDeveloper
@@ -220,10 +227,10 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 // condaTargets are the conda installation, wherever it is. The two default
 // locations are claimed as well as the measured one, because a machine can
 // carry a Miniconda that is no longer on the path.
-func condaTargets(f *Facts, home string) []detect.Target {
+func condaTargets(f *Facts, m *detect.Measure, home string) []detect.Target {
 	paths := []string{path.Join(home, "miniconda3"), path.Join(home, "anaconda3")}
 	if f != nil && f.CondaBase != "" {
-		if base := detect.Rebase(f.CondaBase, f.Home, home); base != "" {
+		if base := m.Path(f.CondaBase); base != "" {
 			paths = append([]string{base}, paths...)
 		}
 	}

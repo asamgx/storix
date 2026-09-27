@@ -104,6 +104,15 @@ func (f *Fixture) Env(t *testing.T, fixture string) detect.Env {
 		ReadFile: detect.ReadFile,
 		ReadDir:  detect.ReadDir,
 		Stat:     detect.Stat,
+		// A link is read inside the fixture: a recording names
+		// /opt/homebrew, and the test must not read this machine's.
+		Readlink: func(p string) (string, error) {
+			root := strings.TrimSuffix(f.Real, Home)
+			if !strings.HasPrefix(p, root+"/") {
+				p = filepath.Join(root, p)
+			}
+			return detect.Readlink(p)
+		},
 	}
 }
 

@@ -67,6 +67,10 @@ func (*Detector) NewFacts() detect.Facts { return &Facts{} }
 type Formula struct {
 	Name     string   `json:"name"`
 	Versions []string `json:"versions,omitempty"`
+	// Linked is the version <prefix>/opt/<name> points at, which is the
+	// keg brew treats as the one in use; empty when the link could not be
+	// read. Only multi-version formulae are asked.
+	Linked string `json:"linked,omitempty"`
 }
 
 // Removal is one line of `brew cleanup -n`: something brew would delete and
@@ -174,6 +178,8 @@ func (*Detector) Probe(ctx context.Context, env detect.Env) (detect.Facts, error
 		degraded = append(degraded, "brew list --formula --versions: "+res.Reason())
 	}
 
+	linkKegs(env, f)
+
 	if res := run(ctx, env.Runner, "cleanup", "-n"); res.OK() {
 		// brew prints its removals on stdout and its warnings on stderr,
 		// and the summary line is on stdout. Both are parsed because the
@@ -191,6 +197,37 @@ func (*Detector) Probe(ctx context.Context, env detect.Env) (detect.Facts, error
 		return f, detect.Degradedf("%s", strings.Join(degraded, "; "))
 	}
 	return f, nil
+}
+
+// linkKegs records, for each formula with more than one keg, which keg
+// <prefix>/opt/<name> points at. That link is what brew itself treats as the
+// version in use; a version sort is not, because "1.6.53 1.6.50" and a
+// pinned older keg both exist on real machines.
+func linkKegs(env detect.Env, f *Facts) {
+	if env.Readlink == nil || f.Prefix == "" {
+		return
+	}
+	for i := range f.Formulae {
+		fm := &f.Formulae[i]
+		if len(fm.Versions) < 2 {
+			continue
+		}
+		target, err := env.Readlink(path.Join(f.Prefix, "opt", fm.Name))
+		if err != nil {
+			continue
+		}
+		// brew writes "../Cellar/<name>/<version>"; only a target in
+		// that shape, naming a keg brew listed, is believed.
+		dir, v := path.Split(path.Clean(target))
+		if path.Base(dir) != fm.Name {
+			continue
+		}
+		for _, have := range fm.Versions {
+			if have == v {
+				fm.Linked = v
+			}
+		}
+	}
 }
 
 // run issues one brew command with the package's timeout.
@@ -294,17 +331,18 @@ type defaults struct{ prefix, cellar, cache string }
 
 // resolve fills in whatever the probe did not learn, moving the paths brew
 // reported into the home the tree is displayed under.
-func resolve(t *walk.Tree, f *Facts, home string) defaults {
+func resolve(t *walk.Tree, f *Facts, cx classify.Context) (defaults, []string) {
+	home := cx.Home
 	d := defaults{prefix: "/opt/homebrew", cache: path.Join(home, "Library/Caches/Homebrew")}
 	if f == nil {
 		d.cellar = path.Join(d.prefix, "Cellar")
-		return d
+		return d, nil
 	}
-	at := func(measured string) string { return detect.Rebase(measured, f.Home, home) }
-	d.prefix = detect.Prefer(t, at(f.Prefix), d.prefix)
-	d.cellar = detect.Prefer(t, at(f.Cellar), path.Join(d.prefix, "Cellar"))
-	d.cache = detect.Prefer(t, at(f.Cache), d.cache)
-	return d
+	m := detect.NewMeasure(f.Home, cx)
+	d.prefix = m.At(t, f.Prefix, d.prefix)
+	d.cellar = m.At(t, f.Cellar, path.Join(d.prefix, "Cellar"))
+	d.cache = m.At(t, f.Cache, d.cache)
+	return d, m.Notes
 }
 
 // Classify turns the facts and the tree into claims and the tool rows the
@@ -319,8 +357,8 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 	if home == "" {
 		return nil, detect.Summary{}
 	}
-	d := resolve(t, facts, home)
-	ev := evidence(facts, d)
+	d, rejected := resolve(t, facts, cx)
+	ev := append(evidence(facts, d), rejected...)
 
 	targets := []detect.Target{
 		{
@@ -415,20 +453,28 @@ func kegs(t *walk.Tree, f *Facts, d defaults, ev []string) ([]classify.Claim, []
 	claims, tools := detect.Claims(t, Name, targets)
 
 	// The version directories under a multi-version formula are worth a row
-	// each: the point of flagging the formula is that one of them is dead
-	// weight, and a reader wants to see which and how much.
+	// each: the point of flagging the formula is that one of them may be
+	// dead weight, and a reader wants to see which and how much. Which one
+	// is brew's answer alone: a keg is Regenerable only when `brew cleanup
+	// -n` lists it, because a keg brew would keep (linked, pinned, still
+	// depended on) is not storix's to call reclaimable.
+	removable := removals(f, d)
 	var versionTargets []detect.Target
 	for _, fm := range formulae {
-		for i, v := range sortedVersions(fm.Versions) {
-			current := i == len(fm.Versions)-1
-			note := "superseded keg; `brew cleanup` removes it"
-			reclaim := classify.Regenerable
-			if current {
-				note = "the version in use"
-				reclaim = classify.ToolManaged
+		for _, v := range sortedVersions(fm.Versions) {
+			keg := path.Join(d.cellar, fm.Name, v)
+			current := fm.Linked != "" && v == fm.Linked
+			note := "installed beside another version; `brew cleanup -n` does not list it, so brew is keeping it"
+			reclaim := classify.ToolManaged
+			switch {
+			case current:
+				note = "the linked version, as " + path.Join("opt", fm.Name) + " points at it"
+			case removable[keg]:
+				note = "superseded keg; `brew cleanup -n` lists it for removal"
+				reclaim = classify.Regenerable
 			}
 			versionTargets = append(versionTargets, detect.Target{
-				Path: path.Join(d.cellar, fm.Name, v), Bucket: classify.BucketDeveloper,
+				Path: keg, Bucket: classify.BucketDeveloper,
 				Category: "Homebrew formulae", Owner: fm.Name, OwnerKeys: []string{"cli:" + fm.Name},
 				Reclaim: reclaim, Kind: "versions", Name: fm.Name, Version: v, Current: current,
 				Note: note, Evidence: ev,
@@ -438,6 +484,24 @@ func kegs(t *walk.Tree, f *Facts, d defaults, ev []string) ([]classify.Claim, []
 	}
 	vClaims, vTools := detect.Claims(t, Name, versionTargets)
 	return append(claims, vClaims...), append(tools, vTools...)
+}
+
+// removals are the display paths `brew cleanup -n` would delete.
+func removals(f *Facts, d defaults) map[string]bool {
+	if f == nil {
+		return nil
+	}
+	out := make(map[string]bool, len(f.Cleanup.Removals))
+	for _, r := range f.Cleanup.Removals {
+		p := path.Clean(r.Path)
+		// brew names kegs under the Cellar it reported; the rows are
+		// keyed by the Cellar Classify resolved.
+		if f.Cellar != "" && strings.HasPrefix(p, f.Cellar+"/") {
+			p = path.Join(d.cellar, p[len(f.Cellar)+1:])
+		}
+		out[p] = true
+	}
+	return out
 }
 
 // formulaNames is every formula to claim: the ones brew listed, or, when the
@@ -461,10 +525,10 @@ func formulaNames(t *walk.Tree, f *Facts, d defaults) []string {
 	return names
 }
 
-// sortedVersions orders a formula's versions so the last one is the one brew
-// would keep. Homebrew prints them oldest first in most cases but not all, so
-// they are sorted rather than trusted: "3.50.4 3.51.1" and "1.6.53 1.6.50"
-// both appear in one listing on this machine.
+// sortedVersions orders a formula's versions for display, oldest-looking
+// first. Homebrew prints them oldest first in most cases but not all ("3.50.4
+// 3.51.1" and "1.6.53 1.6.50" both appear in one listing on this machine), so
+// they are sorted; the order decides nothing about which keg is in use.
 func sortedVersions(versions []string) []string {
 	out := append([]string(nil), versions...)
 	sort.SliceStable(out, func(i, j int) bool { return lessVersion(out[i], out[j]) })
@@ -473,8 +537,7 @@ func sortedVersions(versions []string) []string {
 
 // lessVersion compares two version strings the way a person reads them:
 // numeric runs numerically, everything else lexically. It is a heuristic, and
-// it only ever decides which of several installed kegs carries the "current"
-// marker in a table.
+// it only orders rows in a table.
 func lessVersion(a, b string) bool {
 	as, bs := versionFields(a), versionFields(b)
 	for i := 0; i < len(as) && i < len(bs); i++ {

@@ -2,6 +2,7 @@ package homebrew_test
 
 import (
 	"errors"
+	"io/fs"
 	"testing"
 
 	"github.com/asamgx/storix/internal/classify"
@@ -169,12 +170,32 @@ func TestClassifyThisMachine(t *testing.T) {
 	}
 }
 
+// linkedEnv is the fixture environment with <prefix>/opt/<name> answering as
+// brew links it: python@3.13 at its newer keg, glib at its older one.
+func linkedEnv(t *testing.T, f *detecttest.Fixture) detect.Env {
+	t.Helper()
+	env := f.Env(t, "testdata/this-machine.json")
+	links := map[string]string{
+		"/opt/homebrew/opt/python@3.13": "../Cellar/python@3.13/3.13.8",
+		"/opt/homebrew/opt/glib":        "../Cellar/glib/2.86.1",
+	}
+	env.Readlink = func(p string) (string, error) {
+		if target, ok := links[p]; ok {
+			return target, nil
+		}
+		return "", fs.ErrNotExist
+	}
+	return env
+}
+
 // TestSupersededKegIsFlagged is the milestone's per-formula gate: two versions
-// of one formula, the newer marked current and the older marked superseded.
+// of one formula, the one brew links marked current. Nothing is Regenerable
+// here, because this machine's `brew cleanup -n` names no keg: a keg brew
+// would not remove is not storix's to call reclaimable.
 func TestSupersededKegIsFlagged(t *testing.T) {
 	f := tree(t)
 	det := homebrew.New()
-	facts, err := detecttest.Probe(t, det, f.Env(t, "testdata/this-machine.json"))
+	facts, err := detecttest.Probe(t, det, linkedEnv(t, f))
 	if err != nil {
 		t.Fatalf("Probe: %v", err)
 	}
@@ -186,9 +207,9 @@ func TestSupersededKegIsFlagged(t *testing.T) {
 		reclaim classify.Reclaim
 	}{
 		{cellar + "/python@3.13/3.13.8", true, classify.ToolManaged},
-		{cellar + "/python@3.13/3.13.5", false, classify.Regenerable},
-		{cellar + "/glib/2.86.2", true, classify.ToolManaged},
-		{cellar + "/glib/2.86.1", false, classify.Regenerable},
+		{cellar + "/python@3.13/3.13.5", false, classify.ToolManaged},
+		{cellar + "/glib/2.86.1", true, classify.ToolManaged},
+		{cellar + "/glib/2.86.2", false, classify.ToolManaged},
 	} {
 		tool, ok := detecttest.Tool(sum, tc.path)
 		if !ok {
@@ -210,6 +231,43 @@ func TestSupersededKegIsFlagged(t *testing.T) {
 	// choose between.
 	if _, ok := detecttest.Tool(sum, cellar+"/aalib/1.4rc5_2"); ok {
 		t.Error("a single-version formula was given a version row")
+	}
+}
+
+// TestOnlyBrewsRemovalsAreRegenerable: which keg is superseded is brew's
+// answer, not a version sort's. glib is linked at 2.86.1, which sorts below
+// 2.86.2, and brew lists only python's 3.13.5 for removal; the sort would
+// have called glib's linked keg dead weight.
+func TestOnlyBrewsRemovalsAreRegenerable(t *testing.T) {
+	f := tree(t)
+	facts := &homebrew.Facts{
+		Home: home, Prefix: "/opt/homebrew", Cellar: cellar,
+		Formulae: []homebrew.Formula{
+			{Name: "glib", Versions: []string{"2.86.1", "2.86.2"}, Linked: "2.86.1"},
+			{Name: "python@3.13", Versions: []string{"3.13.5", "3.13.8"}, Linked: "3.13.8"},
+		},
+		Cleanup: homebrew.Cleanup{Removals: []homebrew.Removal{
+			{Path: cellar + "/python@3.13/3.13.5", Bytes: 40_000},
+		}},
+	}
+	_, sum := homebrew.New().Classify(f.Tree, facts, f.Context)
+	for p, want := range map[string]classify.Reclaim{
+		cellar + "/glib/2.86.1":        classify.ToolManaged,
+		cellar + "/glib/2.86.2":        classify.ToolManaged,
+		cellar + "/python@3.13/3.13.8": classify.ToolManaged,
+		cellar + "/python@3.13/3.13.5": classify.Regenerable,
+	} {
+		tool, ok := detecttest.Tool(sum, p)
+		if !ok {
+			t.Errorf("no tool row for %s", p)
+			continue
+		}
+		if tool.Reclaim != want {
+			t.Errorf("%s reclaim = %s, want %s", p, tool.Reclaim, want)
+		}
+	}
+	if tool, _ := detecttest.Tool(sum, cellar+"/glib/2.86.1"); !tool.Current {
+		t.Error("glib's linked keg is not marked current")
 	}
 }
 
