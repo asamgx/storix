@@ -219,7 +219,7 @@ func TestDisabledDetectorsDoNotClassify(t *testing.T) {
 	var called atomic.Bool
 	det := &fake{name: "off", classify: func(*walk.Tree, Facts, classify.Context) ([]classify.Claim, Summary) {
 		called.Store(true)
-		return []classify.Claim{{}}, Summary{Tools: []Tool{{Name: "x"}}}
+		return []classify.Claim{{Reclaim: classify.Unknown}}, Summary{Tools: []Tool{{Name: "x", Reclaim: classify.Unknown}}}
 	}}
 	reg := New(det).Disable("off")
 	run := reg.Start(context.Background(), testEnv(), nil)
@@ -250,7 +250,7 @@ func TestDegradedDetectorsStillClassify(t *testing.T) {
 		probe: func(context.Context, Env) (Facts, error) { return nil, Degradedf("the daemon is down") },
 		classify: func(_ *walk.Tree, f Facts, _ classify.Context) ([]classify.Claim, Summary) {
 			gotFacts = f
-			return []classify.Claim{{Bucket: classify.BucketContainers}}, Summary{Tools: []Tool{{Name: "fallback"}}}
+			return []classify.Claim{{Bucket: classify.BucketContainers, Reclaim: classify.Unknown}}, Summary{Tools: []Tool{{Name: "fallback", Reclaim: classify.Unknown}}}
 		},
 	}
 	run := New(det).Start(context.Background(), testEnv(), nil)
@@ -279,7 +279,7 @@ func TestClassifyPanicIsContained(t *testing.T) {
 			panic("classify bug")
 		}}, Status: Status{Name: "bad", State: Ok}},
 		{Detector: &fake{name: "good", classify: func(*walk.Tree, Facts, classify.Context) ([]classify.Claim, Summary) {
-			return []classify.Claim{{Bucket: classify.BucketContainers}}, Summary{}
+			return []classify.Claim{{Bucket: classify.BucketContainers, Reclaim: classify.Unknown}}, Summary{}
 		}}, Status: Status{Name: "good", State: Ok}},
 	}
 	claims, _, statuses := Classify(nil, outs, classify.Context{})
