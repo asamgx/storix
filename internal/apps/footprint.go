@@ -79,10 +79,16 @@ func Footprints(a *Analysis, winners []classify.Claim) []Footprint {
 		byKey[key] = fp
 	}
 
+	byID := ownersByID(a, byKey)
+
 	// A claim can carry several keys for one owner, so each claim is
-	// attributed once: to the first key that names a known owner.
+	// attributed once: to the first key that names a known owner, and only
+	// failing that to an owner one of its keys is an alias of.
 	for _, cl := range winners {
 		fp := firstOwner(byKey, cl.OwnerKeys)
+		if fp == nil {
+			fp = aliasedOwner(byKey, byID, cl.OwnerKeys)
+		}
 		if fp == nil || cl.Node == nil {
 			continue
 		}
@@ -129,6 +135,55 @@ func firstOwner(byKey map[string]*Footprint, keys []string) *Footprint {
 	for _, k := range keys {
 		if fp, ok := byKey[k]; ok {
 			return fp
+		}
+	}
+	return nil
+}
+
+// ownersByID maps each bundle identifier an owner answers to onto its
+// footprint. The first owner in key order wins an identifier two owners share,
+// so the attribution is the same on every run.
+func ownersByID(a *Analysis, byKey map[string]*Footprint) map[string]*Footprint {
+	out := make(map[string]*Footprint)
+	for _, key := range a.OwnerKeys() {
+		for _, id := range a.Owners[key].IDs {
+			if _, taken := out[idKey(id)]; !taken {
+				out[idKey(id)] = byKey[key]
+			}
+		}
+	}
+	return out
+}
+
+// aliasedOwner finds the owner a claim's keys name indirectly.
+//
+// A detector keys its claims the way an installed application is keyed — by
+// bundle id and cask token, "app:com.todesktop.230313mzl4w4u92" and
+// "cask:cursor" — because that is what it knows. Once the application and its
+// cask are gone the owner is keyed by its product slug instead, and a literal
+// match left everything that detector claimed attributed to nobody: 1.76 GB
+// of Cursor's data dropped out of the orphan row that should have offered it.
+// So an "app:" key is looked up among the identifiers each owner answers to
+// and then in the product table, and a "cask:" key through the product that
+// cask installs.
+func aliasedOwner(byKey, byID map[string]*Footprint, keys []string) *Footprint {
+	for _, k := range keys {
+		if id, ok := strings.CutPrefix(k, "app:"); ok {
+			if fp := byID[idKey(id)]; fp != nil {
+				return fp
+			}
+			if p, ok := defaultIndex.LookupID(id); ok {
+				if fp := byKey["product:"+p.Slug]; fp != nil {
+					return fp
+				}
+			}
+		}
+		if token, ok := strings.CutPrefix(k, "cask:"); ok {
+			if p, ok := defaultIndex.LookupCask(token); ok {
+				if fp := byKey["product:"+p.Slug]; fp != nil {
+					return fp
+				}
+			}
 		}
 	}
 	return nil

@@ -767,3 +767,33 @@ func TestCorpusCaskOnlyAndTrash(t *testing.T) {
 		t.Errorf("in-trash owners = %v, want the DynamicLakePro bundle", trash)
 	}
 }
+
+// TestCorpusCasksWithMissingAppsStayCaskOnly pins the three casks whose
+// application was dragged away while Homebrew still lists them. Cask-only is
+// the more useful answer than orphan-likely — it names the command that
+// finishes the uninstall — so none of them may drift into the orphan list
+// while its Caskroom entry is still there.
+func TestCorpusCasksWithMissingAppsStayCaskOnly(t *testing.T) {
+	t.Parallel()
+	c := buildCorpus(t)
+	_, a := c.analyze(t)
+
+	missing := map[string]bool{}
+	for _, ck := range a.CaskOnlyCasks() {
+		missing[ck.Token] = true
+	}
+	for _, token := range []string{"cursor", "devtoys", "mattermost"} {
+		if !missing[token] {
+			t.Errorf("cask %s is not reported as installed with its application missing", token)
+		}
+	}
+	if v := a.Verdicts["cask:cursor"]; v == nil || v.State != StateCaskOnly {
+		t.Errorf("cask:cursor = %v, want cask-only while the cask is installed", v)
+	}
+	for _, key := range a.OwnersInState(StateOrphanLikely) {
+		switch a.Owners[key].Owner.Label {
+		case "Cursor", "DevToys", "Mattermost":
+			t.Errorf("%s (%s) is an orphan while its cask is still installed", a.Owners[key].Owner.Label, key)
+		}
+	}
+}

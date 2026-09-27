@@ -259,3 +259,31 @@ func TestOwnerIndexLookup(t *testing.T) {
 		t.Error("an unknown name should not resolve")
 	}
 }
+
+// TestAnOrphanKeepsTheBytesADetectorClaimedForIt is Cursor after its cask was
+// uninstalled. The ide detector tags ~/.cursor with the keys Cursor has while
+// it is installed — its bundle id and its cask token — and once both are gone
+// the owner is keyed by its product slug instead. Matching keys literally then
+// left 1.76 GB of Cursor's data attributed to nobody, and the orphan row that
+// should have offered it showed 2.5 MB.
+func TestAnOrphanKeepsTheBytesADetectorClaimedForIt(t *testing.T) {
+	t.Parallel()
+	a := analysisWithOwner(
+		Owner{Key: "product:cursor", Kind: KindApp, Label: "Cursor", Slug: "cursor"},
+		Verdict{State: StateOrphanLikely, Confidence: classify.Likely})
+
+	ideKeys := []string{"app:com.todesktop.230313mzl4w4u92", "cask:cursor", "cli:cursor"}
+	fps := Footprints(a, []classify.Claim{
+		winner("/Users/u/Library/Caches/com.todesktop.230313mzl4w4u92", 2<<20, classify.BucketAppData, "Cache", "product:cursor"),
+		winner("/Users/u/.cursor", 1400<<20, classify.BucketDeveloper, "Cursor", ideKeys...),
+		winner("/Users/u/Library/Application Support/Cursor", 357<<20, classify.BucketDeveloper, "Cursor", "cask:cursor"),
+		// A key that names some other product must not join Cursor.
+		winner("/Users/u/.vscode", 900<<20, classify.BucketDeveloper, "VS Code", "app:com.microsoft.VSCode", "cask:visual-studio-code"),
+	})
+	if len(fps) != 1 {
+		t.Fatalf("footprints = %d, want Cursor alone", len(fps))
+	}
+	if got, want := fps[0].Total, int64(1759<<20); got != want {
+		t.Errorf("Cursor total = %d, want %d: the ide detector's claims belong to it", got, want)
+	}
+}
