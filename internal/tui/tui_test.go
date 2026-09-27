@@ -247,8 +247,12 @@ func TestBrowseNavigatesSortsAndFilters(t *testing.T) {
 	press(tm, "s") // back to size
 
 	press(tm, "/")
+	// Wait for the prompt before typing, not for the typed text: the renderer
+	// redraws only what changed, so under load "filter: mov" can arrive as
+	// "filter: mo", a cursor move and "v", and never appear whole. Key presses
+	// reach the program in order, so the prompt is the only sync point needed.
+	waitFor(t, tm, "filter: ")
 	press(tm, "mov")
-	waitFor(t, tm, "filter: mov")
 	press(tm, "enter")
 
 	press(tm, "esc") // clear the filter
