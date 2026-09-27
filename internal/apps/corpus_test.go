@@ -180,19 +180,31 @@ func (c *corpus) replay(t *testing.T) *probe.Replay {
 		"brew --caskroom":                 {Stdout: c.Caskroom + "\n"},
 		"pkgutil --pkgs":                  {Stdout: "com.apple.pkg.CLTools\ncom.autodesk.AutoCAD2027\ncom.paloaltonetworks.globalprotect.pkg\n"},
 		string(lsregisterPath) + " -dump": {Stdout: dump},
-		"mdfind kMDItemContentType == 'com.apple.application-bundle'": {Stdout: ""},
+		// Spotlight knows the applications the directory listing also
+		// finds, which is what a healthy index answers with. An empty
+		// answer is an index that is off, and the probe says so.
+		"mdfind kMDItemContentType == 'com.apple.application-bundle'": {Stdout: c.Root + "/Applications/ChatGPT.app\n" +
+			c.Root + "/Applications/OrbStack.app\n"},
 		"pkgutil --pkg-info com.autodesk.AutoCAD2027": {Stdout: "package-id: com.autodesk.AutoCAD2027\nversion: 26.0.60.161\nvolume: " +
 			c.Root + "/\nlocation: Applications/Autodesk/AutoCAD 2027\ninstall-time: 1779494033\n"},
 		"pkgutil --pkg-info com.paloaltonetworks.globalprotect.pkg": {Stdout: "package-id: com.paloaltonetworks.globalprotect.pkg\n" +
 			"version: 6.3.2-525\nvolume: " + c.Root + "/\nlocation: Applications/GlobalProtect.app\ninstall-time: 1761159020\n"},
 		"pkgutil --files com.paloaltonetworks.globalprotect.pkg": {Stdout: "Applications/GlobalProtect.app\nApplications/GlobalProtect.app/Contents\n"},
 	}
-	// codesign answers for the two bundles whose team id the corpus needs.
+	// codesign answers for every bundle, with a team for the two whose team
+	// id the corpus needs. The rest answer "not set", which is an answer: a
+	// bundle with no record at all would come back as codesign missing,
+	// which is a failure the resolver refuses to cache.
 	teams := map[string]string{
 		"Applications/ChatGPT.app":  "2DC432GLL2",
 		"Applications/OrbStack.app": "HUAQ24HBR6",
 	}
-	for rel, team := range teams {
+	for _, line := range manifestLines(t, "bundles.tsv") {
+		rel, _, _ := strings.Cut(line, "\t")
+		team := teams[rel]
+		if team == "" {
+			team = "not set"
+		}
 		key := "codesign -dv --verbose=4 " + filepath.Join(c.Root, rel)
 		records[key] = probe.Result{Stderr: "Identifier=x\nTeamIdentifier=" + team + "\n"}
 	}

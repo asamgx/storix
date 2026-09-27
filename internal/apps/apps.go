@@ -36,9 +36,10 @@ import (
 // init registers the detector.
 //
 // The order puts apps after the container and developer-tool detectors, so it
-// appears last in the detectors table and probes last. It does not decide
-// precedence: an apps claim carries classify.SourceApps, which loses to any
-// detector claim and beats a catalog rule whatever the registry order is.
+// appears last in the detectors table. It decides nothing else. It is not when
+// the probe runs — every detector's probe goroutine starts together — and it
+// is not precedence: an apps claim carries classify.SourceApps, which loses to
+// any detector claim and beats a catalog rule whatever the registry order is.
 func init() { detect.Register(300, New()) }
 
 // Detector is the apps detector. It satisfies detect.Detector.
@@ -88,11 +89,14 @@ const (
 
 // probeBudget is how long the whole probe may take.
 //
-// The probe is hidden behind the walk, which costs about twenty seconds on a
-// full volume, and it is worth nothing if it outlives it: the registry cancels
-// a detector at [detect.DefaultTimeout] and a cancelled apps probe yields no
-// inventory at all. So the budget is set under both, and every step's own cap
-// is clamped to what is left of it rather than summed on top. A step that
+// The registry gives each detector a budget — [detect.DefaultTimeout] unless
+// the scan started it with one of its own — and cancels a probe that outruns
+// it, and a cancelled apps probe yields no inventory at all. The scan waits
+// for a running probe until that budget is spent however soon the walk
+// finishes, because its grace is a floor under the wait and not a ceiling; so
+// the detector budget is the ceiling that matters, and this one is set under
+// it. Every step's own cap is clamped to what is left of it rather than
+// summed on top. A step that
 // arrives with nothing left records a degradation and does not run, which is
 // the difference between a report that is missing a section and one that
 // quietly asserts the section was empty.
@@ -107,9 +111,27 @@ const minStepBudget = 250 * time.Millisecond
 const lsregisterPath = "/System/Library/Frameworks/CoreServices.framework/" +
 	"Frameworks/LaunchServices.framework/Support/lsregister"
 
+// lsregisterMaxStdout is how much of the LaunchServices dump is kept.
+//
+// The runner's default is eight megabytes and the dump is 21.6 MB on the
+// reference machine, so the default kept its head and dropped every
+// registration in the tail. Sixty-four megabytes is three times the largest
+// dump measured; one that outgrows even that comes back Truncated, which is
+// not OK, and is recorded as a degradation rather than parsed as the whole
+// register.
+const lsregisterMaxStdout = 64 << 20
+
 // maxSpotlightBundles caps the backstop listing, which on an unusual machine
-// could otherwise return thousands of paths.
-const maxSpotlightBundles = 200
+// could otherwise return thousands of paths. An answer longer than the cap is
+// recorded as a degradation, because every hit past it is an installation the
+// verdicts never heard of.
+//
+// The cap has to sit well above an ordinary machine, or the degradation is
+// permanent and no orphan is ever reported. Spotlight answers for the sealed
+// system volume too: the reference machine returns 249 bundles outside the
+// standard directories, 222 of them under /System. Each one costs a stat and
+// an Info.plist read, so a thousand is still a fraction of a second.
+const maxSpotlightBundles = 1000
 
 // maxReceiptFailures is how many consecutive `pkgutil --pkg-info` calls may
 // fail before the receipt loop gives up.
@@ -133,6 +155,11 @@ const (
 	probeCodesign     = "codesign"
 	probeApplications = "applications"
 	probeLaunchd      = "launchd"
+	// probeTeamCache is the team id cache file rather than a command. A
+	// cache that will not read or write costs a codesign run, never a
+	// signature, so it is reported apart from probeCodesign and caps no
+	// verdict.
+	probeTeamCache = "teamid-cache"
 )
 
 // Probe interrogates the machine. It is the only part of this package that
@@ -152,10 +179,11 @@ func (d *Detector) Probe(ctx context.Context, env detect.Env) (detect.Facts, err
 	defer cancel()
 
 	// The order is the order of decreasing tolerance for being cut short.
-	// The Caskroom is read from disk and costs nothing; LaunchServices is
-	// the one command that can take ten seconds and the one whose absence
-	// silently removes installed applications from the inventory, so it
-	// goes early while the budget is untouched. The receipt loop is last
+	// The Caskroom is one `brew --caskroom`, capped at brewTimeout, and then
+	// a read from disk; LaunchServices is the slowest command, capped at
+	// lsregisterTimeout and measured at 11.6 s under a busy disk, and the
+	// one whose absence silently removes installed applications from the
+	// inventory, so it goes early while the budget is untouched. The receipt loop is last
 	// among the slow ones because a receipt that was not read is a keep
 	// signal that was not found, which degrade() records and the verdicts
 	// then refuse to call an orphan.
@@ -262,6 +290,20 @@ type prober struct {
 // the analysis, the cache and the report.
 func (p *prober) display(full string) string { return mac.DisplayPath(full) }
 
+// factPaths is where the scan is rooted, in the coordinates the Facts use.
+//
+// p.paths is for reading the disk and is rooted wherever the scan was: a real
+// scan is handed a home of "/System/Volumes/Data/Users/<u>", so its root is
+// the data volume. Every path in the Facts has been through display, which
+// strips that prefix. A question that compares a recorded path against the
+// root — is this Spotlight hit on this volume, is this bundle in
+// ~/Applications — therefore has to ask it of these Paths, or it compares a
+// display path with a data-volume one and answers no for every path there is.
+func (p *prober) factPaths() Paths {
+	home := p.display(p.paths.Home)
+	return Paths{Root: volumeRootOf(home), Home: home, User: p.paths.User}
+}
+
 // check asks whether a path is there, in the form the facts record.
 //
 // The second result is empty when the answer is known either way, and carries
@@ -341,18 +383,30 @@ func (p *prober) readDir(dir string) ([]string, error) {
 // receipt. No "brew list" and no "brew info" are run; the receipts on disk
 // say everything those commands would, and reading them cannot touch the
 // network.
+//
+// No Caskroom is an answer, not a failure, when nothing could be hiding one:
+// Homebrew is not installed, or it is and has never installed a cask. Calling
+// that degraded put brew on the degraded list of every such machine, and since
+// brew is one of the orphan probes, no orphan could ever be reported there.
+// The failures are the cases where casks may exist that nobody read: brew ran
+// and did not answer, or a Caskroom that is there would not list.
 func (p *prober) casks(ctx context.Context) {
-	dir := p.caskroomDir(ctx)
+	dir, failure := p.caskroomDir(ctx)
+	if failure != "" {
+		p.degrade(probeBrew, failure)
+		return
+	}
 	if dir == "" {
-		p.degrade(probeBrew, "no Caskroom directory found")
+		return
+	}
+	tokens, err := p.readDir(dir)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			p.degrade(probeBrew, "listing "+dir+": "+err.Error())
+		}
 		return
 	}
 	p.f.CaskroomDir = p.display(dir)
-	tokens, err := p.readDir(dir)
-	if err != nil {
-		p.degrade(probeBrew, "listing "+dir+": "+err.Error())
-		return
-	}
 	sort.Strings(tokens)
 	for _, token := range tokens {
 		if strings.HasPrefix(token, ".") || IsFontCask(token) {
@@ -377,11 +431,15 @@ func (p *prober) casks(ctx context.Context) {
 
 // caskroomDir asks Homebrew where the Caskroom is, falling back to the two
 // standard locations so a machine whose brew is broken still gets its casks.
-func (p *prober) caskroomDir(ctx context.Context) string {
+//
+// An empty dir with an empty failure means there is no Caskroom to read. A
+// failure means there may be one this probe could not find: brew ran and did
+// not answer, and neither standard location exists, so a Homebrew installed
+// under a custom prefix would go unread.
+func (p *prober) caskroomDir(ctx context.Context) (dir, failure string) {
 	budget, ok := p.within(ctx, brewTimeout)
 	if !ok {
-		p.outOfTime(probeBrew)
-		return ""
+		return "", "the apps probe used its " + probeBudget.String() + " budget before this ran"
 	}
 	res := p.env.Runner.Run(ctx, probe.Cmd{
 		Name:    "brew",
@@ -391,15 +449,21 @@ func (p *prober) caskroomDir(ctx context.Context) string {
 	})
 	if res.OK() {
 		if dir := strings.TrimSpace(res.Stdout); dir != "" {
-			return dir
+			return dir, ""
 		}
 	}
 	for _, dir := range []string{"/opt/homebrew/Caskroom", "/usr/local/Caskroom"} {
 		if anchored := p.paths.Resolve(dir); p.env.Exists(anchored) {
-			return anchored
+			return anchored, ""
 		}
 	}
-	return ""
+	if res.Missing {
+		return "", ""
+	}
+	if res.OK() {
+		return "", "brew --caskroom printed nothing and no Caskroom was found at the standard locations"
+	}
+	return "", "brew --caskroom: " + res.Reason() + ", and no Caskroom was found at the standard locations"
 }
 
 // receipts reads the installer package database. Apple's own receipts are
@@ -504,7 +568,10 @@ func (p *prober) registry(ctx context.Context) {
 	}
 	res := p.env.Runner.Run(ctx, probe.Cmd{
 		Name: lsregisterPath, Args: []string{"-dump"}, Timeout: budget,
+		MaxStdout: lsregisterMaxStdout,
 	})
+	// A truncated dump is not OK: the registrations it dropped are
+	// identifiers nobody learned, which is a keep signal lost.
 	if !res.OK() {
 		p.degrade(probeLSRegister, res.Reason())
 		return
@@ -548,16 +615,24 @@ func (p *prober) launchItems() {
 			if !strings.HasSuffix(name, ".plist") {
 				continue
 			}
+			// A plist that will not read or decode is still recorded,
+			// with the reason in CheckErr: it is a job definition for
+			// something, and whether that something still runs is
+			// exactly what nobody found out.
 			full := filepath.Join(d.path, name)
 			data, readErr := p.env.ReadFile(full)
 			if readErr != nil {
 				p.f.LaunchItems = append(p.f.LaunchItems, LaunchItem{
 					Path: p.display(full), Label: strings.TrimSuffix(name, ".plist"), System: d.system,
+					CheckErr: UncheckedNote(full, readErr),
 				})
 				continue
 			}
-			item, _ := ParseLaunchPlist(p.display(full), data, d.system)
-			if item.Program != "" {
+			item, parseErr := ParseLaunchPlist(p.display(full), data, d.system)
+			switch {
+			case parseErr != nil:
+				item.CheckErr = "could not parse " + full + ": " + parseErr.Error()
+			case item.Program != "":
 				item.ProgramExists, item.CheckErr = p.check(p.paths.Resolve(item.Program))
 			}
 			p.f.LaunchItems = append(p.f.LaunchItems, item)
@@ -643,10 +718,10 @@ func (p *prober) readBundlesIn(dir string, depth int, seen map[string]bool) {
 		if statErr != nil || !fi.IsDir {
 			continue
 		}
-		if seen[full] {
+		if seen[p.display(full)] {
 			continue
 		}
-		seen[full] = true
+		seen[p.display(full)] = true
 		p.f.AppDirBundles = append(p.f.AppDirBundles, p.readBundle(full))
 	}
 }
@@ -669,7 +744,10 @@ func (p *prober) readBundle(bundlePath string) BundleInfo {
 
 // spotlight finds bundles outside the standard directories, so that an
 // application installed by JetBrains Toolbox or dragged to the Desktop is
-// known to exist. Without it those would look like orphans.
+// known to exist. Without it those would look like orphans, which is why
+// mdfind is one of the orphan probes: a search that failed, came back empty
+// or was cut at the cap is recorded as a degradation, and a degradation keeps
+// every orphan verdict at unknown.
 func (p *prober) spotlight(ctx context.Context, seen map[string]bool) {
 	budget, ok := p.within(ctx, mdfindTimeout)
 	if !ok {
@@ -685,10 +763,25 @@ func (p *prober) spotlight(ctx context.Context, seen map[string]bool) {
 		p.degrade(probeSpotlight, res.Reason())
 		return
 	}
+	// Every Mac has applications, Safari among them, so an empty answer is
+	// not a machine with none: it is an index that is off or still being
+	// built, which is a search that was not done.
+	if strings.TrimSpace(res.Stdout) == "" {
+		p.degrade(probeSpotlight, "mdfind found no applications at all; Spotlight indexing may be off")
+		return
+	}
 	count := 0
+	onVolume := p.factPaths()
 	for _, line := range strings.Split(res.Stdout, "\n") {
 		full := strings.TrimSpace(line)
-		if full == "" || seen[full] || NestedInBundle(path.Dir(full)) {
+		if full == "" || NestedInBundle(path.Dir(full)) {
+			continue
+		}
+		// mdfind answers in whichever form the index holds, and the
+		// directory listing records what it read in display form, so the
+		// two are compared there.
+		display := p.display(full)
+		if seen[display] {
 			continue
 		}
 		// Spotlight indexes every mounted volume, so a Time Machine disk
@@ -696,7 +789,7 @@ func (p *prober) spotlight(ctx context.Context, seen map[string]bool) {
 		// holds. A copy on another volume is not this volume's
 		// installation, and counting one as such is how an application
 		// deleted from this disk keeps looking installed.
-		if !p.paths.OnVolume(p.display(full)) {
+		if !onVolume.OnVolume(display) {
 			continue
 		}
 		// The index also outlives what it indexed. A hit that is
@@ -706,11 +799,14 @@ func (p *prober) spotlight(ctx context.Context, seen map[string]bool) {
 		if exists, err := p.env.Lookup(full); err == nil && !exists {
 			continue
 		}
-		seen[full] = true
-		p.f.Spotlight = append(p.f.Spotlight, p.readBundle(full))
-		if count++; count >= maxSpotlightBundles {
+		if count >= maxSpotlightBundles {
+			p.degrade(probeSpotlight, "more than "+itoa(maxSpotlightBundles)+
+				" applications outside the standard directories; the rest were not read")
 			return
 		}
+		count++
+		seen[display] = true
+		p.f.Spotlight = append(p.f.Spotlight, p.readBundle(full))
 	}
 }
 
@@ -740,16 +836,32 @@ func (p *prober) teamIDs(ctx context.Context) {
 		cachePath = DefaultTeamCachePath()
 	}
 	r := NewTeamResolver(p.env.Runner, cachePath)
-	_ = r.Load()
+	if err := r.Load(); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		p.degrade(probeTeamCache, "reading the team id cache: "+err.Error())
+	}
+	// With the budget spent the cached answers are still worth having, so
+	// the resolver runs without a runner: it fills in what the cache knows
+	// and asks codesign nothing.
+	if _, ok := p.within(ctx, probe.DefaultTimeout); !ok {
+		p.outOfTime(probeCodesign)
+		r.Runner = nil
+	}
 
-	inv := BuildInventory(nil, p.f, p.paths)
+	inv := BuildInventory(nil, p.f, p.factPaths())
 	r.Resolve(ctx, inv.InstalledBundles())
 	if err := r.Save(); err != nil {
-		p.degrade(probeCodesign, "writing the team id cache: "+err.Error())
+		p.degrade(probeTeamCache, "writing the team id cache: "+err.Error())
 	}
 	p.f.TeamIDs = r.Cache()
 	p.f.CodesignCalls = r.Calls()
-	if len(p.f.TeamIDs) == 0 {
+	// The failures are this scan's own. Whether the cache is empty says
+	// nothing about this run: a cache holding one earlier answer is never
+	// empty, and a codesign that failed for every bundle today would have
+	// been reported as a clean run.
+	switch n, first := r.Failures(); {
+	case n > 0:
+		p.degrade(probeCodesign, itoa(n)+" signatures could not be read; "+first)
+	case len(p.f.TeamIDs) == 0:
 		p.degrade(probeCodesign, "no signatures could be read")
 	}
 }

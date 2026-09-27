@@ -108,16 +108,16 @@ func TestVerdictLiveLaunchItemBlocksOrphan(t *testing.T) {
 	}
 }
 
-// TestVerdictDeadLaunchItemIsNotAKeepSignal is the keystone case. An item
-// whose program cannot be determined, or points at something that is gone,
-// must not protect an orphan: treating "I could not tell" as "it is alive"
-// would suppress every real orphan on a machine with stale launch agents.
+// TestVerdictDeadLaunchItemIsNotAKeepSignal is the stale launch agent. An item
+// that points at a program known to be gone must not protect an orphan: it is
+// the residue of the same uninstall. An item whose program could not be
+// determined is a different case — unknown rather than gone — and
+// TestALaunchItemWithNoProgramIsUnchecked covers it.
 func TestVerdictDeadLaunchItemIsNotAKeepSignal(t *testing.T) {
 	t.Parallel()
 	vf := newVerdictFixture(t, "Users/andrewsam/Library/Application Support/dev.warp.Warp-Stable")
 
 	a := vf.analyze(t, &Facts{LaunchItems: []LaunchItem{
-		{Path: "/Library/LaunchAgents/dev.warp.Warp-Stable.plist", Label: "dev.warp.Warp-Stable"},
 		{Path: "/Library/LaunchAgents/dev.warp.other.plist", Label: "dev.warp.other",
 			Program: "/gone/binary", ProgramExists: false},
 	}}, Options{})

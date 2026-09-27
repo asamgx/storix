@@ -42,6 +42,10 @@ type TeamResolver struct {
 	// calls counts codesign invocations, which the acceptance test reads
 	// to prove the second scan ran none.
 	calls int
+	// failed counts the invocations that said nothing about the signature,
+	// and firstFailure describes the first of them.
+	failed       int
+	firstFailure string
 }
 
 // teamCacheDoc is the on-disk form: a version and the map, so a future change
@@ -52,7 +56,11 @@ type teamCacheDoc struct {
 }
 
 // teamCacheVersion is the current cache format.
-const teamCacheVersion = 1
+//
+// Version 1 cached whatever codesign printed, a timeout included, as an empty
+// team id that was never asked about again. Version 2 caches definite answers
+// only, and moving to it discards those poisoned entries once.
+const teamCacheVersion = 2
 
 // DefaultTeamCachePath is where the team id cache lives. Under sudo it is the
 // invoking user's Application Support rather than root's, so the file stays
@@ -70,8 +78,10 @@ func NewTeamResolver(runner probe.Runner, path string) *TeamResolver {
 	return &TeamResolver{Runner: runner, Path: path, cache: make(map[string]string)}
 }
 
-// Load reads the cache file. A missing or unreadable file is not an error:
-// the cache is an optimisation, and starting cold costs a second once.
+// Load reads the cache file. Whatever goes wrong, the resolver is left usable
+// and cold: the cache is an optimisation, and starting cold costs a second
+// once. The error is still returned, so a caller can tell a first scan (a file
+// that does not exist) from a cache that would not read.
 //
 // The path is lstat'd first, so a symlink planted where the cache lives is
 // refused rather than followed. It is the same rule the sanctioned reader in
@@ -210,8 +220,10 @@ func chownToInvoker(path string) error {
 // grouped by team.
 //
 // Only bundles missing from the cache cost a codesign run, and the runs are
-// bounded by Parallel. A bundle whose signature cannot be read gets an empty
-// team id, cached as empty so an unsigned bundle is asked about once.
+// bounded by Parallel. A bundle codesign reports as unsigned, or as signed
+// with no team, gets an empty team id, cached so it is asked about once. A run
+// that said nothing about the signature — missing, timed out, cancelled — is
+// not an answer, is not cached, and is counted in Failures instead.
 func (r *TeamResolver) Resolve(ctx context.Context, bundles []*Bundle) map[string][]*Bundle {
 	todo := r.pending(bundles)
 	if len(todo) > 0 && r.Runner != nil {
@@ -271,19 +283,64 @@ func (r *TeamResolver) run(ctx context.Context, todo []*Bundle) {
 				Name: "codesign",
 				Args: []string{"-dv", "--verbose=4", b.Path},
 			})
-			// codesign writes its report to stderr and exits non-zero
-			// for an unsigned bundle, so both streams are read and a
-			// non-zero exit is not by itself a failure.
-			team := ParseCodesignTeamID(res.Stderr + "\n" + res.Stdout)
+			team, definite := codesignAnswer(res)
 
 			r.mu.Lock()
+			defer r.mu.Unlock()
 			r.calls++
+			if !definite {
+				// Caching this would make the failure permanent: the
+				// bundle would never be asked about again, and every
+				// scan after would read "no team" as the answer.
+				r.failed++
+				if r.firstFailure == "" {
+					r.firstFailure = b.Path + ": " + codesignFailure(res)
+				}
+				return
+			}
 			r.cache[teamCacheKey(b.BundleInfo)] = team
 			r.dirty = true
-			r.mu.Unlock()
 		}(b)
 	}
 	wg.Wait()
+}
+
+// codesignAnswer reads one codesign run.
+//
+// codesign writes its report to stderr and exits non-zero for an unsigned
+// bundle, so both streams are read and a non-zero exit is not by itself a
+// failure. What makes a run an answer is that it said something about the
+// signature: a TeamIdentifier line, or the statement that there is no
+// signature at all. A run that was missing, timed out, was cancelled or
+// printed neither is not one, and definite is false.
+func codesignAnswer(res probe.Result) (team string, definite bool) {
+	if res.Missing || res.TimedOut || res.Err != nil {
+		return "", false
+	}
+	out := res.Stderr + "\n" + res.Stdout
+	if team := ParseCodesignTeamID(out); team != "" {
+		return team, true
+	}
+	if strings.Contains(out, "TeamIdentifier=") || strings.Contains(out, "code object is not signed at all") {
+		return "", true
+	}
+	return "", false
+}
+
+// codesignFailure describes a run codesignAnswer did not accept.
+func codesignFailure(res probe.Result) string {
+	if reason := res.Reason(); reason != "" {
+		return reason
+	}
+	return "codesign printed no TeamIdentifier"
+}
+
+// Failures is how many codesign runs said nothing about the signature, and
+// what went wrong with the first of them.
+func (r *TeamResolver) Failures() (int, string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.failed, r.firstFailure
 }
 
 // Calls is how many times codesign was invoked, which the acceptance test

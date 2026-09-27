@@ -345,17 +345,74 @@ func TestADegradedProbeCannotProduceAnOrphan(t *testing.T) {
 		t.Errorf("evidence = %v, want it to name the probe that did not answer", v.Evidence)
 	}
 
-	// Nothing at all may be called an orphan on this run, because the same
-	// search failed for every owner.
-	if orphans := a.OwnersInState(StateOrphanLikely); len(orphans) != 0 {
-		t.Errorf("orphans = %v, want none while the evidence is incomplete", orphans)
+	// Nothing at all may be offered for deletion on this run, because the
+	// same search failed for every owner. That covers every reclaimable
+	// state, not only orphan-likely: a cask-only or in-trash verdict is
+	// tagged Orphaned by the claims exactly as an orphan is, and the missing
+	// receipt is as much a missing keep signal for one as for the other.
+	for _, s := range reclaimableStates {
+		if got := a.OwnersInState(s); len(got) != 0 {
+			t.Errorf("%v owners = %v, want none while the evidence is incomplete", s, got)
+		}
 	}
 
-	// The same corpus with pkgutil answering still finds the orphan, so the
-	// cap is the degradation and not the analysis giving up.
+	// The same corpus with pkgutil answering still finds every one of them,
+	// so the cap is the degradation and not the analysis giving up.
 	_, healthy := c.analyze(t)
 	if got := verdictByLabel(t, healthy, "GlobalProtect").State; got != StateOrphanLikely {
 		t.Errorf("GlobalProtect with pkgutil answering = %v, want orphan-likely", got)
+	}
+	for _, s := range reclaimableStates {
+		if len(healthy.OwnersInState(s)) == 0 {
+			t.Errorf("no %v owners with pkgutil answering; the corpus no longer exercises that state", s)
+		}
+	}
+}
+
+// reclaimableStates are the states State.Reclaimable accepts, which is the
+// set every fail-safe assertion has to cover.
+var reclaimableStates = []State{StateOrphanLikely, StateCaskOnly, StateInTrash}
+
+// TestARecentlyWrittenCaskOnlyOwnerIsNotReclaimable is the keep signal applied
+// to the state that used to skip it. Cursor's cask is still installed and its
+// application is gone, but data written moments ago is data something is still
+// writing, and a cask-only verdict offers it for deletion just as an orphan
+// verdict would.
+func TestARecentlyWrittenCaskOnlyOwnerIsNotReclaimable(t *testing.T) {
+	t.Parallel()
+	c := buildCorpus(t)
+	d := c.detector(t)
+	raw, _ := d.Probe(context.Background(), c.env(t))
+	facts, ok := raw.(*Facts)
+	if !ok {
+		t.Fatalf("Probe returned %T", raw)
+	}
+	opts := d.Opts
+	opts.CodesignAvailable = true
+
+	// A year on, the fixture's data is old and the cask-only verdict stands.
+	opts.Now = time.Now().Add(365 * 24 * time.Hour)
+	if v := Analyze(c.walk(t), facts, contextFor(c), opts).Verdicts["cask:cursor"]; v == nil || v.State != StateCaskOnly {
+		t.Fatalf("cask:cursor a year on = %v, want cask-only", v)
+	}
+
+	// Today, the fixture was written moments ago.
+	opts.Now = time.Now()
+	a := Analyze(c.walk(t), facts, contextFor(c), opts)
+	v := a.Verdicts["cask:cursor"]
+	if v == nil {
+		t.Fatal("cask:cursor has no verdict")
+	}
+	if v.State.Reclaimable() {
+		t.Errorf("cask:cursor state = %v, want a recent write to keep it off the reclaimable list", v.State)
+	}
+	if !strings.Contains(strings.Join(v.Keep, " "), "written") {
+		t.Errorf("keep signals = %v, want the recent write", v.Keep)
+	}
+	for _, s := range reclaimableStates {
+		if got := a.OwnersInState(s); len(got) != 0 {
+			t.Errorf("%v owners = %v, want none when every directory was just written", s, got)
+		}
 	}
 }
 

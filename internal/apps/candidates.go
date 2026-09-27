@@ -80,7 +80,8 @@ type Options struct {
 	// DefaultRecentWindow.
 	RecentWindow time.Duration
 	// Now is the clock the keep signals compare against. The zero value
-	// means time.Now, and a test sets it so a verdict is reproducible.
+	// falls back to the tree's finish time, and to time.Now only for a tree
+	// that carries no clock; a test sets it so a verdict is reproducible.
 	Now time.Time
 	// TuningLog receives one line per unknown owner over TuningThreshold:
 	// the owner key, its bytes and its first path. It is nil by default,

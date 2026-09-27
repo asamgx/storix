@@ -13,10 +13,10 @@ import (
 // A launch item whose program still exists is a keep signal: something on
 // this machine is still configured to run, so the software behind it is not
 // gone however absent its bundle is. An item whose program cannot be
-// determined is deliberately not a keep signal. Google's keystone agent plist
-// names neither Program nor ProgramArguments in the form a naive parse
-// expects, and treating "I could not tell" as "it is alive" would suppress
-// real orphans.
+// determined — Google's keystone agent plist names neither Program nor
+// ProgramArguments in the form a naive parse expects — is not a keep signal,
+// because "I could not tell" is not "it is alive". It is not evidence of
+// absence either, so an owner it belongs to is unknown rather than orphaned.
 type LaunchItem struct {
 	// Path is the display path of the plist.
 	Path string `json:"path"`

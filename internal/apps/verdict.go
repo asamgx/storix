@@ -109,6 +109,60 @@ func (a *Analysis) verdicts(opts Options) {
 // telling someone that data belongs to software they still use is a way to
 // lose their trust in every other line of the report.
 func (a *Analysis) verdictFor(o *OwnerResult, now time.Time, window time.Duration) *Verdict {
+	return a.settle(o, a.decide(o, now, window), now, window)
+}
+
+// settle is the step every verdict leaves through, and the only place a
+// reclaimable verdict is allowed to stand.
+//
+// A reclaimable state is a claim that the software is gone, whichever branch
+// of [Analysis.decide] reached it: cask-only and in-trash are tagged Orphaned
+// by the claims exactly as orphan-likely is. So all three answer to the same
+// two guards — a keep signal, and evidence a degraded probe or an unreadable
+// path left ungathered — and either one turns the verdict into something that
+// is not offered for deletion. Keying the guard on the state rather than on
+// the branch is what stops a new early return from skipping it.
+func (a *Analysis) settle(o *OwnerResult, v *Verdict, now time.Time, window time.Duration) *Verdict {
+	if !v.State.Reclaimable() {
+		return v
+	}
+	if keep := a.keepSignals(o, now, window); len(keep) > 0 {
+		v.Keep = keep
+		a.applyKeep(o, v, now)
+		return v
+	}
+	// A reclaimable verdict is a claim about what is *not* on the machine,
+	// so it is only as good as the search behind it. When the probes that
+	// would have found the software could not run, or when a path that
+	// would have been a keep signal could not be stat'd, the honest answer
+	// is that nothing is known — not that the software is gone.
+	if gaps := a.incompleteEvidence(o); len(gaps) > 0 {
+		v.State, v.Confidence = StateUnknown, classify.UnknownOwner
+		v.Evidence = append(v.Evidence, gaps...)
+	}
+	return v
+}
+
+// applyKeep turns a verdict with keep signals into the state they support: a
+// launch item or receipt that is still live says the software is installed,
+// and a recent write alone says nothing can be concluded.
+func (a *Analysis) applyKeep(o *OwnerResult, v *Verdict, now time.Time) {
+	switch {
+	case a.hasLiveLaunchItem(o):
+		v.State, v.Confidence = StateInstalled, classify.Likely
+		v.Evidence = append(v.Evidence, "a launch item for "+o.Owner.Label+" is still configured to run")
+	case a.hasLiveReceipt(o):
+		v.State, v.Confidence = StateInstalled, classify.Likely
+		v.Evidence = append(v.Evidence, "an installer receipt for "+o.Owner.Label+" still points at an existing location")
+	default:
+		v.State, v.Confidence = StateUnknown, classify.UnknownOwner
+		v.Evidence = append(v.Evidence,
+			"no installed application, but the directory was written "+humanAge(o.LastTouch, now)+" ago")
+	}
+}
+
+// decide reaches the owner's state before [Analysis.settle] checks it.
+func (a *Analysis) decide(o *OwnerResult, now time.Time, window time.Duration) *Verdict {
 	v := &Verdict{LastWrite: a.lastWrite(o)}
 
 	switch o.Owner.Kind {
@@ -175,18 +229,7 @@ func (a *Analysis) verdictFor(o *OwnerResult, now time.Time, window time.Duratio
 	// or not it changes the verdict.
 	v.Keep = a.keepSignals(o, now, window)
 	if len(v.Keep) > 0 {
-		switch {
-		case a.hasLiveLaunchItem(o):
-			v.State, v.Confidence = StateInstalled, classify.Likely
-			v.Evidence = append(v.Evidence, "a launch item for "+o.Owner.Label+" is still configured to run")
-		case a.hasLiveReceipt(o):
-			v.State, v.Confidence = StateInstalled, classify.Likely
-			v.Evidence = append(v.Evidence, "an installer receipt for "+o.Owner.Label+" still points at an existing location")
-		default:
-			v.State, v.Confidence = StateUnknown, classify.UnknownOwner
-			v.Evidence = append(v.Evidence,
-				"no application bundle, but the directory was written "+humanAge(o.LastTouch, now)+" ago")
-		}
+		a.applyKeep(o, v, now)
 		return v
 	}
 
@@ -213,24 +256,19 @@ func (a *Analysis) verdictFor(o *OwnerResult, now time.Time, window time.Duratio
 	}
 
 	v.Confidence, v.Evidence = a.orphanConfidence(o, v.Evidence)
-	// An orphan verdict is a claim about what is *not* on the machine, so it
-	// is only as good as the search behind it. When the probes that would
-	// have found the software could not run, or when a path that would have
-	// been a keep signal could not be stat'd, the honest answer is that
-	// nothing is known — not that the software is gone.
-	if gaps := a.incompleteEvidence(o); len(gaps) > 0 {
-		v.State, v.Confidence = StateUnknown, classify.UnknownOwner
-		v.Evidence = append(v.Evidence, gaps...)
-	}
 	return v
 }
 
 // orphanProbes are the probes whose failure leaves an orphan verdict without
 // the evidence that would have contradicted it: the casks that name an
 // application, the installer receipts and the launch items that show something
-// is still configured to run, the LaunchServices register, and the listing of
-// the directories an application is installed in. Lose any of those and the
-// search an orphan verdict claims to have done was not done.
+// is still configured to run, the LaunchServices register, the listing of
+// the directories an application is installed in, and the Spotlight search for
+// the ones installed anywhere else. Lose any of those and the search an orphan
+// verdict claims to have done was not done.
+//
+// codesign is not here because it matters to one kind of owner only; see
+// [Analysis.namedByTeam].
 //
 // LaunchServices earns its place through the inventory rather than through the
 // verdict. Its most visible use points the other way — a registration at a
@@ -246,6 +284,7 @@ var orphanProbes = map[string]bool{
 	probeLSRegister:   true,
 	probeApplications: true,
 	probeLaunchd:      true,
+	probeSpotlight:    true,
 }
 
 // incompleteEvidence lists the reasons an orphan verdict cannot be reached for
@@ -259,11 +298,32 @@ var orphanProbes = map[string]bool{
 func (a *Analysis) incompleteEvidence(o *OwnerResult) []string {
 	var out []string
 	for _, deg := range a.Inventory.Degraded {
-		if orphanProbes[deg.Probe] {
+		if orphanProbes[deg.Probe] || (deg.Probe == probeCodesign && a.namedByTeam(o)) {
 			out = append(out, "orphan evidence incomplete: "+deg.Probe+" "+deg.Reason)
 		}
 	}
 	return append(out, a.uncheckedFor(o)...)
+}
+
+// namedByTeam reports whether any of the owner's directories is a group
+// container namespaced by a team id.
+//
+// Such a directory is attributed through the signature of the installed
+// application that team signed, so when codesign could not read signatures
+// the one search that could have found its application was not done. Every
+// other owner is found by identifier and name, which codesign has no part in,
+// and a failed signature read says nothing about them.
+func (a *Analysis) namedByTeam(o *OwnerResult) bool {
+	for _, i := range o.Members {
+		c := a.Candidates[i]
+		if c.Loc.Key != KeyGroupContainer {
+			continue
+		}
+		if _, _, ok := TeamIDPrefix(c.Name); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // uncheckedFor lists the owner's own paths that could not be stat'd.
@@ -273,17 +333,27 @@ func (a *Analysis) incompleteEvidence(o *OwnerResult) []string {
 // receipt whose install location could not be checked might point at a
 // directory that is still there. Reading either as absence is how a machine
 // without Full Disk Access reports its installed software as orphaned.
+//
+// A launch item whose plist would not decode, or that names no program this
+// parser understands, is the same gap: it is a job definition for the owner,
+// and whether its program still exists is unknown rather than known to be no.
 func (a *Analysis) uncheckedFor(o *OwnerResult) []string {
 	var out []string
 	for _, item := range a.Inventory.LaunchItems {
-		if item.CheckErr == "" {
+		if item.CheckErr == "" && item.Program != "" {
 			continue
 		}
 		for _, id := range o.IDs {
-			if item.Owns(id) {
-				out = append(out, item.CheckErr)
-				break
+			if !item.Owns(id) {
+				continue
 			}
+			if item.CheckErr != "" {
+				out = append(out, item.CheckErr)
+			} else {
+				out = append(out, "launch item "+item.Label+" at "+item.Path+
+					" names no program this parser understands, so whether it still runs is unknown")
+			}
+			break
 		}
 	}
 	for _, rec := range a.Inventory.Receipts {
