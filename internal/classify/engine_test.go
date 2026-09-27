@@ -206,9 +206,12 @@ func TestEngineCodeRoots(t *testing.T) {
 		category string
 		reclaim  Reclaim
 	}{
-		"/Users/andrew/code/mochi":              {BucketDeveloper, "Project source", UserData},
-		"/Users/andrew/code/mochi/main.go":      {BucketDeveloper, "Project source", UserData},
-		"/Users/andrew/code/mochi/node_modules": {BucketDeveloper, "Build artifacts", Regenerable},
+		"/Users/andrew/code/mochi":         {BucketDeveloper, "Project source", UserData},
+		"/Users/andrew/code/mochi/main.go": {BucketDeveloper, "Project source", UserData},
+		// The catalog alone never calls a build directory reclaimable:
+		// only the projects detector, which checks the evidence beside
+		// it, can. Without that detector node_modules is the project's.
+		"/Users/andrew/code/mochi/node_modules": {BucketDeveloper, "Project source", UserData},
 		"/Users/andrew/code/mochi/.git":         {BucketDeveloper, "Repo history", UserData},
 	}
 	for p, want := range cases {
@@ -219,6 +222,33 @@ func TestEngineCodeRoots(t *testing.T) {
 		if cl.Owner != "mochi" && p != "/Users/andrew/code" {
 			t.Errorf("%s: owner = %q, want mochi", p, cl.Owner)
 		}
+	}
+}
+
+// TestCatalogNeverCallsABuildDirectoryReclaimableByName: the code-root rules
+// used to mark {project}/build, dist, target, .venv, .next, .turbo and
+// node_modules regenerable on the name alone, so ~/code/notaproject/build,
+// with no manifest to say a build tool made it, was offered for deletion.
+// The projects detector overrides the name where it finds the evidence; with
+// no detector claim, the directory is the project's source, and kept.
+func TestCatalogNeverCallsABuildDirectoryReclaimableByName(t *testing.T) {
+	f := testutil.New(t)
+	names := []string{"build", "dist", "target", ".venv", ".next", ".turbo", "node_modules"}
+	for _, name := range names {
+		f.File("Users/andrew/code/notaproject/"+name+"/output.bin", 100_000)
+	}
+
+	tree := fixtureTree(t, f)
+	c := run(t, nil, tree)
+	for _, name := range names {
+		p := "/Users/andrew/code/notaproject/" + name
+		cl := claimAt(t, c, tree, p)
+		if cl.Reclaim != UserData || cl.Category != "Project source" {
+			t.Errorf("%s: got %s/%s/%s, want Project source kept as user data", p, cl.Bucket, cl.Category, cl.Reclaim)
+		}
+	}
+	if got := c.Buckets[BucketDeveloper].Reclaimable(); got != 0 {
+		t.Errorf("the catalog alone made %d bytes of a code root reclaimable", got)
 	}
 }
 
@@ -501,13 +531,14 @@ func TestRunRejectsUnusableExtraClaims(t *testing.T) {
 	n := node(t, tree, "/Users/andrew/Library/Application Support/Code")
 	src := Source{Kind: SourceDetector, ID: "ide", Detector: "ide"}
 	c := run(t, nil, tree,
-		Claim{Node: n, Owner: "no bucket at all", Source: src},
-		Claim{Node: n, Bucket: Bucket(99), Owner: "a bucket past the end", Source: src},
-		Claim{Node: nil, Bucket: BucketDeveloper, Owner: "a path the walk never retained", Source: src},
+		Claim{Node: n, Owner: "no bucket at all", Reclaim: Unknown, Source: src},
+		Claim{Node: n, Bucket: Bucket(99), Owner: "a bucket past the end", Reclaim: Unknown, Source: src},
+		Claim{Node: nil, Bucket: BucketDeveloper, Owner: "a path the walk never retained", Reclaim: Unknown, Source: src},
+		Claim{Node: n, Bucket: BucketDeveloper, Owner: "a reclaim past the end", Reclaim: Reclaim(99), Source: src},
 	)
 
-	if c.Rejected != 3 {
-		t.Errorf("Rejected = %d, want 3", c.Rejected)
+	if c.Rejected != 4 {
+		t.Errorf("Rejected = %d, want 4", c.Rejected)
 	}
 	if got := c.Buckets[0].Bytes; got != 0 {
 		t.Errorf("Buckets[0] holds %d bytes, which no report prints", got)
@@ -519,11 +550,40 @@ func TestRunRejectsUnusableExtraClaims(t *testing.T) {
 		t.Errorf("the buckets sum to %d, the tree to %d", got, want)
 	}
 
-	// The same three claims with a bucket that exists are kept, so the
-	// rejection is about the bucket and not about the shape of the test.
-	ok := run(t, nil, tree, Claim{Node: n, Bucket: BucketDeveloper, Owner: "VS Code", Source: src})
+	// The same claims with a bucket and a tag that exist are kept, so the
+	// rejection is about those fields and not about the shape of the test.
+	ok := run(t, nil, tree, Claim{Node: n, Bucket: BucketDeveloper, Owner: "VS Code", Reclaim: Unknown, Source: src})
 	if ok.Rejected != 0 {
 		t.Errorf("Rejected = %d for a well-formed claim", ok.Rejected)
+	}
+}
+
+// TestRunRejectsClaimWithoutReclaim: the zero Reclaim was Regenerable, so a
+// detector target that forgot the field told the report its bytes were safe
+// to delete. Missing evidence has to mean keep: the claim is dropped and
+// counted, and none of its bytes are reclaimable.
+func TestRunRejectsClaimWithoutReclaim(t *testing.T) {
+	f := testutil.New(t)
+	f.File("Users/andrew/Library/Application Support/Code/blob", 500_000)
+
+	tree := fixtureTree(t, f)
+	n := node(t, tree, "/Users/andrew/Library/Application Support/Code")
+	src := Source{Kind: SourceDetector, ID: "ide", Detector: "ide"}
+	c := run(t, nil, tree, Claim{Node: n, Bucket: BucketDeveloper, Owner: "forgot the tag", Source: src})
+
+	if c.Rejected != 1 {
+		t.Errorf("Rejected = %d, want 1", c.Rejected)
+	}
+	if _, ok := c.ExplicitAtNode(n); ok {
+		t.Error("a claim with no reclaim tag still won its node")
+	}
+	for _, b := range Buckets() {
+		if got := c.Buckets[b].Reclaimable(); got != 0 {
+			t.Errorf("%s reports %d reclaimable bytes from a claim that never said so", b, got)
+		}
+	}
+	if got := c.Buckets[BucketDeveloper].ByReclaim[Regenerable]; got != 0 {
+		t.Errorf("Developer holds %d regenerable bytes from an untagged claim", got)
 	}
 }
 
@@ -601,21 +661,34 @@ func TestEngineMachinePathsAreLiteral(t *testing.T) {
 func TestNewRejectsBadRules(t *testing.T) {
 	cases := map[string][]Rule{
 		"duplicate id": {
-			{ID: "x", Match: "/A", Bucket: BucketOther},
-			{ID: "x", Match: "/B", Bucket: BucketOther},
+			{ID: "x", Match: "/A", Bucket: BucketOther, Reclaim: Unknown},
+			{ID: "x", Match: "/B", Bucket: BucketOther, Reclaim: Unknown},
 		},
 		"unknown capture": {
-			{ID: "x", Match: "/A/{name}", Bucket: BucketOther, Owner: "{other}"},
+			{ID: "x", Match: "/A/{name}", Bucket: BucketOther, Owner: "{other}", Reclaim: Unknown},
 		},
 		"bad bucket": {
-			{ID: "x", Match: "/A", Bucket: Bucket(99)},
+			{ID: "x", Match: "/A", Bucket: Bucket(99), Reclaim: Unknown},
 		},
 		"root pattern": {
-			{ID: "x", Match: "/", Bucket: BucketOther},
+			{ID: "x", Match: "/", Bucket: BucketOther, Reclaim: Unknown},
 		},
 		"two captures in a segment": {
-			{ID: "x", Match: "/A/{a}-{b}", Bucket: BucketOther},
+			{ID: "x", Match: "/A/{a}-{b}", Bucket: BucketOther, Reclaim: Unknown},
 		},
+		// A rule that forgot its tag used to be Regenerable, the zero
+		// value, which the report counts as safe to delete.
+		"no reclaim tag": {
+			{ID: "x", Match: "/A", Bucket: BucketOther},
+		},
+		"reclaim past the end": {
+			{ID: "x", Match: "/A", Bucket: BucketOther, Reclaim: Reclaim(99)},
+		},
+	}
+	// The control: the same shape with every field set is accepted, so a
+	// case above fails for the reason its name gives.
+	if _, err := New([]Rule{{ID: "x", Match: "/A", Bucket: BucketOther, Reclaim: Unknown}}, testContext()); err != nil {
+		t.Fatalf("New refused a well-formed rule: %v", err)
 	}
 	for name, rules := range cases {
 		if _, err := New(rules, testContext()); err == nil {

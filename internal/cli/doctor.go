@@ -309,13 +309,24 @@ func doctorPID(pid int) string {
 }
 
 // doctorDetectorTools names the external binaries each registered detector's
-// Probe looks for with Env.Has, mirroring the phase 1b plan's own detector
-// table (docs/04). A detector absent from this map walks static catalog
-// paths only and never asks the machine for anything, so it can never be
-// Missing.
+// Probe runs, mirroring the phase 1b plan's own detector table (docs/04).
+// Every row is derived the same way, by looking each binary up on the
+// augmented PATH doctor shares with the detectors.
+//
+// For most detectors the list is what their Probe asks Env.Has before
+// running anything. The apps detector never asks Env.Has: it runs its
+// commands directly and degrades on the ones that fail, so its list is the
+// commands apps.go itself invokes — `brew --caskroom`, `mdfind`, the
+// LaunchServices dump, `pkgutil` and `codesign`. lsregister is named by its
+// full path because it is on no PATH, which is also how apps runs it.
+//
+// A detector absent from this map walks static catalog paths only and never
+// asks the machine for anything, so it can never be Missing.
 var doctorDetectorTools = map[string][]string{
 	"aimodels": {"ollama"},
-	"apps":     {"pkgutil", "codesign"},
+	"apps": {"brew", "mdfind",
+		"/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+		"pkgutil", "codesign"},
 	"colima":   {"colima", "limactl"},
 	"docker":   {"docker"},
 	"go":       {"go"},
@@ -360,11 +371,14 @@ func doctorTools(ctx context.Context, w io.Writer) {
 			if i == 0 {
 				label = name
 			}
+			// A tool named by its full path is shown by its name; the
+			// path column already says where it is.
+			shown := filepath.Base(tool)
 			if p, err := env.LookPath(tool); err == nil {
-				doctorf(tw, "  %s\t%s\t%s\n", label, tool, p)
+				doctorf(tw, "  %s\t%s\t%s\n", label, shown, p)
 				found = true
 			} else {
-				doctorf(tw, "  %s\t%s\t%s\n", label, tool, "not found")
+				doctorf(tw, "  %s\t%s\t%s\n", label, shown, "not found")
 			}
 		}
 		if !found {

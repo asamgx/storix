@@ -178,7 +178,10 @@ func (f *appsClockFixture) reportAt(t *testing.T, finished time.Time) string {
 	t.Helper()
 	f.tree.Finished = finished
 	claims, _, _ := detect.Classify(f.tree, f.outs, f.cx)
-	class := classifyWith(f.tree, Config{}, claims)
+	class, err := classifyWith(f.tree, Config{}, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
 	rep := appsReport(f.tree, f.outs, class, f.cx)
 	if rep == nil {
 		t.Fatal("no application inventory was built")

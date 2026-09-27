@@ -165,8 +165,33 @@ func (m *ledgerModel) selectedRoot() (ledgerRoot, bool) {
 	return m.roots[m.dCursor], true
 }
 
+// unopenable says why the bucket under the cursor has no directories to list,
+// or "" when it has some or the cursor is not on the table.
+//
+// macOS, Purgeable and Unaccounted are readings, not walked bytes, and a scan
+// with no classification has put every walked byte in Other without a claim
+// root to show. Opening any of them used to say "nothing on this machine is in
+// this bucket" over a row holding gigabytes, which is the one thing the drill
+// list must never say about bytes it simply cannot see. The bucket's own note
+// is what explains where its number came from.
+func (m *ledgerModel) unopenable() string {
+	if m.drilling() {
+		return ""
+	}
+	row, b, ok := m.selectedBucket()
+	if !ok || b == 0 || (b.Walked() && m.class != nil) {
+		return ""
+	}
+	note := row.Note
+	if note == "" {
+		note = "its bytes are not a set of directories"
+	}
+	return row.Label + " has no directories to open: " + note
+}
+
 // open descends: from the table into a bucket's roots, and from a root into
 // the browser. The node it returns is what the root model opens in Browse.
+// A bucket unopenable names is left closed.
 func (m *ledgerModel) open() (*walk.Node, bool) {
 	if m.drilling() {
 		r, ok := m.selectedRoot()
@@ -176,7 +201,7 @@ func (m *ledgerModel) open() (*walk.Node, bool) {
 		return r.node, true
 	}
 	_, b, ok := m.selectedBucket()
-	if !ok || b == 0 {
+	if !ok || b == 0 || m.unopenable() != "" {
 		return nil, false
 	}
 	m.roots = m.bucketRoots(b)

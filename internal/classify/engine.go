@@ -14,12 +14,6 @@ import (
 // display paths; a root that does not exist simply matches nothing.
 var DefaultCodeRoots = []string{"~/code", "~/Developer", "~/Projects", "~/src", "~/dev", "~/work"}
 
-// artifactDirs are build outputs that sit directly inside a project. Only the
-// first level below a project is named here: an artifact nested deeper needs a
-// "anywhere under" pattern, which the grammar deliberately lacks, so the
-// projects detector of M11 claims those.
-var artifactDirs = []string{"node_modules", "target", ".venv", "dist", "build", ".next", ".turbo"}
-
 // Context is what the catalog needs to know about the machine being
 // classified: whose home "~" means, which other homes exist, and where the
 // user keeps source code.
@@ -106,8 +100,8 @@ type Engine struct {
 
 // New compiles the rules against a context. It fails on a duplicate rule id,
 // a pattern that does not parse, a rule whose Owner or OwnerKeys name a
-// capture the pattern does not bind, and a rule with an invalid bucket: all
-// four are catalog bugs, and a catalog bug should stop a build rather than
+// capture the pattern does not bind, a rule with an invalid bucket, and a
+// rule with no reclaim tag or an invalid one: all five are catalog bugs, and a catalog bug should stop a build rather than
 // quietly misfile a bucket's worth of bytes.
 func New(rules []Rule, ctx Context) (*Engine, error) {
 	seen := make(map[string]bool, len(rules))
@@ -122,6 +116,9 @@ func New(rules []Rule, ctx Context) (*Engine, error) {
 		seen[r.ID] = true
 		if !r.Bucket.Valid() {
 			return nil, fmt.Errorf("classify: rule %q has an invalid bucket %d", r.ID, r.Bucket)
+		}
+		if !r.Reclaim.Valid() {
+			return nil, fmt.Errorf("classify: rule %q has no valid reclaim tag (%d)", r.ID, r.Reclaim)
 		}
 	}
 
@@ -208,8 +205,16 @@ func (e *Engine) Match(display string, isDir bool) (Claim, bool) {
 
 // projectRules turns the code roots into catalog rules. They cannot live in
 // the static catalog because the roots come from the machine: a rule per root,
-// a rule per project inside it, and rules for the build artifacts and the
-// repository history directly inside a project (D34 / R7).
+// a rule per project inside it, and a rule for the repository history directly
+// inside a project (D34 / R7).
+//
+// There is deliberately no rule for build output. A directory called build,
+// dist, target or .venv is only build output when something beside it says a
+// build tool made it — a manifest, a pyvenv.cfg, not being tracked by git —
+// and a path pattern cannot see any of that. Naming them here marked
+// ~/code/notaproject/build regenerable on its name alone; now it inherits the
+// project's source rule and is kept, and only the projects detector, which
+// checks the evidence, can call a build directory reclaimable.
 //
 // The root goes in Anchor rather than into Match, so a code root really
 // called "~/{work}" or "~/src*" anchors at that directory instead of being
@@ -218,14 +223,14 @@ func (e *Engine) Match(display string, isDir bool) (Claim, bool) {
 // project and log every project as a conflict with itself.
 func projectRules(ctx Context) []Rule {
 	roots := ctx.codeRoots()
-	out := make([]Rule, 0, len(roots)*(3+len(artifactDirs)))
+	out := make([]Rule, 0, len(roots)*3)
 	for i, root := range roots {
 		n := fmt.Sprintf("%d", i)
 		out = append(out,
 			Rule{
 				ID: "dev.projects.root." + n, Anchor: root,
 				Bucket: BucketDeveloper, Category: "Project source", Owner: "Code root",
-				Reclaim: UserData, Explain: "a code root: the projects under it are yours, their build output is not",
+				Reclaim: UserData, Explain: "a code root: the projects under it are yours",
 			},
 			Rule{
 				ID: "dev.projects.source." + n, Anchor: root, Match: "{project}",
@@ -240,14 +245,6 @@ func projectRules(ctx Context) []Rule {
 				Explain: "git history of {project}; deleting it loses unpushed work",
 			},
 		)
-		for j, dir := range artifactDirs {
-			out = append(out, Rule{
-				ID: fmt.Sprintf("dev.projects.artifacts.%d.%d", i, j), Anchor: root, Match: "{project}/" + dir,
-				Bucket: BucketDeveloper, Category: "Build artifacts", Owner: "{project}",
-				OwnerKeys: []string{"project:{project}"}, Reclaim: Regenerable,
-				Explain: dir + " of {project}: rebuilt by the project's own tooling",
-			})
-		}
 	}
 	return out
 }
@@ -293,6 +290,11 @@ func (e *Engine) Run(t *walk.Tree, extra []Claim) *Classification {
 // its bytes to Buckets[0], which no bucket is and no report prints. That is
 // the one way a byte can leave the partition without anything saying so, and
 // counting the drops is what makes it visible.
+//
+// A claim without a valid reclaim tag is dropped for the same reason and one
+// more: the zero Reclaim is what a literal that forgot the field has, and the
+// safe reading of a forgotten tag is not any tag at all. The node falls back
+// to what the catalog or its parent says about it.
 func indexExtra(extra []Claim) (map[*walk.Node][]Claim, int) {
 	if len(extra) == 0 {
 		return nil, 0
@@ -300,7 +302,7 @@ func indexExtra(extra []Claim) (map[*walk.Node][]Claim, int) {
 	m := make(map[*walk.Node][]Claim, len(extra))
 	rejected := 0
 	for i := range extra {
-		if extra[i].Node == nil || !extra[i].Bucket.Valid() {
+		if extra[i].Node == nil || !extra[i].Bucket.Valid() || !extra[i].Reclaim.Valid() {
 			rejected++
 			continue
 		}
@@ -536,6 +538,11 @@ func (e *Engine) aggregate(t *walk.Tree, c *Classification) {
 		if eff := c.Effective[i]; eff >= 0 {
 			cl := &c.Claims[eff]
 			b, cat, owner, rec = cl.Bucket, cl.Category, cl.Owner, cl.Reclaim
+			if !rec.Valid() {
+				// New and indexExtra both refuse such a claim; this
+				// keeps an index out of range from ever panicking.
+				rec = Unknown
+			}
 		}
 		bt := &c.Buckets[b]
 		bt.Bytes += own

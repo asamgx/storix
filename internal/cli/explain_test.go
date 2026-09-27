@@ -14,6 +14,7 @@ import (
 	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/classify/catalog"
 	"github.com/asamgx/storix/internal/mac"
+	"github.com/asamgx/storix/internal/report"
 	"github.com/asamgx/storix/internal/scan"
 	"github.com/asamgx/storix/internal/testutil"
 	"github.com/asamgx/storix/internal/units"
@@ -362,7 +363,7 @@ func TestExplainJSONMirrorsTheFields(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatalf("the document is not valid JSON: %v\n%s", err, raw)
 	}
-	if got.Schema != apps.ReportSchema || got.Mode != "path" {
+	if got.Schema != report.SchemaVersion || got.Mode != "path" {
 		t.Errorf("schema/mode = %d/%q", got.Schema, got.Mode)
 	}
 	if !got.Scan.FromCache || got.Scan.AgeNS == 0 {
@@ -536,5 +537,28 @@ func TestRunExplainRejectsAnOwnerNobodyHas(t *testing.T) {
 	}
 	if got := ExitCode(err); got != ExitConfigError {
 		t.Errorf("exit code = %d, want %d", got, ExitConfigError)
+	}
+}
+
+// TestRunExplainResolvesARelativePath: the tree is keyed by absolute paths,
+// so `storix explain node_modules` from inside a project used to report that
+// the directory was not in the scan at all.
+func TestRunExplainResolvesARelativePath(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	f := testutil.New(t)
+	f.File("Library/Caches/com.example.app/blob.bin", 200_000)
+	t.Chdir(f.Path("Library/Caches"))
+
+	for i, arg := range []string{"com.example.app", "./com.example.app", "../Caches/com.example.app"} {
+		var out, errOut bytes.Buffer
+		// One walk; the other two read the scan it stored.
+		o := &explainOptions{roots: []string{f.Root}, scan: i == 0, fromCache: i > 0}
+		if err := runExplain(context.Background(), &out, &errOut, o, arg); err != nil {
+			t.Errorf("explain %s: %v (stderr %s)", arg, err, errOut.String())
+			continue
+		}
+		if want := mac.DisplayPath(f.Path("Library/Caches/com.example.app")); !strings.Contains(out.String(), want) {
+			t.Errorf("explain %s does not name %s:\n%s", arg, want, out.String())
+		}
 	}
 }

@@ -26,6 +26,7 @@ type appsOptions struct {
 	fromCache bool
 	debug     bool
 	roots     []string
+	codeRoots []string
 }
 
 func newAppsCmd() *cobra.Command {
@@ -55,6 +56,7 @@ renders the stored scan whatever its age.`,
 	}
 	f := cmd.Flags()
 	f.StringSliceVar(&o.roots, "roots", []string{mac.DataRoot}, "roots to scan")
+	f.StringSliceVar(&o.codeRoots, "code-roots", codeRootsDefault(), codeRootsUsage)
 	f.BoolVar(&o.orphans, "orphans", false, "print only the sections about software that is no longer installed")
 	f.BoolVar(&o.json, "json", false, "print the inventory as JSON instead")
 	f.BoolVar(&o.all, "all", false, "list every row rather than the head of each section")
@@ -152,6 +154,7 @@ func (o *appsOptions) resolve() (report.Options, scan.Config, error) {
 		Debug:     o.debug,
 		FromCache: o.fromCache,
 		Version:   BuildInfo(),
+		CodeRoots: o.codeRoots,
 	}
 	return ro, cfg, nil
 }

@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"os"
 	"path/filepath"
@@ -392,5 +393,35 @@ func TestTextRefusesAnEmptyResult(t *testing.T) {
 	}
 	if err := JSON(&buf, &scan.Result{}, Options{}); err == nil {
 		t.Error("JSON accepted a result with no tree")
+	}
+}
+
+// TestAnUnclassifiedScanSaysWhy: with the catalog broken every byte lands in
+// Other, and a report that printed that ledger without the reason would pass
+// storix's failure off as the disk's answer.
+func TestAnUnclassifiedScanSaysWhy(t *testing.T) {
+	r := fakeScan()
+	r.Class = nil
+	r.ClassifyErr = errors.New(`the catalog did not compile: classify: duplicate rule id "twice"`)
+
+	var text bytes.Buffer
+	if err := Text(&text, r, Options{Units: units.Decimal}); err != nil {
+		t.Fatal(err)
+	}
+	flat := strings.Join(strings.Fields(text.String()), " ")
+	if !strings.Contains(flat, "not classified") || !strings.Contains(flat, `duplicate rule id "twice"`) {
+		t.Errorf("the text report does not say why the scan is unclassified:\n%s", text.String())
+	}
+
+	var js bytes.Buffer
+	if err := JSON(&js, r, Options{Version: "v0.0.0-test"}); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(js.Bytes(), &doc); err != nil {
+		t.Fatalf("the document does not parse: %v", err)
+	}
+	if got, _ := doc["classify_error"].(string); !strings.Contains(got, "duplicate rule id") {
+		t.Errorf("classify_error = %q, want the catalog's error", got)
 	}
 }

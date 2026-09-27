@@ -418,12 +418,20 @@ func (t *textReport) snapshots() {
 }
 
 func (t *textReport) hints() {
-	if len(t.l.Hints) == 0 {
+	texts := make([]string, 0, len(t.l.Hints)+1)
+	if err := t.r.ClassifyErr; err != nil {
+		// First, because it changes how every bucket above reads.
+		texts = append(texts, "this scan was not classified, so every byte above is counted as Other: "+err.Error())
+	}
+	for _, h := range t.l.Hints {
+		texts = append(texts, h.Text)
+	}
+	if len(texts) == 0 {
 		return
 	}
 	t.section("HINTS")
-	for _, h := range t.l.Hints {
-		for i, line := range wrapText(h.Text, textWidth-4) {
+	for _, text := range texts {
+		for i, line := range wrapText(text, textWidth-4) {
 			bullet := "  • "
 			if i > 0 {
 				bullet = "    "

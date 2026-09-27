@@ -67,8 +67,8 @@ type Classification struct {
 	// which is the list that drives the next round of catalog rules.
 	Unmatched []int32
 	// Rejected counts the detector and apps claims this run refused: one
-	// naming a path the walk never retained, or carrying a bucket that is
-	// not one of the twelve. It is zero on a healthy run and a number a
+	// naming a path the walk never retained, carrying a bucket that is not
+	// one of the twelve, or carrying no valid reclaim tag. It is zero on a healthy run and a number a
 	// test can assert on, rather than bytes quietly going missing.
 	Rejected int
 

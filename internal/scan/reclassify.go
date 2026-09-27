@@ -52,7 +52,7 @@ func reclassify(cfg Config, res *Result, meta cache.Meta) error {
 	cx := classifyContext(res.Tree, cfg)
 	claims, summaries, statuses := detect.Classify(res.Tree, outs, cx)
 	res.Detectors, res.Summaries = statuses, summaries
-	res.Class = classifyWith(res.Tree, cfg, claims)
+	res.Class, res.ClassifyErr = classifyWith(res.Tree, cfg, claims)
 	res.Timing.Classify = time.Since(start)
 
 	// The application report is rebuilt from the stored facts for the same

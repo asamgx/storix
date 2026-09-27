@@ -143,9 +143,11 @@ func TestSurveyExpectations(t *testing.T) {
 		testHome + "/.Trash":       classify.BucketTrash,
 
 		// Code roots and the rest of the machine.
-		testHome + "/code":                                   classify.BucketDeveloper,
-		testHome + "/code/gib":                               classify.BucketDeveloper,
-		testHome + "/code/gib/node_modules":                  classify.BucketDeveloper,
+		testHome + "/code":     classify.BucketDeveloper,
+		testHome + "/code/gib": classify.BucketDeveloper,
+		// ~/code/gib/node_modules has no rule of its own any more: it
+		// inherits gib's source rule, and only the projects detector, with
+		// the evidence in hand, calls it build output.
 		testHome + "/Documents":                              classify.BucketPersonal,
 		testHome + "/Downloads":                              classify.BucketPersonal,
 		"/Applications":                                      classify.BucketApps,

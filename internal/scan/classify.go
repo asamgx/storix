@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/asamgx/storix/internal/classify"
-	"github.com/asamgx/storix/internal/classify/catalog"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/walk"
 )
@@ -26,7 +25,7 @@ func Classify(t *walk.Tree, cfg Config) *classify.Classification {
 	if t == nil || t.Root == nil {
 		return nil
 	}
-	e, err := classify.New(catalog.Rules(), classifyContext(t, cfg))
+	e, err := classify.New(catalogRules(), classifyContext(t, cfg))
 	if err != nil {
 		return nil
 	}

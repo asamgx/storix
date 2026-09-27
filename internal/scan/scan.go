@@ -168,6 +168,11 @@ type Result struct {
 	// failure would leave them re-running a twenty-second walk wondering
 	// where the files went.
 	RecordErr error
+	// ClassifyErr is why Class is nil on a scan that has a tree: the
+	// catalog did not compile. The walk and the ledger stand, but every
+	// byte reads as Other, and the report says so rather than presenting
+	// that as the disk's answer.
+	ClassifyErr error
 }
 
 // Root returns the scanned root as a user sees it.
@@ -236,7 +241,7 @@ func Run(ctx context.Context, cfg Config) (*Result, error) {
 	res.Timing.Probe = slowestProbe(statuses)
 	res.RecordErr = recordProbes(statuses)
 
-	res.Class = classifyWith(tree, cfg, claims)
+	res.Class, res.ClassifyErr = classifyWith(tree, cfg, claims)
 	res.Timing.Classify = time.Since(t0)
 
 	// The application report is built from the claims that won their node,

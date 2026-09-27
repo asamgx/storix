@@ -83,10 +83,15 @@ versioned document, with the tree limited by --depth and --min-size unless
 	f.BoolVar(&o.fromCache, "from-cache", false, "render the stored scan instead of walking the disk")
 	f.StringArrayVar(&o.disableDet, "disable-detector", nil,
 		"switch off one tool detector by name; repeatable (the report still lists it, as disabled)")
-	f.StringSliceVar(&o.codeRoots, "code-roots", codeRootsDefault(),
-		"directories holding your projects, for the Developer bucket (default: the usual ones that exist on this machine)")
+	f.StringSliceVar(&o.codeRoots, "code-roots", codeRootsDefault(), codeRootsUsage)
 	return cmd
 }
+
+// codeRootsUsage is --code-roots' help, shared by every command that
+// classifies a scan. A stored scan is reclassified on load, so dev, explain
+// and apps need the flag as much as scan does: without it they reclassify
+// with the defaults and the projects under a custom root vanish.
+const codeRootsUsage = "directories holding your projects, for the Developer bucket (default: the usual ones that exist on this machine)"
 
 // codeRootsDefault is --code-roots' default: classify.DefaultCodeRoots kept
 // to the entries that exist on this machine, so --help shows real candidates
@@ -262,6 +267,7 @@ func cachedScan(cfg scan.Config, errOut io.Writer) (*scan.Result, error) {
 	res, ok, err := scan.LoadLatest(cfg)
 	switch {
 	case ok:
+		warnUnclassified(errOut, res)
 		return res, nil
 	case err == nil:
 		return nil, nil
@@ -324,7 +330,18 @@ func runOne(ctx context.Context, errOut io.Writer, cfg scan.Config) (*scan.Resul
 	if err != nil {
 		return nil, &ConfigError{Err: err}
 	}
+	warnUnclassified(errOut, res)
 	return res, nil
+}
+
+// warnUnclassified says so when a scan has no classification because the
+// catalog failed. Every command that reads a scan comes through runOne or
+// cachedScan, so this is the one place that makes sure a ledger with every
+// byte in Other is never shown without the reason.
+func warnUnclassified(errOut io.Writer, res *scan.Result) {
+	if res != nil && res.ClassifyErr != nil {
+		_, _ = fmt.Fprintf(errOut, "storix: the scan was not classified (%v)\n", res.ClassifyErr)
+	}
 }
 
 // progressWidth is how much of the terminal the progress line may use.

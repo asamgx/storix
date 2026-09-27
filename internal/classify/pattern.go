@@ -64,8 +64,11 @@ type segment struct {
 	// it exists for the "Users/*" home anchor, which has to skip the
 	// directories under /Users that are not an account's home.
 	except []string
-	// literals records whether the segment carries literal text of its own,
-	// which is the first thing specificity looks at.
+	// literals records whether the segment carries literal text of its own.
+	// It decides the segment's class, which feeds the pattern's shape;
+	// better compares the source kind, then depth, then shape, and only
+	// then the count of literal characters, so this is not the first thing
+	// specificity looks at.
 	literals bool
 }
 

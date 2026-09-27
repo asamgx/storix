@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/asamgx/storix/internal/detect"
 	"github.com/asamgx/storix/internal/report"
 	"github.com/asamgx/storix/internal/scan"
@@ -185,5 +187,66 @@ func TestScanResolveCarriesCodeRoots(t *testing.T) {
 	}
 	if len(cfg.CodeRoots) != 2 || cfg.CodeRoots[0] != "~/code" || cfg.CodeRoots[1] != "~/work" {
 		t.Errorf("code roots = %v", cfg.CodeRoots)
+	}
+}
+
+// TestReclassifyingCommandsHonourCodeRoots: a stored scan is reclassified on
+// load, so dev, explain and apps need --code-roots as much as scan does.
+// Without it they reclassified with the defaults, and the projects under a
+// custom root, which the scan itself had listed, vanished.
+func TestReclassifyingCommandsHonourCodeRoots(t *testing.T) {
+	f := testutil.New(t)
+	t.Setenv("HOME", f.Root)
+	f.File("mycode/mochi/package.json", 200)
+	f.File("mycode/mochi/node_modules/dep/index.js", 300_000)
+	custom := []string{filepath.Join(f.Root, "mycode")}
+
+	var out, errOut bytes.Buffer
+	scanOpts := &scanOptions{
+		threshold: "64KB", minSize: "10MB", top: report.DefaultTop, depth: report.DefaultDepth,
+		report: true, roots: []string{f.Root}, codeRoots: custom,
+	}
+	if err := runScan(context.Background(), &out, &errOut, scanOpts); err != nil {
+		t.Fatalf("scan: %v (stderr %s)", err, errOut.String())
+	}
+
+	projects := func(codeRoots []string) string {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		o := &devOptions{roots: []string{f.Root}, fromCache: true, projects: true, codeRoots: codeRoots}
+		if err := runDev(context.Background(), &out, &errOut, o); err != nil {
+			t.Fatalf("dev: %v (stderr %s)", err, errOut.String())
+		}
+		return out.String()
+	}
+	if got := projects(custom); !strings.Contains(got, "mochi") {
+		t.Errorf("dev --from-cache --code-roots %s lost the project:\n%s", custom[0], got)
+	}
+
+	// explain reads the same stored scan: the artifact is the project's,
+	// not an unowned directory.
+	var eout, eerr bytes.Buffer
+	eo := &explainOptions{roots: []string{f.Root}, fromCache: true, json: true, codeRoots: custom}
+	if err := runExplain(context.Background(), &eout, &eerr, eo, filepath.Join(f.Root, "mycode/mochi/node_modules")); err != nil {
+		t.Fatalf("explain: %v (stderr %s)", err, eerr.String())
+	}
+	if !strings.Contains(eout.String(), `"mochi"`) {
+		t.Errorf("explain --code-roots does not attribute the artifacts to the project:\n%s", eout.String())
+	}
+
+	// The flag itself, with the scan command's default, on all three.
+	for _, cmd := range []*cobra.Command{newDevCmd(), newExplainCmd(), newAppsCmd()} {
+		fl := cmd.Flags().Lookup("code-roots")
+		if fl == nil {
+			t.Errorf("%s has no --code-roots", cmd.Name())
+			continue
+		}
+		if err := cmd.Flags().Parse([]string{"--code-roots", custom[0]}); err != nil {
+			t.Errorf("%s --code-roots: %v", cmd.Name(), err)
+		}
+	}
+	ao := &appsOptions{sortBy: "size", codeRoots: custom}
+	if _, cfg, err := ao.resolve(); err != nil || len(cfg.CodeRoots) != 1 || cfg.CodeRoots[0] != custom[0] {
+		t.Errorf("apps: code roots = %v (%v)", cfg.CodeRoots, err)
 	}
 }

@@ -73,7 +73,7 @@ json="$(mktemp -t storix-accept-1b)"
 trap 'rm -f "$json"' EXIT
 
 args=(scan --no-cache --json)
-[[ -n "$root" ]] && args+=("$root")
+[[ -n "$root" ]] && args+=(--roots "$root")
 
 echo "scanning…"
 "$binary" "${args[@]}" >"$json"

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -34,6 +35,7 @@ type explainOptions struct {
 	scan       bool
 	debug      bool
 	disableDet []string
+	codeRoots  []string
 }
 
 func newExplainCmd() *cobra.Command {
@@ -74,6 +76,7 @@ whatever its age and its age is printed; --scan walks the disk first and
 	f.BoolVar(&o.debug, "debug", false, "print timings")
 	f.StringArrayVar(&o.disableDet, "disable-detector", nil,
 		"switch off one tool detector by name; repeatable")
+	f.StringSliceVar(&o.codeRoots, "code-roots", codeRootsDefault(), codeRootsUsage)
 	return cmd
 }
 
@@ -141,6 +144,7 @@ func (o *explainOptions) resolve() (units.Format, scan.Config, error) {
 		FromCache:         !o.scan,
 		DisabledDetectors: o.disableDet,
 		Version:           BuildInfo(),
+		CodeRoots:         o.codeRoots,
 	}
 	return u, cfg, nil
 }
@@ -254,7 +258,17 @@ type explainOwnerDoc struct {
 }
 
 // explainPath answers about one directory of the walked tree.
+//
+// A relative argument is resolved against the working directory first, the
+// way every other command-line tool reads one: `storix explain node_modules`
+// from inside a project means that project's node_modules, and the tree is
+// keyed by absolute paths. A "~" path is left for mac.ScanPath to expand.
 func explainPath(res *scan.Result, arg string) (*explainPathDoc, error) {
+	if !filepath.IsAbs(arg) && !strings.HasPrefix(arg, "~") {
+		if abs, err := filepath.Abs(arg); err == nil {
+			arg = abs
+		}
+	}
 	node, ok := res.Tree.Lookup(mac.ScanPath(arg))
 	if !ok {
 		return nil, &ConfigError{Err: fmt.Errorf(

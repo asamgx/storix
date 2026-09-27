@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "storix": "v0.0.0-test",
   "root": "/",
   "units": "decimal",
@@ -154,18 +154,18 @@
         "bytes": 4680120000,
         "files": 3,
         "known": true,
-        "reclaimable": 4680000000,
+        "reclaimable": 4200000000,
         "by_reclaim": [
           {
             "id": "regenerable",
             "label": "regenerable",
-            "bytes": 4680000000,
+            "bytes": 4200000000,
             "known": true
           },
           {
             "id": "user-data",
             "label": "user-data",
-            "bytes": 120000,
+            "bytes": 480120000,
             "known": true
           }
         ],
@@ -178,18 +178,11 @@
             "note": "90% of the bucket"
           },
           {
-            "id": "Build artifacts",
-            "label": "Build artifacts",
-            "bytes": 480000000,
-            "known": true,
-            "note": "10% of the bucket"
-          },
-          {
             "id": "Project source",
             "label": "Project source",
-            "bytes": 120000,
+            "bytes": 480120000,
             "known": true,
-            "note": "0% of the bucket"
+            "note": "10% of the bucket"
           }
         ],
         "owners": [
@@ -604,7 +597,7 @@
             "path": "/Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data/data.img.raw",
             "node": 20,
             "bytes": 18700000000,
-            "reclaim": 1,
+            "reclaim": "tool-managed",
             "note": "245 GB apparent, 18.7 GB allocated"
           }
         ]
@@ -623,7 +616,7 @@
             "path": "/Users/u/Library/Caches/go-build",
             "node": 13,
             "bytes": 4200000000,
-            "reclaim": 0
+            "reclaim": "regenerable"
           }
         ]
       },
@@ -641,7 +634,7 @@
                 "path": "/Users/u/code/storix/node_modules",
                 "node": 29,
                 "bytes": 480000000,
-                "reclaim": 0
+                "reclaim": "regenerable"
               }
             ],
             "last_activity": "2026-06-14T00:00:00Z",
@@ -661,7 +654,7 @@
             "path": "/Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data/data.img.raw",
             "node": 20,
             "bytes": 18700000000,
-            "reclaim": 1,
+            "reclaim": "tool-managed",
             "note": "245 GB apparent, 18.7 GB allocated"
           }
         ],
@@ -674,7 +667,7 @@
             "known": true,
             "count": 36,
             "active": 11,
-            "reclaim": 1
+            "reclaim": "tool-managed"
           },
           {
             "type": "Containers",
@@ -684,7 +677,7 @@
             "known": true,
             "count": 12,
             "active": 2,
-            "reclaim": 1
+            "reclaim": "tool-managed"
           },
           {
             "type": "Local Volumes",
@@ -694,7 +687,7 @@
             "known": true,
             "count": 23,
             "active": 3,
-            "reclaim": 3
+            "reclaim": "user-data"
           },
           {
             "type": "Build Cache",
@@ -702,7 +695,7 @@
             "reclaimable": 4638000000,
             "count": 72,
             "active": 0,
-            "reclaim": 1
+            "reclaim": "tool-managed"
           }
         ],
         "context": "orbstack",

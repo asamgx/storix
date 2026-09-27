@@ -8,7 +8,7 @@ LEDGER  (every byte of used space, in one of twelve buckets)
   ██░░░░░░░░░░░░   28.13 GB  13.4%                1  macOS
   █░░░░░░░░░░░░░     1.4 GB   0.7%                2  Applications
   █░░░░░░░░░░░░░       7 GB   3.3%     7 GB free  3  App data
-  █░░░░░░░░░░░░░    4.68 GB   2.2%  4.68 GB free  4  Developer
+  █░░░░░░░░░░░░░    4.68 GB   2.2%   4.2 GB free  4  Developer
   █░░░░░░░░░░░░░    18.7 GB   8.9%  18.7 GB free  5  Containers & VMs
   █░░░░░░░░░░░░░      49 KB   0.0%                6  Personal files
   █░░░░░░░░░░░░░     3.1 GB   1.5%                7  Backups
@@ -38,10 +38,9 @@ BUCKETS  (what is inside each one)
   owner     7 GB  100.0%  com.spotify.client
 
   Developer — 4.68 GB, 3 files
-  reclaim   4.68 GB regenerable, 120 KB user-data
+  reclaim   4.2 GB regenerable, 480.1 MB user-data
   category    4.2 GB  89.7%  Build cache
-              480 MB  10.3%  Build artifacts
-              120 KB   0.0%  Project source
+            480.1 MB  10.3%  Project source
   owner       4.2 GB  89.7%  Go
             480.1 MB  10.3%  storix
 

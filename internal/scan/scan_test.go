@@ -232,3 +232,32 @@ func factsFor(t *testing.T, root string) *volume.Facts {
 	}
 	return f
 }
+
+// TestRunRecordsWhyItDidNotClassify: a catalog that does not compile used to
+// leave Class nil with the error dropped, so the report showed every byte in
+// Other and nothing said that was storix failing rather than the disk.
+func TestRunRecordsWhyItDidNotClassify(t *testing.T) {
+	broken := []classify.Rule{
+		{ID: "twice", Match: "/A", Bucket: classify.BucketOther, Reclaim: classify.Unknown},
+		{ID: "twice", Match: "/B", Bucket: classify.BucketOther, Reclaim: classify.Unknown},
+	}
+	saved := catalogRules
+	catalogRules = func() []classify.Rule { return broken }
+	t.Cleanup(func() { catalogRules = saved })
+
+	f := testutil.New(t)
+	f.File("a.bin", 1024)
+	res, err := Run(t.Context(), Config{Roots: []string{f.Root}, NoCache: true})
+	if err != nil {
+		t.Fatalf("a broken catalog sank the scan: %v", err)
+	}
+	if res.Class != nil {
+		t.Error("a catalog that does not compile still produced a classification")
+	}
+	if res.ClassifyErr == nil || !strings.Contains(res.ClassifyErr.Error(), `duplicate rule id "twice"`) {
+		t.Errorf("ClassifyErr = %v, want the catalog's own error", res.ClassifyErr)
+	}
+	if res.Ledger == nil {
+		t.Error("the ledger is missing although the walk succeeded")
+	}
+}

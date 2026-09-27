@@ -20,7 +20,11 @@ import (
 
 // SchemaVersion is the version of the --json document. It changes whenever a
 // field is removed or its meaning changes; adding a field does not.
-const SchemaVersion = 1
+//
+// 2 (2026-09-27, D42): every "reclaim" tag is its name ("regenerable")
+// rather than a number, because the numbering changed so that the zero value
+// could never mean "safe to delete".
+const SchemaVersion = 2
 
 // JSON writes the machine-readable report.
 //
@@ -54,6 +58,9 @@ func JSON(w io.Writer, r *scan.Result, o Options) error {
 	e.field("ledger", r.Ledger)
 	if c := classificationJSON(r); c != nil {
 		e.field("classification", c)
+	}
+	if r.ClassifyErr != nil {
+		e.field("classify_error", r.ClassifyErr.Error())
 	}
 	// The application inventory is the apps lane's own document, emitted
 	// whole rather than summarised: `storix apps --json` prints the same

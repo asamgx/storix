@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/fang v1.0.0
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260920004010-53e2afe73ae5
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.47.0
 	howett.net/plist v1.0.1
@@ -20,7 +21,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.8 // indirect
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20250603201427-c31516f43444 // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20251109135125-8916d276318f // indirect
-	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260920004010-53e2afe73ae5 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect

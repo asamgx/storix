@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -81,19 +82,24 @@ func homeOf(cfg Config) string {
 // classifyWith runs the catalog over a finished tree together with the claims
 // the detectors made.
 //
-// It is Classify with the detector claims folded in; the two are one function
-// with one behaviour, and the exported one stays for callers that have no
-// detectors to offer.
-func classifyWith(t *walk.Tree, cfg Config, claims []classify.Claim) *classify.Classification {
+// It is Classify with the detector claims folded in, and unlike Classify it
+// says why when there is no classification: a catalog that does not compile
+// leaves every byte in Other, and a reader shown that ledger with no reason
+// would take it for the disk's answer rather than storix's failure.
+func classifyWith(t *walk.Tree, cfg Config, claims []classify.Claim) (*classify.Classification, error) {
 	if t == nil || t.Root == nil {
-		return nil
+		return nil, nil
 	}
-	e, err := classify.New(catalog.Rules(), classifyContext(t, cfg))
+	e, err := classify.New(catalogRules(), classifyContext(t, cfg))
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("the catalog did not compile: %w", err)
 	}
-	return e.Run(t, claims)
+	return e.Run(t, claims), nil
 }
+
+// catalogRules is the catalog the engine compiles. It is a variable so a test
+// can hand the scan a broken one.
+var catalogRules = catalog.Rules
 
 // slowestProbe is the wall time of the probe that took longest, which is the
 // number that answers "did the detectors cost the scan anything": they run

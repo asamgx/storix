@@ -91,8 +91,8 @@ func fixtureDetectors() ([]detect.Status, map[string]detect.Summary) {
 		"orbstack": {
 			Runtimes: []detect.Runtime{{
 				Name:          "OrbStack",
-				HostImage:     []detect.Tool{{Name: "data image", Kind: "image", Path: "~/.orbstack/data.img", Node: -1, Bytes: 18_000_000}},
-				GuestReported: []detect.Line{{Type: "Images", Size: 12_000_000, Reclaimable: 5_000_000, Count: 9, Known: true}},
+				HostImage:     []detect.Tool{{Name: "data image", Kind: "image", Path: "~/.orbstack/data.img", Node: -1, Bytes: 18_000_000, Reclaim: classify.ToolManaged}},
+				GuestReported: []detect.Line{{Type: "Images", Size: 12_000_000, Reclaimable: 5_000_000, Count: 9, Known: true, Reclaim: classify.ToolManaged}},
 				Machines:      []string{"docker"},
 				Note:          "the image is sparse; the daemon counts what is inside it",
 			}},
@@ -612,4 +612,67 @@ func sectionEntries(c whyContent, title string) []whyEntry {
 		}
 	}
 	return nil
+}
+
+// TestLedgerDoesNotOpenBucketsWithNoDirectories: macOS, Purgeable and
+// Unaccounted are readings rather than walked bytes, and without a
+// classification Other has no claim roots either. Opening one used to say
+// "nothing on this machine is in this bucket" over a row holding gigabytes;
+// the status line gives the bucket's own note instead and the table stays.
+func TestLedgerDoesNotOpenBucketsWithNoDirectories(t *testing.T) {
+	m := newClassifiedModel(t)
+	m.w, m.h = termWidth, termHeight
+	m.resize()
+
+	indexOf := func(want classify.Bucket) int {
+		for i := range m.ledger.buckets() {
+			if bucketAt(i) == want {
+				return i
+			}
+		}
+		t.Fatalf("no %s row", want)
+		return 0
+	}
+	for _, b := range []classify.Bucket{classify.BucketMacOS, classify.BucketPurgeable, classify.BucketUnaccounted} {
+		m.ledger.moveTo(indexOf(b))
+		row, _, _ := m.ledger.selectedBucket()
+		m.status = ""
+		m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		if m.ledger.drilling() {
+			t.Errorf("enter on %s opened a drill list", b)
+			m.ledger.back()
+		}
+		if !strings.Contains(m.status, row.Label) || (row.Note != "" && !strings.Contains(m.status, row.Note)) {
+			t.Errorf("enter on %s set the status to %q, want its label and note %q", b, m.status, row.Note)
+		}
+	}
+
+	// A walked bucket still opens.
+	m.ledger.moveTo(indexOf(classify.BucketAppData))
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !m.ledger.drilling() {
+		t.Error("enter on App data no longer opens its roots")
+	}
+	m.ledger.back()
+
+	// With no classification, Other holds every walked byte and has no
+	// claim root to list.
+	res := classifiedResult(t)
+	res.Class = nil
+	res.Ledger = ledger.BuildClassified(nil, res.Tree, units.Decimal, nil)
+	u := newTestModel(t, res)
+	u.w, u.h = termWidth, termHeight
+	u.resize()
+	for i := range u.ledger.buckets() {
+		if bucketAt(i) == classify.BucketOther {
+			u.ledger.moveTo(i)
+		}
+	}
+	u.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if u.ledger.drilling() {
+		t.Error("enter on Other opened a drill list for an unclassified scan")
+	}
+	if !strings.Contains(u.status, "not classified") {
+		t.Errorf("status = %q, want Other's note", u.status)
+	}
 }

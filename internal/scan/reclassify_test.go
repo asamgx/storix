@@ -295,14 +295,78 @@ func TestADisabledDetectorStaysDisabledOnLoad(t *testing.T) {
 	}
 }
 
-// TestReclassifyOnLoadIsWithinBudget measures the M12 budget on the user's own
-// cache: a full volume must reclassify in under 300 ms, because the TUI's
-// first frame from a cache is that plus the decode.
+// TestReclassifyOnLoadIsWithinBudget keeps the M12 budget honest on every
+// run, over a synthetic tree this test builds: a few thousand directories laid
+// out where the catalog, the code roots and the ~/Library captures all have
+// something to match, stored and then loaded back. The bound is the full
+// volume's 300 ms, which is generous for a tree this size (it reclassifies,
+// detectors and apps included, in a few tens of milliseconds): what it
+// catches is reclassification on load becoming accidentally quadratic, not
+// a few percent of drift.
 //
-// It runs only where there is a real cache to read, which is the machine the
-// budget is stated for; everywhere else there is nothing to measure and the
-// test says so rather than pretending.
+// It used to read the developer's own cache, which made it a test of what
+// the machine running it had last scanned; that measurement is the opt-in
+// test below.
 func TestReclassifyOnLoadIsWithinBudget(t *testing.T) {
+	homedStore(t)
+	f := testutil.New(t)
+	const n = 1500
+	for i := range n {
+		f.Dir(fmt.Sprintf("Users/andrew/Library/Caches/com.example.app%d/blobs", i))
+		f.Dir(fmt.Sprintf("Users/andrew/Library/Application Support/App%d/data", i))
+		f.Dir(fmt.Sprintf("Users/andrew/code/proj%d/node_modules/dep", i))
+	}
+	f.File("Users/andrew/Library/Caches/com.example.app0/blobs/blob", 400_000)
+
+	cfg := Config{
+		Roots:     []string{f.Root},
+		Home:      f.Path("Users/andrew"),
+		CodeRoots: []string{f.Path("Users/andrew/code")},
+		Units:     units.Decimal,
+		Version:   storeVersion,
+		Probe:     probe.NewReplay(nil),
+	}
+	cached, err := WithCache(cfg)
+	if err != nil {
+		t.Fatalf("WithCache: %v", err)
+	}
+	if res, err := Run(context.Background(), cached); err != nil || res.PersistErr != nil {
+		t.Fatalf("Run: %v, persist: %v", err, res.PersistErr)
+	}
+	cfg.FromCache = true
+	res, ok, err := LoadLatest(cfg)
+	if err != nil || !ok {
+		t.Fatalf("LoadLatest = %v, %v", ok, err)
+	}
+	if len(res.Tree.Nodes) < 3*n {
+		t.Fatalf("the synthetic tree kept %d nodes, want at least %d", len(res.Tree.Nodes), 3*n)
+	}
+	if res.Class == nil {
+		t.Fatal("the loaded scan was not reclassified")
+	}
+	t.Logf("%d nodes: reclassify %s", len(res.Tree.Nodes), res.Timing.Classify.Round(time.Millisecond))
+	if raceDetector {
+		t.Skip("measured, not judged: the race detector costs an order of magnitude")
+	}
+	if res.Timing.Classify > 300*time.Millisecond {
+		t.Errorf("reclassify took %s over %d nodes, budget is 300ms for a full volume",
+			res.Timing.Classify.Round(time.Millisecond), len(res.Tree.Nodes))
+	}
+}
+
+// TestReclassifyOnLoadIsWithinBudgetOnThisMachine measures the same budget on
+// the cache of the machine the tests run on, the full volume the budget is
+// stated for. It is opt-in, like the other real-cache test below: without the
+// gate it measured whatever the developer had last scanned, and failed or
+// passed on that rather than on the code.
+//
+//	STORIX_REAL_CACHE_TEST="$(storix version | cut -d' ' -f2-)" \
+//	  go test ./internal/scan/ -run WithinBudgetOnThisMachine
+func TestReclassifyOnLoadIsWithinBudgetOnThisMachine(t *testing.T) {
+	version := os.Getenv(realCacheEnv)
+	if version == "" {
+		t.Skipf("set %s to the version `storix version` prints to measure this machine's own cache", realCacheEnv)
+	}
 	store, err := cache.DefaultStore()
 	if err != nil {
 		t.Skipf("no cache store: %v", err)
@@ -310,7 +374,7 @@ func TestReclassifyOnLoadIsWithinBudget(t *testing.T) {
 	if _, _, err := store.Latest(); err != nil {
 		t.Skipf("no stored scan to measure: %v", err)
 	}
-	cfg := Config{FromCache: true, Units: units.Decimal}
+	cfg := Config{FromCache: true, Units: units.Decimal, Version: version}
 	start := time.Now()
 	res, ok, err := LoadLatest(cfg)
 	if err != nil || !ok {

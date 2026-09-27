@@ -311,6 +311,9 @@ func (m *Model) doneStatus(res *scan.Result) string {
 	if res.Tree != nil && res.Tree.Incomplete {
 		return "scan interrupted; the totals below are a lower bound"
 	}
+	if res.ClassifyErr != nil {
+		return "scan finished but was not classified (" + res.ClassifyErr.Error() + ")"
+	}
 	if res.PersistErr != nil {
 		return "scan finished; it was not cached (" + res.PersistErr.Error() + ")"
 	}
@@ -419,8 +422,11 @@ func (m *Model) ledgerKey(msg tea.KeyPressMsg) tea.Cmd {
 		l.moveTo(l.rowCount() - 1)
 	case key.Matches(msg, m.keys.Open):
 		drilling := l.drilling()
+		why := l.unopenable()
 		n, ok := l.open()
 		switch {
+		case why != "":
+			m.status = why
 		case ok:
 			m.openInBrowse(n)
 		case drilling:

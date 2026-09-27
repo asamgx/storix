@@ -30,6 +30,7 @@ type devOptions struct {
 	scan       bool
 	debug      bool
 	disableDet []string
+	codeRoots  []string
 }
 
 func newDevCmd() *cobra.Command {
@@ -62,6 +63,7 @@ its age instead, and --scan always walks the disk.`,
 	f.BoolVar(&o.debug, "debug", false, "print timings")
 	f.StringArrayVar(&o.disableDet, "disable-detector", nil,
 		"switch off one tool detector by name; repeatable (the section still lists it, as disabled)")
+	f.StringSliceVar(&o.codeRoots, "code-roots", codeRootsDefault(), codeRootsUsage)
 	return cmd
 }
 
@@ -138,6 +140,7 @@ func (o *devOptions) resolve() (report.Options, scan.Config, error) {
 		FromCache:         o.fromCache,
 		DisabledDetectors: o.disableDet,
 		Version:           BuildInfo(),
+		CodeRoots:         o.codeRoots,
 	}
 	return ro, cfg, nil
 }

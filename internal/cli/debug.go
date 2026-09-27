@@ -14,6 +14,9 @@ import (
 // what a nil Class means: a catalog that failed to compile still leaves a
 // correct scan, just one --debug has nothing more to say about.
 func printClassifyDebug(out io.Writer, res *scan.Result) {
+	if res != nil && res.ClassifyErr != nil {
+		_, _ = fmt.Fprintf(out, "  classify not run: %v\n", res.ClassifyErr)
+	}
 	if res == nil || res.Class == nil {
 		return
 	}
