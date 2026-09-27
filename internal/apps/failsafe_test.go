@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/probe"
 )
 
@@ -468,5 +469,28 @@ func TestALaunchItemWithNoProgramIsUnchecked(t *testing.T) {
 	}}}, Options{}), "Vivaldi")
 	if v.State != StateUnknown {
 		t.Errorf("Vivaldi with a program-less launch item = %v, want unknown", v.State)
+	}
+}
+
+// TestAReclaimTagIsNeverUnset is the engine's rule from this side: a claim
+// with no reclaim tag is rejected, so a location row or match that forgot one
+// would drop the directory from the report rather than tag it. The fallback
+// for a tag nobody set is Unknown, which keeps the bytes visible and offers
+// none of them for deletion.
+func TestAReclaimTagIsNeverUnset(t *testing.T) {
+	t.Parallel()
+	a := &Analysis{}
+	var unset classify.Reclaim
+	got := a.reclaimFor(Candidate{Loc: Location{}}, Match{}, &Verdict{State: StateInstalled})
+	if got == unset || !got.Valid() {
+		t.Fatalf("reclaimFor with nothing set = %v, want a valid tag", got)
+	}
+	if got != classify.Unknown {
+		t.Errorf("reclaimFor with nothing set = %v, want unknown", got)
+	}
+	for _, loc := range Locations {
+		if !loc.Reclaim.Valid() {
+			t.Errorf("location %s has no valid reclaim tag", loc.Dir)
+		}
 	}
 }

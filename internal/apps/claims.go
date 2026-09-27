@@ -186,8 +186,14 @@ func (a *Analysis) reclaimFor(c Candidate, m Match, v *Verdict) classify.Reclaim
 	if v != nil && v.State == StateUnknown {
 		return classify.Unknown
 	}
-	if m.HasReclaim {
+	if m.HasReclaim && m.Reclaim.Valid() {
 		return m.Reclaim
+	}
+	// The engine rejects a claim whose tag was never set, which would drop
+	// the directory from the report. A location row that forgot its tag
+	// gets Unknown instead: visible, and offered to nobody for deletion.
+	if !c.Loc.Reclaim.Valid() {
+		return classify.Unknown
 	}
 	return c.Loc.Reclaim
 }
