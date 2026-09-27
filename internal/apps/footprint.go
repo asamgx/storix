@@ -46,8 +46,9 @@ type Footprint struct {
 	Total      int64 `json:"total"`
 	// Sources are where the owner's bundles were found.
 	Sources []Source `json:"-"`
-	// Confidence is the weakest attribution among the components, because
-	// a footprint is only as trustworthy as its least certain part.
+	// Confidence is the weakest of the owner's verdict and the attributions
+	// among the components, because a footprint is only as trustworthy as
+	// its least certain part.
 	Confidence classify.Confidence `json:"confidence"`
 	Components []Component         `json:"components,omitempty"`
 }
@@ -72,6 +73,14 @@ func Footprints(a *Analysis, winners []classify.Claim) []Footprint {
 		fp := &Footprint{Owner: o.Owner, Confidence: o.Confidence}
 		if v := a.Verdicts[key]; v != nil {
 			fp.State, fp.Verdict = v.State, *v
+			// The attribution says whose data this is; the verdict says
+			// what became of the software. A footprint reports the weaker
+			// of the two, so an orphan whose only evidence is a directory
+			// name reads as possible however sure the attribution is.
+			// Confidence counts up as it weakens.
+			if v.Confidence != classify.None && v.Confidence > fp.Confidence {
+				fp.Confidence = v.Confidence
+			}
 		}
 		for _, b := range o.Bundles {
 			fp.Sources = append(fp.Sources, b.Source)

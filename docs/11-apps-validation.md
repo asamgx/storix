@@ -81,21 +81,20 @@ below (see Divergences).
 | DynamicLake Pro | 5.4 MB | 2026-05-29 | likely | directory named after a bundle identifier; no bundle found (see [docs/10](10-bench-1b.md): the walker cannot see `~/.Trash`, so this is not the in-Trash case the original plan expected) |
 | Cap | 852 KB | 2025-07-23 | likely | `so.cap.desktop`, no bundle |
 | DevToys | 520 KB | 2025-11-13 | likely | `com.devtoys*` caches, prefs and WebKit data; no bundle |
-| TabNine | 217 KB | 2025-07-26 | likely* | the evidence says "the only evidence is the directory name, so this is possible rather than likely" |
+| TabNine | 217 KB | 2025-07-26 | possible | the evidence says "the only evidence is the directory name, so this is possible rather than likely" |
 | boringNotch | 41 KB | 2025-07-26 | likely | `theboringteam.boringnotch` container, no bundle |
-| Chromium | 12 KB | 2026-09-14 | likely* | the only copy on the volume is a staged Playwright download (`~/Library/Caches/ms-playwright/chromium-1161/chrome-mac/Chromium.app`), which does not count as installed; evidence again says "possible rather than likely" |
-| Microsoft Edge | 12 KB | 2026-09-14 | likely* | directory-name evidence only |
-| Vivaldi | 12 KB | 2026-09-14 | likely* | directory-name evidence only |
+| Chromium | 12 KB | 2026-09-14 | possible | the only copy on the volume is a staged Playwright download (`~/Library/Caches/ms-playwright/chromium-1161/chrome-mac/Chromium.app`), which does not count as installed; evidence again says "possible rather than likely" |
+| Microsoft Edge | 12 KB | 2026-09-14 | possible | directory-name evidence only |
+| Vivaldi | 12 KB | 2026-09-14 | possible | directory-name evidence only |
 | Opera | 8 KB | 2026-09-14 | likely | `com.operasoftware.Opera`, no bundle |
 | Mozilla | 0 B | 2026-07-22 | **possible** (JSON: `corroborating`) | `/Library/Application Support/Mozilla`, directory-name evidence only; nothing inside it belongs to an installed application |
 
-`*`: `apps.orphanConfidence` (`internal/apps/verdict.go`) writes "possible rather than likely" only
-when it returns `classify.Corroborating`, which the text report prints as "possible". Mozilla is
-that case, and both columns agree. For TabNine, Chromium, Microsoft Edge and Vivaldi the same
-sentence is in the evidence, but the reported confidence, in both the text and the JSON, is
-`likely`. So on this build something after `orphanConfidence` raises the verdict while the
-evidence line stays. The tier and the prose disagree for those four rows. This is an open
-follow-up for the apps lane, not a data problem: the orphan verdict itself is right either way.
+TabNine, Chromium, Microsoft Edge and Vivaldi have directory-name evidence only, so
+`apps.orphanConfidence` grades them `Corroborating`, printed as "possible". An earlier build
+reported them `likely`: the footprint started from the owner's attribution confidence ("this
+directory is TabNine's") and never looked at the verdict's ("TabNine is gone"). The footprint now
+takes the weaker of the two, so the reported tier can never exceed what the verdict supports
+(`TestANameOnlyOrphanIsReportedAsPossible`).
 
 UI Launcher, orphan-likely on 2026-09-23, is now **installed**. It lives under
 `/Library/Application Support/Autodesk/AdODIS/…`, which the apps inventory now finds, so it was a
@@ -138,11 +137,9 @@ describes rather than a gap in coverage.
   Trash-dwelling bundle; this scan process cannot list `~/.Trash` (EACCES, confirmed directly),
   so the walker never sees whatever is there and the verdict falls back to the directory-name
   evidence alone. Correct given what the process can read; see docs/10 for the confirmation.
-- **TabNine, Chromium, Microsoft Edge and Vivaldi say "possible" in their evidence but carry
-  `likely`**, in the text and in the JSON (see the note under the orphan table). The sentence is
-  only written together with `Corroborating`, so on this build the confidence is raised after
-  the evidence is written. That is a real inconsistency between the prose and the tier, and an
-  open follow-up. Mozilla is the one row where both say "possible".
+- **TabNine, Chromium, Microsoft Edge and Vivaldi were reported `likely`** although their evidence
+  only supports "possible". Fixed before merge: a footprint's confidence is capped at the
+  verdict's, so these four and Mozilla now read "possible" in the text and the JSON.
 - **Cursor, DevToys and Mattermost moved from cask-only to orphan-likely** between the 09-23 run
   and the 09-27 re-run. Their casks were uninstalled in between (51 casks became 48) and their
   data stayed. So the cask receipts that used to explain the data are gone, and the

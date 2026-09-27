@@ -494,3 +494,33 @@ func TestAReclaimTagIsNeverUnset(t *testing.T) {
 		}
 	}
 }
+
+// TestANameOnlyOrphanIsReportedAsPossible is the confidence the report
+// overstated. TabNine's data is attributed to TabNine with confidence, but the
+// only evidence that TabNine is gone is a directory name, and the verdict says
+// so: corroborating, "possible rather than likely". The report printed the
+// attribution's tier instead, so a guess read as a likely orphan.
+func TestANameOnlyOrphanIsReportedAsPossible(t *testing.T) {
+	t.Parallel()
+	vf := newVerdictFixture(t, "Users/andrewsam/Library/Application Support/TabNine")
+	a := vf.analyze(t, &Facts{}, Options{})
+
+	v := verdictByLabel(t, a, "TabNine")
+	if v.State != StateOrphanLikely || v.Confidence != classify.Corroborating {
+		t.Fatalf("TabNine verdict = %v %v, want orphan-likely corroborating", v.State, v.Confidence)
+	}
+	rep := BuildReport(a, a.Claims())
+	var found bool
+	for _, e := range rep.Orphans {
+		if e.Label != "TabNine" {
+			continue
+		}
+		found = true
+		if e.Confidence != classify.Corroborating.String() {
+			t.Errorf("reported confidence = %s, want %s: never above the verdict's", e.Confidence, classify.Corroborating)
+		}
+	}
+	if !found {
+		t.Fatalf("TabNine is not in the report's orphans: %+v", rep.Orphans)
+	}
+}
