@@ -293,3 +293,30 @@ func TestHumanAge(t *testing.T) {
 		}
 	}
 }
+
+// TestVerdictForeignCopyIsNotCalledAnUpdate: a bundle that only shares the
+// owner's name, inside another program's cache, is still no installation, but
+// it is not the owner's staged update either. Playwright's test Chromium was
+// reported as "a staged update" of the Chromium browser.
+func TestVerdictForeignCopyIsNotCalledAnUpdate(t *testing.T) {
+	t.Parallel()
+	vf := newVerdictFixture(t, "Users/andrewsam/Library/Application Support/Chromium")
+
+	a := vf.analyze(t, &Facts{Spotlight: []BundleInfo{{
+		Path:        vf.home + "/Library/Caches/ms-playwright/chromium-1161/chrome-mac/Chromium.app",
+		ID:          "org.chromium.Chromium",
+		DisplayName: "Chromium",
+	}}}, Options{})
+
+	v := verdictByLabel(t, a, "Chromium")
+	if v.State != StateOrphanLikely {
+		t.Fatalf("State = %v, want orphan-likely", v.State)
+	}
+	evidence := strings.Join(v.Evidence, " ")
+	if strings.Contains(evidence, "staged update") {
+		t.Errorf("a copy in another program's cache is called a staged update: %v", v.Evidence)
+	}
+	if !strings.Contains(evidence, "another program's data") {
+		t.Errorf("evidence does not say where the copy is: %v", v.Evidence)
+	}
+}

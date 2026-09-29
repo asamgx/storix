@@ -86,7 +86,7 @@ DEVELOPER  (what your toolchains keep, and what they would give back)
 
   go
   4.2 GB  regen    build cache  /Users/u/Library/Caches/go-build
-  reclaim   4.2 GB across the directories listed above
+  reclaim   4.2 GB can be freed outright, across the directories listed above
 
   projects
   480 MB  build artifacts  git  /Users/u/code/storix  (last touched 2026-06-14)

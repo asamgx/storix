@@ -138,8 +138,48 @@ func TestReclaimLineCountsEachByteOnce(t *testing.T) {
 	r.Detectors = []detect.Status{{Name: "node", State: detect.Ok, Verified: true}}
 
 	got := renderDeveloper(t, r)
-	want := units.Decimal.Bytes(store.Bytes) + " across the directories listed above"
+	want := units.Decimal.Bytes(store.Bytes) + " can be freed outright, across the directories listed above"
 	if !strings.Contains(got, want) {
 		t.Errorf("reclaim line does not read %q; the nested row was counted again:\n%s", want, got)
+	}
+}
+
+// TestReclaimLineKeepsToolManagedApart is D43 in the developer section. A pnpm
+// store root is tool-managed as a whole, its live generation too, and only a
+// superseded generation inside it can be freed outright. The line summed every
+// reclaimable-tagged outermost row, so the live store — and a default Rust
+// toolchain — read as space to give back.
+func TestReclaimLineKeepsToolManagedApart(t *testing.T) {
+	r := fakeScan()
+	root := toolAt(r.Tree, "/Users/u/code/storix", detect.Tool{
+		Name: "store root", Kind: "data", Reclaim: classify.ToolManaged,
+	})
+	old := toolAt(r.Tree, "/Users/u/code/storix/node_modules", detect.Tool{
+		Name: "superseded generation", Kind: "versions", Reclaim: classify.Regenerable,
+	})
+	r.Summaries = map[string]detect.Summary{"node": {Tools: []detect.Tool{root, old}}}
+	r.Detectors = []detect.Status{{Name: "node", State: detect.Ok, Verified: true}}
+
+	got := renderDeveloper(t, r)
+	u := units.Decimal
+	want := u.Bytes(old.Bytes) + " can be freed outright and " + u.Bytes(root.Bytes-old.Bytes) +
+		" more only through the tool"
+	if !strings.Contains(got, want) {
+		t.Errorf("reclaim line does not read %q:\n%s", want, got)
+	}
+}
+
+func TestReclaimSharesCountEachByteAtItsDeepestRow(t *testing.T) {
+	tools := []detect.Tool{
+		{Path: "/a", Bytes: 100, Reclaim: classify.ToolManaged},
+		{Path: "/a/live", Bytes: 60, Reclaim: classify.ToolManaged},
+		{Path: "/a/old", Bytes: 30, Reclaim: classify.Regenerable},
+		{Path: "/a/old", Bytes: 30, Reclaim: classify.Regenerable},
+		{Path: "/ab", Bytes: 7, Reclaim: classify.Orphaned},
+		{Path: "/c", Bytes: 5, Reclaim: classify.UserData},
+	}
+	free, viaTool := reclaimShares(tools)
+	if free != 37 || viaTool != 70 {
+		t.Errorf("reclaimShares = %d free, %d via tool; want 37 and 70", free, viaTool)
 	}
 }

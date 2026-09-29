@@ -1,8 +1,8 @@
 DEVELOPER  (what your toolchains keep, and what they would give back)                                                   
   node                                                                                                                  
   4 MB  tool    pnpm store v10  ~/Library/Caches/pnpm                                                                   
-  reclaim   4 MB — pnpm store prune; 4 MB across the directories listed above                                           
-                                                                                                                        
+  reclaim   4 MB — pnpm store prune; 4 MB only through the tool, across the directories listed                          
+            above                                                                                                       
                                                                                                                         
                                                                                                                         
                                                                                                                         

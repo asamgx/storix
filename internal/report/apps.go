@@ -216,8 +216,8 @@ func (a *appsReport) unknown() {
 	if !a.all && len(shown) > appsTopUnknown {
 		shown = shown[:appsTopUnknown]
 	}
-	a.section(fmt.Sprintf("UNKNOWN OWNER  (%d of %d directories, largest first)",
-		len(shown), a.rep.Counts.Candidates))
+	a.section(fmt.Sprintf("UNKNOWN OWNER  (%d of %d, largest first)",
+		len(shown), len(a.rep.Unknown)))
 
 	tbl := newTable(a.st, false, true, false)
 	for _, e := range shown {

@@ -155,30 +155,73 @@ func (t *textReport) toolGroup(g toolGroup) {
 // what the tool itself says it would free, which for Homebrew is the summary
 // line of `brew cleanup -n` and knows about superseded kegs no path pattern
 // can identify. The second is what storix adds up from the directories it
-// tagged reclaimable. Where both exist both are printed, because a reader
-// deciding what to delete wants the tool's own promise first.
+// tagged, split the way the ledger splits it (D43): bytes that can be freed
+// outright, and bytes only the tool itself can give back because it keeps
+// what is still in use. Counting a live pnpm store or the default Rust
+// toolchain as "reclaim" promised space no one should delete by hand.
 func (t *textReport) reclaimLine(g toolGroup) {
 	measured := g.summary.Reclaimable
-	var walked int64
-	for _, tool := range outermost(g.summary.Tools) {
-		if tool.Reclaim.Reclaimable() {
-			walked += tool.Bytes
-		}
+	free, viaTool := reclaimShares(g.summary.Tools)
+
+	var walked string
+	switch {
+	case free > 0 && viaTool > 0:
+		walked = fmt.Sprintf("%s can be freed outright and %s more only through the tool, across the directories listed above",
+			t.u.Bytes(free), t.u.Bytes(viaTool))
+	case free > 0:
+		walked = t.u.Bytes(free) + " can be freed outright, across the directories listed above"
+	case viaTool > 0:
+		walked = t.u.Bytes(viaTool) + " only through the tool, across the directories listed above"
 	}
 
 	switch {
-	case measured > 0 && walked > 0:
-		t.field("reclaim", fmt.Sprintf("%s — %s; %s across the directories listed above",
-			t.u.Bytes(measured), reclaimSource(g.summary), t.u.Bytes(walked)), t.st.good)
+	case measured > 0 && walked != "":
+		t.field("reclaim", fmt.Sprintf("%s — %s; %s",
+			t.u.Bytes(measured), reclaimSource(g.summary), walked), t.st.good)
 	case measured > 0:
 		t.field("reclaim", t.u.Bytes(measured)+" — "+reclaimSource(g.summary), t.st.good)
-	case walked > 0:
-		t.field("reclaim", t.u.Bytes(walked)+" across the directories listed above", t.st.good)
+	case walked != "":
+		t.field("reclaim", walked, t.st.good)
 	}
 }
 
-// reclaimSource attributes a tool-reported figure to the command that
-// produced it.
+// reclaimShares splits a detector's rows into what can be freed outright and
+// what only the tool can give back, counting each byte once.
+//
+// A detector lists a directory and the interesting things inside it — the
+// pnpm store root and each of its generations — and those rows carry
+// different tags: the live generation is tool-managed, the superseded ones
+// regenerable. Each byte is therefore counted under the deepest row that
+// holds it, so the superseded generations count as free inside a store root
+// that as a whole is not.
+func reclaimShares(tools []detect.Tool) (free, viaTool int64) {
+	sorted := append([]detect.Tool(nil), tools...)
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Path < sorted[j].Path })
+
+	own := make([]int64, len(sorted))
+	var stack []int // indexes of the rows enclosing the current one
+	for i, tool := range sorted {
+		own[i] = tool.Bytes
+		for len(stack) > 0 && !within(tool.Path, sorted[stack[len(stack)-1]].Path) {
+			stack = stack[:len(stack)-1]
+		}
+		if len(stack) > 0 {
+			own[stack[len(stack)-1]] -= tool.Bytes
+		}
+		stack = append(stack, i)
+	}
+	for i, tool := range sorted {
+		b := max(own[i], 0)
+		switch {
+		case tool.Reclaim.Freeable():
+			free += b
+		case tool.Reclaim == classify.ToolManaged:
+			viaTool += b
+		}
+	}
+	return free, viaTool
+}
+
 func reclaimSource(s detect.Summary) string {
 	if s.ReclaimNote != "" {
 		return s.ReclaimNote
@@ -186,28 +229,10 @@ func reclaimSource(s detect.Summary) string {
 	return "reported by the tool itself"
 }
 
-// outermost drops the rows nested inside another row, so that a total over
-// them counts each byte once.
-//
-// A detector lists both a directory and the interesting things inside it —
-// the Cellar and the two formulae with a superseded version, the pnpm store
-// root and each of its generations — because both are worth seeing. Adding
-// those rows up would count the same gigabyte three times, which is how a
-// report ends up promising more free space than the disk has.
-func outermost(tools []detect.Tool) []detect.Tool {
-	sorted := append([]detect.Tool(nil), tools...)
-	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Path < sorted[j].Path })
-
-	out := make([]detect.Tool, 0, len(sorted))
-	kept := ""
-	for _, tool := range sorted {
-		if kept != "" && strings.HasPrefix(tool.Path, kept+"/") {
-			continue
-		}
-		kept = tool.Path
-		out = append(out, tool)
-	}
-	return out
+// within reports whether path is dir or lies inside it. A row listed twice
+// for the same directory is nested in the first, so it is not counted again.
+func within(path, dir string) bool {
+	return path == dir || strings.HasPrefix(path, dir+"/")
 }
 
 // sortedTools orders a detector's rows largest first, which is the order a
