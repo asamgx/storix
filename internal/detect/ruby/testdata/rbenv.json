@@ -1,0 +1,6 @@
+[
+  {
+    "cmd": {"Name": "gem", "Args": ["env", "gemdir"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {"stdout": "/Users/andrew/.rbenv/versions/3.3.6/lib/ruby/gems/3.3.0\n", "exit_code": 0, "duration_ns": 300000000}
+  }
+]

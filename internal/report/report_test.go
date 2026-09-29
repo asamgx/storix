@@ -3,6 +3,7 @@ package report
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"os"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asamgx/storix/internal/classify"
+	"github.com/asamgx/storix/internal/classify/catalog"
 	"github.com/asamgx/storix/internal/ledger"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/scan"
@@ -80,36 +83,65 @@ func fillTree(root *walk.Node) *walk.Tree {
 	return &walk.Tree{Root: root, Nodes: index, Started: started, Finished: finished}
 }
 
-// fakeScan is the scan both golden files describe: a data-volume walk with a
-// nested mount skipped, three kinds of unreadable directory, evicted cloud
-// files in two locations and a hard-link group.
+// fakeScan is the scan both golden files describe: a data-volume walk with an
+// application, a container disk image, a package cache, an app cache, a
+// device backup, cloud files, the Trash and one directory no rule reaches, so
+// that every bucket the classifier fills has something in it. It also has a
+// nested mount skipped, three kinds of unreadable directory and a hard-link
+// group, exactly as phase 1a had.
 func fakeScan() *scan.Result {
-	users := dir("Users",
-		dir("u",
-			dir("Library",
-				dir("Group Containers",
-					node("data.img.raw", 18_700_000_000, 245_000_000_000),
-				),
-				dir("Caches",
-					node("go-build", 4_200_000_000, 4_200_000_000),
-				),
-				dir("Mobile Documents",
-					func() *walk.Node {
-						n := node("Keynote.key", 0, 2_000_000_000)
-						n.Flags = walk.FlagDataless
-						return n
-					}(),
+	library := dir("Library",
+		dir("Application Support",
+			dir("MobileSync",
+				dir("Backup",
+					dir("00008110-000C4D2E0A30801E",
+						node("Manifest.db", 3_100_000_000, 3_100_000_000),
+					),
 				),
 			),
+		),
+		dir("Caches",
+			dir("go-build", node("trim.txt", 4_200_000_000, 4_200_000_000)),
+			dir("com.spotify.client", node("Data", 7_000_000_000, 7_000_000_000)),
+		),
+		dir("Group Containers",
+			dir("HUAQ24HBR6.dev.orbstack",
+				dir("data", node("data.img.raw", 18_700_000_000, 245_000_000_000)),
+			),
+		),
+		dir("Mobile Documents",
 			func() *walk.Node {
-				d := dir("Desktop")
-				d.Small = walk.Small{Files: 12, Dataless: 5, Bytes: 49_152, Apparent: 41_003}
-				return d
+				n := node("Keynote.key", 0, 2_000_000_000)
+				n.Flags = walk.FlagDataless
+				return n
 			}(),
 		),
 	)
-	root := dir(mac.DataRoot, users, dir("private", dir("var", dir("db"))))
-	root.Children[1].Children[0].Children[0].Flags = walk.FlagUnreadable | walk.FlagPartial
+	home := dir("u",
+		library,
+		func() *walk.Node {
+			d := dir("Desktop")
+			d.Small = walk.Small{Files: 12, Dataless: 5, Bytes: 49_152, Apparent: 41_003}
+			return d
+		}(),
+		dir(".Trash", node("old-build.zip", 900_000_000, 900_000_000)),
+		dir("code", dir("storix",
+			node("main.go", 120_000, 120_000),
+			dir("node_modules", node("bundle.js", 480_000_000, 480_000_000)),
+		)),
+	)
+	apps := dir("Applications", func() *walk.Node {
+		n := dir("Arc.app", node("Arc", 1_400_000_000, 1_400_000_000))
+		n.Flags = walk.FlagBundle
+		return n
+	}())
+	root := dir(mac.DataRoot,
+		apps,
+		dir("Users", home),
+		dir("weird-vendor-drop", node("blob", 260_000_000, 260_000_000)),
+		dir("private", dir("var", dir("db"))),
+	)
+	root.Children[3].Children[0].Children[0].Flags = walk.FlagUnreadable | walk.FlagPartial
 
 	tr := fillTree(root)
 	tr.LinkGroups = 1_284
@@ -128,17 +160,30 @@ func fakeScan() *scan.Result {
 	tr.SkipListed = []string{mac.DataRoot + "/private/var/vm"}
 
 	f := fakeFacts()
-	l := ledger.Build(f, tr, units.Decimal)
+	e, err := classify.New(catalog.Rules(), classify.Context{
+		Home:      "/Users/u",
+		CodeRoots: []string{"/Users/u/code"},
+	})
+	if err != nil {
+		panic("the catalog does not compile: " + err.Error())
+	}
+	class := e.Run(tr, nil)
+	l := ledger.BuildClassified(f, tr, units.Decimal, class)
 	return &scan.Result{
-		Facts:  f,
-		Tree:   tr,
-		Ledger: l,
+		Facts:     f,
+		Tree:      tr,
+		Ledger:    l,
+		Class:     class,
+		Detectors: fakeDetectors(),
+		Summaries: fakeSummaries(tr),
 		Timing: scan.Timing{
-			Facts:  310 * time.Millisecond,
-			Walk:   19 * time.Second,
-			Finish: 12 * time.Millisecond,
-			Ledger: 4 * time.Millisecond,
-			Total:  19_700 * time.Millisecond,
+			Facts:    310 * time.Millisecond,
+			Walk:     19 * time.Second,
+			Probe:    1_750 * time.Millisecond,
+			Finish:   12 * time.Millisecond,
+			Classify: 180 * time.Millisecond,
+			Ledger:   4 * time.Millisecond,
+			Total:    19_700 * time.Millisecond,
 		},
 	}
 }
@@ -348,5 +393,35 @@ func TestTextRefusesAnEmptyResult(t *testing.T) {
 	}
 	if err := JSON(&buf, &scan.Result{}, Options{}); err == nil {
 		t.Error("JSON accepted a result with no tree")
+	}
+}
+
+// TestAnUnclassifiedScanSaysWhy: with the catalog broken every byte lands in
+// Other, and a report that printed that ledger without the reason would pass
+// storix's failure off as the disk's answer.
+func TestAnUnclassifiedScanSaysWhy(t *testing.T) {
+	r := fakeScan()
+	r.Class = nil
+	r.ClassifyErr = errors.New(`the catalog did not compile: classify: duplicate rule id "twice"`)
+
+	var text bytes.Buffer
+	if err := Text(&text, r, Options{Units: units.Decimal}); err != nil {
+		t.Fatal(err)
+	}
+	flat := strings.Join(strings.Fields(text.String()), " ")
+	if !strings.Contains(flat, "not classified") || !strings.Contains(flat, `duplicate rule id "twice"`) {
+		t.Errorf("the text report does not say why the scan is unclassified:\n%s", text.String())
+	}
+
+	var js bytes.Buffer
+	if err := JSON(&js, r, Options{Version: "v0.0.0-test"}); err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(js.Bytes(), &doc); err != nil {
+		t.Fatalf("the document does not parse: %v", err)
+	}
+	if got, _ := doc["classify_error"].(string); !strings.Contains(got, "duplicate rule id") {
+		t.Errorf("classify_error = %q, want the catalog's error", got)
 	}
 }

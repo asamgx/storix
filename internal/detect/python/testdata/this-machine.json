@@ -1,0 +1,85 @@
+[
+  {
+    "cmd": {
+      "Name": "pyenv",
+      "Args": [
+        "root"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/.pyenv\n",
+      "exit_code": 0,
+      "duration_ns": 47292833
+    }
+  },
+  {
+    "cmd": {
+      "Name": "pyenv",
+      "Args": [
+        "version-name"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "system\n",
+      "exit_code": 0,
+      "duration_ns": 80291375
+    }
+  },
+  {
+    "cmd": {
+      "Name": "uv",
+      "Args": [
+        "cache",
+        "dir"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/.cache/uv\n",
+      "exit_code": 0,
+      "duration_ns": 58537791
+    }
+  },
+  {
+    "cmd": {
+      "Name": "uv",
+      "Args": [
+        "python",
+        "dir"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/.local/share/uv/python\n",
+      "exit_code": 0,
+      "duration_ns": 12413917
+    }
+  },
+  {
+    "cmd": {
+      "Name": "pip3",
+      "Args": [
+        "cache",
+        "dir"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/Library/Caches/pip\n",
+      "exit_code": 0,
+      "duration_ns": 998886375
+    }
+  }
+]

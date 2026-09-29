@@ -5,6 +5,8 @@ import (
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/lipgloss/v2"
+
+	"github.com/asamgx/storix/internal/classify"
 )
 
 // Styles is the palette of the whole interface.
@@ -28,6 +30,20 @@ type Styles struct {
 	Good     lipgloss.Style
 	Banner   lipgloss.Style
 	Status   lipgloss.Style
+
+	// Chip and its variants draw the short tags the tables carry: a
+	// reclaimability tag on a browse row, an application's state, how sure
+	// an owner attribution is. ChipOk is for what is safe or certain,
+	// ChipWarn for what wants the reader's attention, ChipDim for what is
+	// merely stated.
+	Chip     lipgloss.Style
+	ChipOk   lipgloss.Style
+	ChipWarn lipgloss.Style
+	ChipDim  lipgloss.Style
+
+	// Panel and PanelTitle draw the why panel beside or under a view.
+	Panel      lipgloss.Style
+	PanelTitle lipgloss.Style
 }
 
 // NewStyles builds the palette. With color false every style renders its
@@ -38,6 +54,8 @@ func NewStyles(color, dark bool) Styles {
 		Title: plain, Crumb: plain, Dim: plain, Label: plain, Value: plain,
 		Bar: plain, BarEmpty: plain, Selected: plain, Marker: plain, Dir: plain,
 		Warn: plain, Good: plain, Banner: plain, Status: plain,
+		Chip: plain, ChipOk: plain, ChipWarn: plain, ChipDim: plain,
+		Panel: plain, PanelTitle: plain,
 	}
 	if !color {
 		return s
@@ -63,7 +81,59 @@ func NewStyles(color, dark bool) Styles {
 	s.Good = plain.Foreground(lipgloss.Color("2"))
 	s.Banner = plain.Bold(true).Foreground(lipgloss.Color("3"))
 	s.Status = plain.Foreground(muted)
+	s.Chip = plain.Foreground(lipgloss.Color("6"))
+	s.ChipOk = plain.Foreground(lipgloss.Color("2"))
+	s.ChipWarn = plain.Foreground(lipgloss.Color("3"))
+	s.ChipDim = plain.Foreground(muted)
+	s.Panel = plain
+	s.PanelTitle = plain.Bold(true).Foreground(lipgloss.Color("6"))
 	return s
+}
+
+// reclaimChip is the short tag a browse row carries for its reclaimability,
+// with the style that says how much attention it deserves. The tags are five
+// columns at most so the column never moves.
+func reclaimChip(st Styles, r classify.Reclaim) (string, lipgloss.Style) {
+	switch r {
+	case classify.Regenerable:
+		return "regen", st.ChipOk
+	case classify.ToolManaged:
+		return "tool", st.ChipOk
+	case classify.Orphaned:
+		return "orph", st.ChipWarn
+	case classify.UserData:
+		return "user", st.ChipDim
+	case classify.System:
+		return "sys", st.ChipDim
+	default:
+		return "?", st.ChipDim
+	}
+}
+
+// stateChip styles an application's state. Installed software is stated
+// plainly; everything else is a claim about software that may not be there
+// any more, which is what the reader is being asked to look at.
+func stateChip(st Styles, state string) lipgloss.Style {
+	switch state {
+	case "installed":
+		return st.ChipOk
+	case "orphan-likely", "cask-only", "in-trash":
+		return st.ChipWarn
+	default:
+		return st.ChipDim
+	}
+}
+
+// confidenceChip styles how sure an owner attribution is.
+func confidenceChip(st Styles, conf string) lipgloss.Style {
+	switch conf {
+	case "strong":
+		return st.ChipOk
+	case "likely":
+		return st.Chip
+	default:
+		return st.ChipDim
+	}
 }
 
 // HelpStyles is the palette of the key hints, plain when color is off so a

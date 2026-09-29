@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/textinput"
 	"charm.land/lipgloss/v2"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/walk"
@@ -31,10 +31,11 @@ type browseModel struct {
 	cachedBy rowOpts
 	valid    bool
 
-	// filter is the prompt shown while the user is typing one; filtering
-	// says the keyboard belongs to it.
-	filter    textinput.Model
-	filtering bool
+	// class is what the owner and reclaim columns read. It is not part of
+	// rowOpts — a classification is a pointer to a large structure, not a
+	// cache key a person chose — so setClass drops the cached rows itself
+	// when a rescan produces a new one.
+	class *classify.Classification
 
 	// height is how many rows fit on the screen, set by the root model.
 	height int
@@ -78,6 +79,16 @@ func (b *browseModel) setTree(root *walk.Node) {
 	}
 }
 
+// setClass points the owner and reclaim columns at a new classification,
+// dropping the cached rows so they are rebuilt against it.
+func (b *browseModel) setClass(c *classify.Classification) {
+	if b.class == c {
+		return
+	}
+	b.class = c
+	b.valid = false
+}
+
 // openPath descends from the root to n, recording the trail.
 func (b *browseModel) openPath(n *walk.Node) {
 	var chain []*walk.Node
@@ -89,6 +100,31 @@ func (b *browseModel) openPath(n *walk.Node) {
 		b.dir = chain[i]
 		b.cursor, b.offset = 0, 0
 		b.valid = false
+	}
+}
+
+// jumpTo opens the directory that holds n and puts the cursor on it.
+//
+// A directory is shown in its parent rather than entered, because a reader
+// arriving from the ledger or the application table wants to see the thing
+// they picked and what sits beside it, not its contents.
+func (b *browseModel) jumpTo(n *walk.Node) {
+	if n == nil || b.root == nil {
+		return
+	}
+	b.dir, b.trail = b.root, nil
+	b.cursor, b.offset = 0, 0
+	b.clearFilter()
+	b.valid = false
+	if n.Parent == nil {
+		return
+	}
+	b.openPath(n.Parent)
+	for i, r := range b.visible() {
+		if r.node == n {
+			b.moveTo(i)
+			return
+		}
 	}
 }
 
@@ -104,7 +140,7 @@ func (b *browseModel) visible() []row {
 	if b.valid && b.cachedOn == b.dir && b.cachedBy == b.opts {
 		return b.rows
 	}
-	b.rows = buildRows(b.dir, b.opts)
+	b.rows = buildRows(b.dir, b.opts, b.class)
 	b.cachedOn, b.cachedBy, b.valid = b.dir, b.opts, true
 	if b.cursor >= len(b.rows) {
 		b.cursor = max(len(b.rows)-1, 0)
@@ -177,11 +213,8 @@ func (b *browseModel) open() bool {
 	return true
 }
 
-// clearFilter drops the filter and its prompt.
-func (b *browseModel) clearFilter() {
-	b.opts.filter = ""
-	b.filtering = false
-}
+// clearFilter drops the filter.
+func (b *browseModel) clearFilter() { b.opts.filter = "" }
 
 // parent goes back up, restoring the cursor the user left behind.
 func (b *browseModel) parent() bool {
@@ -303,6 +336,12 @@ func (b *browseModel) columnsLine(st Styles) string {
 	sb.WriteString(" " + padLeft(bytes, bytesWidth, bytes))
 	sb.WriteString(" " + padLeft("%", pctWidth, "%"))
 	sb.WriteString(" " + padLeft(fileCount, filesWidth, fileCount))
+	if c.owner > 0 {
+		sb.WriteString(" " + padRight(truncate("owner", c.owner), c.owner, truncate("owner", c.owner)))
+	}
+	if c.reclaim > 0 {
+		sb.WriteString(" " + truncate("tag", c.reclaim))
+	}
 	return st.Dim.Render(strings.TrimRight(sb.String(), " "))
 }
 

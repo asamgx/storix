@@ -1,0 +1,21 @@
+[
+  {
+    "cmd": {
+      "Name": "go",
+      "Args": [
+        "env",
+        "GOCACHE",
+        "GOMODCACHE",
+        "GOPATH",
+        "GOROOT"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/Library/Caches/go-build\n",
+      "exit_code": 0
+    }
+  }
+]

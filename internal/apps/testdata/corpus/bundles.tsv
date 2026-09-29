@@ -1,0 +1,19 @@
+# Application bundles the fixture creates, one per line. The Info.plist body
+# is generated from these columns; "mas" adds Contents/_MASReceipt/receipt.
+# path	id	name	version	mas
+Applications/Visual Studio Code.app	com.microsoft.VSCode	Code	1.99.0	0
+Applications/Google Chrome.app	com.google.Chrome	Google Chrome	151.0.7922.140	0
+Applications/Android Studio.app	com.google.android.studio	Android Studio	2025.1.3	0
+Applications/Stremio.app	com.westbridge.stremio5-mac	Stremio	5.0.0	0
+Applications/ChatGPT.app	com.openai.codex	ChatGPT	1.2024.1	0
+Applications/OrbStack.app	dev.kdrag0n.MacVirt	OrbStack	2.0.1	0
+Applications/Lens.app	com.electron.kontena-lens	Lens	2025.1.1	0
+Applications/Arc.app	company.thebrowser.Browser	Arc	1.104.0	0
+Applications/Brave Browser.app	com.brave.Browser	Brave Browser	151.1.93.136	0
+Applications/LocalSend.app	org.localsend.localsendApp	LocalSend	1.17.0	0
+Applications/Bitwarden.app	com.bitwarden.desktop	Bitwarden	2025.9.0	1
+Applications/Utilities/Claude Code URL Handler.app		Claude Code URL Handler		0
+Applications/Autodesk/AutoCAD 2027/AutoCAD 2027.app	com.autodesk.AutoCAD2027	AutoCAD 2027	26.0.60.161	0
+opt/homebrew/Caskroom/grandperspective/3.5.1/GrandPerspective.app	net.sourceforge.grandperspective	GrandPerspective	3.5.1	0
+Applications/WhatsApp.app	net.whatsapp.WhatsApp	WhatsApp	2.25.1	0
+Applications/balenaEtcher.app	io.balena.etcher	balenaEtcher	2.1.4	0

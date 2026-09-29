@@ -1,0 +1,44 @@
+[
+  {
+    "cmd": {"Name": "xcode-select", "Args": ["-p"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {"stdout": "/Applications/Xcode.app/Contents/Developer\n", "exit_code": 0, "duration_ns": 6000000}
+  },
+  {
+    "cmd": {
+      "Name": "xcodebuild",
+      "Args": ["-checkFirstLaunchStatus"],
+      "Env": ["DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"],
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {"exit_code": 0, "duration_ns": 800000000}
+  },
+  {
+    "cmd": {
+      "Name": "xcrun",
+      "Args": ["simctl", "list", "devices", "-j"],
+      "Env": ["DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"],
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "{\n  \"devices\" : {\n    \"com.apple.CoreSimulator.SimRuntime.iOS-18-2\" : [\n      {\n        \"udid\" : \"11111111-1111-1111-1111-111111111111\",\n        \"name\" : \"iPhone 16 Pro\",\n        \"isAvailable\" : true,\n        \"state\" : \"Shutdown\"\n      }\n    ],\n    \"com.apple.CoreSimulator.SimRuntime.iOS-16-0\" : [\n      {\n        \"udid\" : \"22222222-2222-2222-2222-222222222222\",\n        \"name\" : \"iPhone 13\",\n        \"isAvailable\" : false,\n        \"availabilityError\" : \"runtime profile not found using \\\"System\\\" match policy\",\n        \"state\" : \"Shutdown\"\n      }\n    ]\n  }\n}\n",
+      "exit_code": 0,
+      "duration_ns": 300000000
+    }
+  },
+  {
+    "cmd": {
+      "Name": "xcrun",
+      "Args": ["simctl", "runtime", "list", "-j"],
+      "Env": ["DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"],
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "{\n  \"A1\" : {\n    \"identifier\" : \"com.apple.CoreSimulator.SimRuntime.iOS-18-2\",\n    \"version\" : \"18.2\",\n    \"build\" : \"22C150\",\n    \"path\" : \"/Library/Developer/CoreSimulator/Images/A1.dmg\"\n  }\n}\n",
+      "exit_code": 0,
+      "duration_ns": 200000000
+    }
+  }
+]

@@ -1,0 +1,6 @@
+[
+  {
+    "cmd": {"Name": "ollama", "Args": ["list"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {"stdout": "Error: something went wrong\nwarning\n", "exit_code": 0, "duration_ns": 5000000}
+  }
+]

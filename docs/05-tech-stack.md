@@ -15,7 +15,7 @@
 | Components | `github.com/charmbracelet/bubbles` | `table`, `viewport`, `progress`, `spinner`, `textinput`, `help`, `key` |
 | Logging | `github.com/charmbracelet/log` | Debug log to file when `--debug` |
 | Syscalls | `golang.org/x/sys/unix` | `Statfs`, `Lstat`/`Stat_t`, `Getattrlistbulk`, `Setattrlist` if needed |
-| plist | `howett.net/plist` | Info.plist (XML and binary), pkg receipts, `lsregister` output parsing |
+| plist | `howett.net/plist` v1.0.1 | Info.plist (XML and binary), pkg receipts, `lsregister` output parsing. In use since phase 1b (`internal/apps/plist.go`, `internal/detect/xcode`, `internal/detect/backups`) |
 | Sizes | `github.com/dustin/go-humanize` or in-house | Must support decimal and binary; likely write a 30-line formatter to match Finder exactly |
 | Config | `github.com/BurntSushi/toml` | Simple TOML config |
 | Cache encoding | `encoding/gob` first; evaluate `github.com/vmihailenco/msgpack` if size/speed is poor | Benchmark on the real tree |
@@ -35,11 +35,23 @@ storix/
                                 duplicate CLI logic (added in the phase 1a implementation plan)
     walk/                       walker, node tree, hard-link dedupe, skip list, IO policy
     volume/                     statfs, diskutil, tmutil facts
-    classify/                   rule model, catalog, engine, conflict resolution, provenance
-    detect/                     Detector interface + one package per detector
-      apps/  homebrew/  node/  python/  rust/  golang/  ruby/  jvm/  xcode/  ide/
-      aimodels/  projects/  orbstack/  docker/  colima/  vms/  nix/  backups/
-    probe/                      shell-out helper with timeouts, PATH resolution, caching
+    classify/                   rule model, engine, conflict resolution, provenance (bucket.go,
+                                claim.go, engine.go, pattern.go, compile.go, rule.go)
+      catalog/                  the embedded rule tables, one file per area (288 rules)
+    detect/                     Detector interface, registry/runner, Env, shared types (detect.go,
+                                registry.go, env.go)
+      homebrew/  node/  python/  rust/  golang/  ruby/  jvm/  xcode/  ide/
+      aimodels/  projects/  orbstack/  docker/  colima/  podman/  vms/  kubernetes/  nix/
+      backups/  clitools/  ecosystems/            (not "other-ecosystems" — the package
+                                                   directory, the cache section key and
+                                                   --disable-detector all agree on the shorter name)
+    apps/                       the application inventory detector: bundle/cask/receipt/
+                                LaunchServices/team-id linking, orphan verdicts, footprints
+                                (registers itself into detect's registry; not a subpackage of
+                                detect, since it depends on classify.Classification)
+    probe/                      shell-out helper with timeouts, PATH resolution, fixtures
+                                (probe.go, exec.go, record.go for capture/replay, bytes.go for
+                                parsing human-formatted sizes like "9.853GB")
     ledger/                     bucket aggregation, reconciliation, reclaim totals
     cache/                      scan persistence, retention, ownership fix under sudo
     report/                     text and JSON renderers

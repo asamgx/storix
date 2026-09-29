@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/mac"
 	"github.com/asamgx/storix/internal/testutil"
 	"github.com/asamgx/storix/internal/volume"
@@ -175,7 +176,7 @@ func TestRunSendsProgressEvents(t *testing.T) {
 
 func TestExemptPrefixesOnlyApplyToTheDataVolume(t *testing.T) {
 	f := testutil.New(t)
-	opts := walkOptions(Config{}, f.Root, factsFor(t, f.Root))
+	opts := walkOptions(Config{}, f.Root, factsFor(t, f.Root), nil, classify.Context{})
 	if opts.ExemptPrefixes == nil || len(opts.ExemptPrefixes) != 0 {
 		t.Errorf("ExemptPrefixes = %v, want an empty non-nil slice under a partial root", opts.ExemptPrefixes)
 	}
@@ -183,7 +184,7 @@ func TestExemptPrefixesOnlyApplyToTheDataVolume(t *testing.T) {
 		t.Error("the mount guard is off, so a nested mount would be counted twice")
 	}
 
-	whole := walkOptions(Config{}, mac.DataRoot, factsFor(t, mac.DataRoot))
+	whole := walkOptions(Config{}, mac.DataRoot, factsFor(t, mac.DataRoot), nil, classify.Context{})
 	if whole.ExemptPrefixes != nil {
 		t.Errorf("ExemptPrefixes = %v, want nil (the walker's defaults) on the data volume", whole.ExemptPrefixes)
 	}
@@ -230,4 +231,33 @@ func factsFor(t *testing.T, root string) *volume.Facts {
 		t.Skipf("volume facts unavailable: %v", err)
 	}
 	return f
+}
+
+// TestRunRecordsWhyItDidNotClassify: a catalog that does not compile used to
+// leave Class nil with the error dropped, so the report showed every byte in
+// Other and nothing said that was storix failing rather than the disk.
+func TestRunRecordsWhyItDidNotClassify(t *testing.T) {
+	broken := []classify.Rule{
+		{ID: "twice", Match: "/A", Bucket: classify.BucketOther, Reclaim: classify.Unknown},
+		{ID: "twice", Match: "/B", Bucket: classify.BucketOther, Reclaim: classify.Unknown},
+	}
+	saved := catalogRules
+	catalogRules = func() []classify.Rule { return broken }
+	t.Cleanup(func() { catalogRules = saved })
+
+	f := testutil.New(t)
+	f.File("a.bin", 1024)
+	res, err := Run(t.Context(), Config{Roots: []string{f.Root}, NoCache: true})
+	if err != nil {
+		t.Fatalf("a broken catalog sank the scan: %v", err)
+	}
+	if res.Class != nil {
+		t.Error("a catalog that does not compile still produced a classification")
+	}
+	if res.ClassifyErr == nil || !strings.Contains(res.ClassifyErr.Error(), `duplicate rule id "twice"`) {
+		t.Errorf("ClassifyErr = %v, want the catalog's own error", res.ClassifyErr)
+	}
+	if res.Ledger == nil {
+		t.Error("the ledger is missing although the walk succeeded")
+	}
 }

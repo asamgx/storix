@@ -25,11 +25,23 @@ type KeyMap struct {
 	Finder    key.Binding
 	Copy      key.Binding
 	Switch    key.Binding
-	Browse    key.Binding
-	Unacc     key.Binding
-	Rescan    key.Binding
-	Help      key.Binding
-	Quit      key.Binding
+
+	// The six result views, in the order of docs/03: the digits select one
+	// directly and tab cycles through them.
+	Ledger     key.Binding
+	Browse     key.Binding
+	Apps       key.Binding
+	Developer  key.Binding
+	Containers key.Binding
+	Unacc      key.Binding
+
+	// Why toggles the panel that says where a row's classification came
+	// from. It is the same panel in every view that has a selection.
+	Why key.Binding
+
+	Rescan key.Binding
+	Help   key.Binding
+	Quit   key.Binding
 }
 
 // DefaultKeyMap is the keymap of docs/03-architecture.md § Browse.
@@ -54,17 +66,26 @@ func DefaultKeyMap() KeyMap {
 		Finder:    key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "reveal in Finder")),
 		Copy:      key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy path")),
 		Switch:    key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch view")),
-		Browse:    key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "browse")),
-		Unacc:     key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "unaccounted")),
-		Rescan:    key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rescan")),
-		Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
-		Quit:      key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+
+		Ledger:     key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "ledger")),
+		Browse:     key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "browse")),
+		Apps:       key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "apps")),
+		Developer:  key.NewBinding(key.WithKeys("4"), key.WithHelp("4", "developer")),
+		Containers: key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "containers")),
+		// u is the alias the fingers find: the unaccounted view moved from
+		// 2 to 6 when the ledger took the first digit.
+		Unacc: key.NewBinding(key.WithKeys("6", "u"), key.WithHelp("6/u", "unaccounted")),
+		Why:   key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "why")),
+
+		Rescan: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rescan")),
+		Help:   key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Quit:   key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
 	}
 }
 
 // ShortHelp is the one-line hint in the footer.
 func (k KeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Open, k.Parent, k.SortSize, k.Filter, k.Switch, k.Help, k.Quit}
+	return []key.Binding{k.Up, k.Down, k.Open, k.Parent, k.SortSize, k.Filter, k.Why, k.Switch, k.Help, k.Quit}
 }
 
 // FullHelp is the help overlay, in columns.
@@ -73,7 +94,8 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.PageUp, k.PageDown, k.Top, k.Bottom},
 		{k.Open, k.Parent, k.Bundles, k.Filter, k.Escape},
 		{k.SortSize, k.SortName, k.SortMtime, k.SortCount, k.Apparent},
-		{k.Finder, k.Copy, k.Switch, k.Browse, k.Unacc},
+		{k.Finder, k.Copy, k.Why, k.Switch},
+		{k.Ledger, k.Browse, k.Apps, k.Developer, k.Containers, k.Unacc},
 		{k.Rescan, k.Help, k.Quit},
 	}
 }

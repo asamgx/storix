@@ -1,0 +1,60 @@
+# The verdict per owner: what became of the application behind the data.
+#
+# The orphan set is the acceptance list of the plan's Part B section 7, and it
+# is asserted exactly: an owner that appears here and should not, or one that
+# is missing, is a regression in the resolution order rather than a tuning
+# question. "corroborating" is what the report prints as "possible": the only
+# evidence is a directory name.
+#
+# Verdicts are computed against a fixed clock a year past the fixture's
+# creation, so nothing is protected by the thirty-day recency keep signal.
+# That signal has its own test in verdict_test.go.
+# owner key	label	state	confidence
+app:com.autodesk.AutoCAD2027	AutoCAD	installed	strong
+app:com.aviorrok.DynamicLakePro	DynamicLake Pro	in-trash	likely
+app:com.bitwarden.desktop	Bitwarden	installed	strong
+app:com.brave.Browser	Brave Browser	installed	strong
+app:com.electron.kontena-lens	Lens	installed	strong
+app:com.google.Chrome	Google Chrome	installed	strong
+app:com.google.android.studio	Android Studio	installed	strong
+app:com.microsoft.VSCode	VS Code	installed	strong
+app:com.openai.codex	ChatGPT	installed	strong
+app:com.westbridge.stremio5-mac	Stremio	installed	strong
+app:company.thebrowser.Browser	Arc	installed	strong
+app:dev.kdrag0n.MacVirt	OrbStack	installed	strong
+app:io.balena.etcher	balenaEtcher	installed	strong
+app:name:Claude Code URL Handler	Claude Code URL Handler	installed	strong
+app:net.sourceforge.grandperspective	GrandPerspective	installed	strong
+app:net.whatsapp.WhatsApp	WhatsApp	installed	strong
+app:org.localsend.localsendApp	LocalSend	installed	strong
+cask:cursor	Cursor	cask-only	likely
+cli:codex-cli	Codex CLI	non-app	likely
+cli:fastmcp	fastmcp	non-app	likely
+cli:gitkrakencli	GitKrakenCLI	non-app	likely
+cli:gk	gk	non-app	likely
+cli:go	go	non-app	likely
+cli:k9s	k9s	non-app	likely
+cli:lazygit	lazygit	non-app	likely
+cli:storix	storix	non-app	likely
+cli:turborepo	turborepo	non-app	likely
+cli:zoxide	zoxide	non-app	likely
+product:antigravity	Antigravity	orphan-likely	likely
+product:atlas	Atlas	orphan-likely	likely
+product:boringnotch	boringNotch	orphan-likely	corroborating
+product:cap	Cap	orphan-likely	likely
+product:chromium	Chromium	orphan-likely	likely
+product:edge	Microsoft Edge	orphan-likely	likely
+product:globalprotect	GlobalProtect	orphan-likely	likely
+product:opera	Opera	orphan-likely	likely
+product:tabnine	TabNine	orphan-likely	corroborating
+product:ui-launcher	UI Launcher	orphan-likely	corroborating
+product:vivaldi	Vivaldi	orphan-likely	likely
+product:warp	Warp	orphan-likely	likely
+product:wondershare	Wondershare	orphan-likely	likely
+project:mochi	mochi	own-build	likely
+unknown:SomethingNobodyKnows	SomethingNobodyKnows	unknown	unknown
+vendor:com.autodesk	Autodesk	vendor	corroborating
+vendor:com.brave	BraveSoftware	vendor	corroborating
+vendor:com.google	Google	vendor	corroborating
+vendor:com.microsoft	Microsoft	vendor	corroborating
+vendor:com.openai	OpenAI	vendor	corroborating

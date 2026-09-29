@@ -307,7 +307,9 @@ func linkChildren(arena []walk.Node, parent, childStart, childCount []uint32) er
 }
 
 // preorder indexes the rebuilt tree depth-first, left to right, which is the
-// order walk.Finalize produces, so the IDs match a fresh walk.
+// order walk.Finalize produces, so the IDs match a fresh walk. It stamps
+// Node.ID exactly as walk's own preorder does; cache_test asserts that a round
+// trip leaves every id where it was.
 func preorder(root *walk.Node, n int) []*walk.Node {
 	nodes := make([]*walk.Node, 0, n)
 	stack := make([]*walk.Node, 1, 64)
@@ -316,6 +318,7 @@ func preorder(root *walk.Node, n int) []*walk.Node {
 		i := len(stack) - 1
 		cur := stack[i]
 		stack = stack[:i]
+		cur.ID = int32(len(nodes))
 		nodes = append(nodes, cur)
 		for j := len(cur.Children) - 1; j >= 0; j-- {
 			stack = append(stack, cur.Children[j])

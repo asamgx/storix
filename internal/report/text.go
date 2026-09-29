@@ -66,6 +66,9 @@ type Options struct {
 	// Version is the storix version recorded in the JSON document. The
 	// report cannot read it from internal/cli, which imports this package.
 	Version string
+	// Debug adds the sections that exist to tune storix rather than to
+	// describe the machine, such as the directories no rule matched.
+	Debug bool
 }
 
 // withDefaults fills the zero values in.
@@ -93,6 +96,11 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 
 	t := &textReport{w: w, r: r, l: r.Ledger, o: o, st: st, u: u}
 	t.header()
+	t.ledgerSection()
+	t.buckets()
+	t.developer()
+	t.containers()
+	t.detectors()
 	t.volume()
 	t.container()
 	t.topDirs()
@@ -102,6 +110,7 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 	t.snapshots()
 	t.hints()
 	t.counters()
+	t.unmatched()
 	return nil
 }
 
@@ -120,6 +129,7 @@ func Unaccounted(w io.Writer, r *scan.Result, o Options) error {
 	t := &textReport{w: w, r: r, l: r.Ledger, o: o, st: newStyles(o.Color), u: o.Units}
 	t.volume()
 	t.container()
+	t.detectors()
 	t.skipped()
 	t.unreadable()
 	t.dataless()
@@ -408,12 +418,20 @@ func (t *textReport) snapshots() {
 }
 
 func (t *textReport) hints() {
-	if len(t.l.Hints) == 0 {
+	texts := make([]string, 0, len(t.l.Hints)+1)
+	if err := t.r.ClassifyErr; err != nil {
+		// First, because it changes how every bucket above reads.
+		texts = append(texts, "this scan was not classified, so every byte above is counted as Other: "+err.Error())
+	}
+	for _, h := range t.l.Hints {
+		texts = append(texts, h.Text)
+	}
+	if len(texts) == 0 {
 		return
 	}
 	t.section("HINTS")
-	for _, h := range t.l.Hints {
-		for i, line := range wrapText(h.Text, textWidth-4) {
+	for _, text := range texts {
+		for i, line := range wrapText(text, textWidth-4) {
 			bullet := "  • "
 			if i > 0 {
 				bullet = "    "

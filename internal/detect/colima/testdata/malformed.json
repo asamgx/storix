@@ -1,0 +1,34 @@
+[
+  {
+    "cmd": {
+      "Name": "colima",
+      "Args": [
+        "list",
+        "--json"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "not json at all\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "limactl",
+      "Args": [
+        "list",
+        "--json"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "",
+      "exit_code": 0
+    }
+  }
+]

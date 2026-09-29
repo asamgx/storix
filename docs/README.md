@@ -21,6 +21,8 @@ not delete anything.
 | [07-decisions.md](07-decisions.md) | Decisions taken, assumptions, open questions |
 | [08-validation-round-1.md](08-validation-round-1.md) | What was verified on the machine, what was wrong, what changed |
 | [09-bench-1a.md](09-bench-1a.md) | Phase 1a benchmark numbers: `du` vs. the parallel walker, memory, cache, reconciliation, and the manual acceptance checklists |
+| [10-bench-1b.md](10-bench-1b.md) | Phase 1b benchmark numbers: the twelve buckets, engine and probe timing, detector states, conflicts, the largest code-root projects, containers host vs. daemon, and what is not verified on this machine |
+| [11-apps-validation.md](11-apps-validation.md) | Phase 1b application inventory validation: the installed/cask-only/orphan-likely/non-app acceptance tables and where the running detector diverged from the original plan |
 
 ## Status
 
@@ -39,7 +41,19 @@ not delete anything.
   numbers and the acceptance checklist are in
   [09-bench-1a.md](09-bench-1a.md).
 
+- 2026-09-23: **Phase 1b implemented** on branch `asamgx/phase-1b-classify` (M8–M13, A1–A6, independent review round applied; see [10-bench-1b.md](10-bench-1b.md) and [11-apps-validation.md](11-apps-validation.md)). PR pending.
 - 2026-09-23: **Phase 1a implemented** on branch `asamgx/phase-1a-walker` (M0–M6 shipped; M7 acceptance evidence in [09-bench-1a.md](09-bench-1a.md); manual dataless and Finder sampling checks left as checklists). Next: review, merge, then phase 1b.
+
+- 2026-09-23: **Phase 1b implemented** on branch `asamgx/phase-1b-classify` (`v0.1.0` tagged on
+  the phase 1a merge commit; M8–M13 and A1–A7 shipped: the classification engine and 288-rule
+  catalog, `probe`/`detect` framework, 21 detectors, the application inventory in
+  `internal/apps`, the twelve-bucket ledger, the Ledger/Apps/Developer/Containers TUI views and
+  why panel, `storix explain`/`storix apps`/`storix dev`, and the `--disable-detector`/
+  `--code-roots` flags). Other is 0.0% of used space and every acceptance gate in
+  `docs/06-roadmap.md` is met or explicitly marked partial; two corpus entries the plan got
+  wrong before validation (GlobalProtect, Wondershare) are corrected per docs/07 D37–D38. Full
+  numbers in [10-bench-1b.md](10-bench-1b.md) and [11-apps-validation.md](11-apps-validation.md).
+  PR pending. Next: review, merge, then phase 2 (reclaim).
 
 ## Machine snapshot used while planning
 

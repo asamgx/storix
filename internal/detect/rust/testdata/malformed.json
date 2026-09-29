@@ -1,0 +1,18 @@
+[
+  {
+    "cmd": {
+      "Name": "rustup",
+      "Args": [
+        "toolchain",
+        "list"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "no installed toolchains\n",
+      "exit_code": 0
+    }
+  }
+]

@@ -169,6 +169,13 @@ type Ledger struct {
 	// holds to the byte even when the closing statfs is missing.
 	Data Line `json:"data"`
 
+	// Buckets are the twelve top-level buckets of docs/02, always present
+	// and always in that order. They partition the volume's used space:
+	// the walked ones come from the classification, the others from the
+	// readings around the walk. A ledger built without a classification
+	// still carries twelve buckets, with every walked byte in Other.
+	Buckets []Bucket `json:"buckets,omitempty"`
+
 	// MacOS is one line per non-Data volume of the same container: the
 	// sealed system volume, Preboot, VM, Update, Recovery. They are never
 	// walked; their sizes come from getattrlist.
@@ -198,7 +205,18 @@ type Ledger struct {
 // Build assembles the ledger. It never fails: a missing fact becomes a line
 // marked unknown with the reason attached, because a scan that cannot read
 // purgeable space or take a closing statfs still has something true to say.
+//
+// The bucket table is still twelve rows long without a classification, with
+// every walked byte in Other and a note saying so, because a caller that
+// cannot classify should get a shorter answer rather than a different shape.
 func Build(f *volume.Facts, t *walk.Tree, u units.Format) *Ledger {
+	l := build(f, t, u)
+	l.fillBuckets(nil)
+	return l
+}
+
+// build is the phase 1a ledger, without buckets.
+func build(f *volume.Facts, t *walk.Tree, u units.Format) *Ledger {
 	l := &Ledger{Units: u}
 	if t == nil {
 		return l

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/asamgx/storix/internal/detect"
 	"github.com/asamgx/storix/internal/mac"
 )
 
@@ -23,7 +24,7 @@ func TestRunDoctor(t *testing.T) {
 		"build", "dataless materialization", "purgeable space",
 		"getattrlist vs statfs", "permissions", "volumes", "container",
 		"mounts nested inside the scan root", "local Time Machine snapshots",
-		"paths",
+		"paths", "tools (detectors)", "xcode gate", "detectors that would be Missing",
 	}
 	for _, s := range sections {
 		if !strings.Contains(out, s) {
@@ -46,6 +47,25 @@ func TestRunDoctor(t *testing.T) {
 		t.Error("build without cgo does not report anything as unavailable")
 	}
 	t.Log("\n" + out)
+}
+
+// TestRunDoctorListsEveryDetector guards the tools section against silently
+// dropping a detector: every name the registry knows about must appear in
+// the tools table, whether or not this machine has its binary.
+func TestRunDoctorListsEveryDetector(t *testing.T) {
+	if _, err := os.Stat(mac.DataRoot); err != nil {
+		t.Skipf("no %s on this machine: %v", mac.DataRoot, err)
+	}
+	var buf bytes.Buffer
+	if err := runDoctor(context.Background(), &buf, mac.DataRoot); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, det := range detect.Default().Detectors() {
+		if !strings.Contains(out, det.Name()) {
+			t.Errorf("the tools section does not mention detector %q", det.Name())
+		}
+	}
 }
 
 func TestDoctorCommandRegistered(t *testing.T) {

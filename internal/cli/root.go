@@ -29,6 +29,7 @@ type rootOptions struct {
 	debug       bool
 	noCache     bool
 	fromCache   bool
+	codeRoots   []string
 }
 
 // Root builds the storix command tree.
@@ -61,6 +62,7 @@ Redirected to a file or a pipe it prints the text report instead.`,
 	f.BoolVar(&o.debug, "debug", false, "print timings and memory statistics")
 	f.BoolVar(&o.noCache, "no-cache", false, "walk the disk and store nothing")
 	f.BoolVar(&o.fromCache, "from-cache", false, "render the stored scan instead of walking the disk")
+	f.StringSliceVar(&o.codeRoots, "code-roots", codeRootsDefault(), "directories whose projects the developer view lists")
 
 	cmds := append([]*cobra.Command(nil), subcommands...)
 	sort.Slice(cmds, func(i, j int) bool { return cmds[i].Name() < cmds[j].Name() })
@@ -86,6 +88,7 @@ func runRoot(ctx context.Context, out, errOut io.Writer, o *rootOptions) error {
 		debug:       o.debug,
 		noCache:     o.noCache,
 		fromCache:   o.fromCache,
+		codeRoots:   o.codeRoots,
 	}
 	return runScan(ctx, out, errOut, so)
 }

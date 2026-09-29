@@ -1,0 +1,41 @@
+[
+  {
+    "cmd": {
+      "Name": "docker",
+      "Args": [
+        "context",
+        "ls",
+        "--format",
+        "json"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "{\"Current\":true,\"Description\":\"Docker Desktop\",\"DockerEndpoint\":\"unix:///Users/andrew/Library/Containers/com.docker.docker/Data/docker.raw.sock\",\"Error\":\"\",\"Name\":\"desktop-linux\"}\n{\"Current\":false,\"Description\":\"Current DOCKER_HOST based configuration\",\"DockerEndpoint\":\"unix:///var/run/docker.sock\",\"Error\":\"\",\"Name\":\"default\"}\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "docker",
+      "Args": [
+        "--context",
+        "desktop-linux",
+        "system",
+        "df",
+        "--format",
+        "json"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 10000000000
+    },
+    "result": {
+      "stdout": "",
+      "stderr": "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?",
+      "exit_code": 1
+    }
+  }
+]

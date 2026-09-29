@@ -6,10 +6,10 @@ import (
 )
 
 // maxBytesPerNode is the memory budget the tree has to live within. The plan
-// budgets 112 B for a Node plus its name, its pointer in the parent's child
-// slice and its slot in the preorder index; 200 B is the target and 220 the
-// limit, which leaves room for allocator rounding without letting a field
-// creep in unnoticed. A full scan retains on the order of a million nodes, so
+// budgets 120 B for a Node (112 before Node.ID was added in phase 1b) plus its
+// name, its pointer in the parent's child slice and its slot in the preorder
+// index; 200 B is the target and 220 the limit, which leaves room for
+// allocator rounding without letting a field creep in unnoticed. A full scan retains on the order of a million nodes, so
 // every byte here is a megabyte of resident memory.
 const maxBytesPerNode = 220
 

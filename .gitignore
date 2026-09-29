@@ -16,3 +16,4 @@ coverage.*
 .idea/
 .vscode/
 /storix-nocgo
+internal/detect/_recorded/

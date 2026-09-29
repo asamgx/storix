@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/asamgx/storix/internal/report"
+	"github.com/asamgx/storix/internal/scan"
 	"github.com/asamgx/storix/internal/testutil"
 	"github.com/asamgx/storix/internal/units"
 )
@@ -248,5 +249,20 @@ func TestScanCachesAndThenRendersFromTheCache(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "cache,") || !strings.Contains(out.String(), "old") {
 		t.Errorf("the report does not say it came from the cache:\n%s", out.String())
+	}
+}
+
+// TestWarnUnclassifiedNamesTheCatalogError: every command reads its scan
+// through runOne or cachedScan, and both end here, so this is what keeps a
+// ledger with every byte in Other from being shown without the reason.
+func TestWarnUnclassifiedNamesTheCatalogError(t *testing.T) {
+	var errOut bytes.Buffer
+	warnUnclassified(&errOut, &scan.Result{})
+	if errOut.Len() != 0 {
+		t.Errorf("a classified scan printed %q", errOut.String())
+	}
+	warnUnclassified(&errOut, &scan.Result{ClassifyErr: errors.New("the catalog did not compile")})
+	if got := errOut.String(); !strings.Contains(got, "not classified") || !strings.Contains(got, "the catalog did not compile") {
+		t.Errorf("warning = %q", got)
 	}
 }

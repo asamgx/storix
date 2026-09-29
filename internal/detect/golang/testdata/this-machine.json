@@ -1,0 +1,22 @@
+[
+  {
+    "cmd": {
+      "Name": "go",
+      "Args": [
+        "env",
+        "GOCACHE",
+        "GOMODCACHE",
+        "GOPATH",
+        "GOROOT"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/Library/Caches/go-build\n/Users/andrew/go/pkg/mod\n/Users/andrew/go\n/opt/homebrew/opt/go/libexec\n",
+      "exit_code": 0,
+      "duration_ns": 10522709
+    }
+  }
+]

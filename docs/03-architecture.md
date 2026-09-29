@@ -213,8 +213,18 @@ Views, switched with tabs/keys:
 6. **Unaccounted** — unreadable directories with errno and the permission hints.
 
 Scanning shows a progress view (spinner, counters, current path, elapsed) and transitions
-into the Ledger when done. Probes that are still running show as pending chips and update
-in place.
+into the Ledger when done.
+
+**Divergence from the original design (phase 1b):** probes do not surface as pending chips that
+update in place. `scan.Run` joins every detector's `Probe` (`run.Wait`, with a grace period for
+stragglers) before classification runs once, so there is no "still running" state for the TUI to
+render by the time a view exists to render it — a probe is either done by classification time or
+counted as `Timeout`/`Degraded`. Per-detector state and timing are still shown, as a finished
+table rather than live-updating chips: the DETECTORS section of the text report (`--report`,
+`report/containers.go`), which the TUI's Unaccounted view renders too, and `duration_ns` on each
+detector in `--json` and `storix dev --json`. `storix doctor` lists which tools each detector would
+look for but runs no probe and times nothing; neither the why panel nor `--debug` (which prints only
+the slowest probe against the walk) shows a per-detector time.
 
 ### Non-interactive
 - `--report` prints the ledger and each section statically with Lip Gloss styling (colors

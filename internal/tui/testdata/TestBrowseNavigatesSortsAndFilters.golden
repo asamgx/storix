@@ -1,9 +1,9 @@
 /fixture                                                                                          4.3 MB  11 files  live
-   name                                                                                          size▼      %      files
-   Movies/                                                                    ████████░░░░░░    2.5 MB  58.1%          1
-   Library/                                                                   ████░░░░░░░░░░    1.4 MB  32.0%          8
-   Applications/                                                              █░░░░░░░░░░░░░    426 KB   9.9%          2
-   Empty/                                                                     ░░░░░░░░░░░░░░       0 B   0.0%          0
+   name                                                                     size▼      %      files owner          tag
+   Movies/                                               ████████░░░░░░    2.5 MB  58.1%          1
+   Library/                                              ████░░░░░░░░░░    1.4 MB  32.0%          8
+   Applications/                                         █░░░░░░░░░░░░░    426 KB   9.9%          2
+   Empty/                                                ░░░░░░░░░░░░░░       0 B   0.0%          0
 
 
 
@@ -37,4 +37,4 @@
 
 
 bundles are now openable
-↑/k up • ↓/j down • enter/l open • bksp/h parent • s sort by size • / filter • tab switch view • ? help • q quit
+↑/k up • ↓/j down • enter/l open • bksp/h parent • s sort by size • / filter • w why • tab switch view • ? help • q quit

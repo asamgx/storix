@@ -1,0 +1,67 @@
+[
+  {
+    "cmd": {
+      "Name": "npm",
+      "Args": [
+        "config",
+        "get",
+        "cache"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/.npm\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "pnpm",
+      "Args": [
+        "store",
+        "path"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/Library/pnpm/store/v11\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "yarn",
+      "Args": [
+        "--version"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "4.5.3\n",
+      "exit_code": 0
+    }
+  },
+  {
+    "cmd": {
+      "Name": "yarn",
+      "Args": [
+        "config",
+        "get",
+        "cacheFolder"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/.yarn/berry/cache\n",
+      "exit_code": 0
+    }
+  }
+]

@@ -1,0 +1,70 @@
+[
+  {
+    "cmd": {
+      "Name": "npm",
+      "Args": [
+        "config",
+        "get",
+        "cache"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/.npm\n",
+      "exit_code": 0,
+      "duration_ns": 248299167
+    }
+  },
+  {
+    "cmd": {
+      "Name": "pnpm",
+      "Args": [
+        "store",
+        "path"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/Library/pnpm/store/v10\n",
+      "exit_code": 0,
+      "duration_ns": 535100583
+    }
+  },
+  {
+    "cmd": {
+      "Name": "yarn",
+      "Args": [
+        "--version"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "1.22.22\n",
+      "exit_code": 0,
+      "duration_ns": 290063208
+    }
+  },
+  {
+    "cmd": {
+      "Name": "yarn",
+      "Args": [
+        "cache",
+        "dir"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stdout": "/Users/andrew/Library/Caches/Yarn/v6\n",
+      "exit_code": 0,
+      "duration_ns": 447005958
+    }
+  }
+]

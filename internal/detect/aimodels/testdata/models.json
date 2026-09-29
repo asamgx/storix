@@ -1,0 +1,10 @@
+[
+  {
+    "cmd": {"Name": "ollama", "Args": ["list"], "Env": null, "Dir": "", "Timeout": 0},
+    "result": {
+      "stdout": "NAME                       ID              SIZE      MODIFIED\nllama3.2:latest            a80c4f17acd5    2.0 GB    3 days ago\nqwen2.5-coder:14b          9ec8897f747e    9.0 GB    2 weeks ago\n",
+      "exit_code": 0,
+      "duration_ns": 120000000
+    }
+  }
+]

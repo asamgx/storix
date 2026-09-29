@@ -48,27 +48,74 @@ Acceptance:
 
 Deliverable: the ledger and the smart views.
 
-- [ ] `classify` engine: rule model, embedded catalog (~150 rules), specificity ordering, inheritance, conflict resolution, provenance.
-- [ ] `probe` helper with timeouts, concurrency with the walk, captured fixtures.
-- [ ] Detectors in priority order: `homebrew`, `node`, `python`, `go`, `rust`, `xcode`, `ide`, `projects`, `orbstack`, `docker`, then `apps` (inventory → footprint → orphans), then `jvm`, `ruby`, `aimodels`, `colima`, `vms`, `nix`, `backups`, `cli-tools`.
-- [ ] Ledger view with 12 buckets, reclaimable sub-bars.
-- [ ] Apps view (footprints, orphan candidates with evidence).
-- [ ] Developer view (tools, versions with current markers, projects with last activity).
-- [ ] Containers view (host allocated vs guest reported).
-- [ ] "Why" panel showing provenance for any row.
-- [ ] `storix explain PATH`, `storix apps`, `storix dev`.
-- [ ] Curated alias table seeded with ~50 apps; a `testdata` corpus of real Library listings (paths only, no contents) for regression.
+**Implemented on branch `asamgx/phase-1b-classify` (2026-09-23); PR pending.** Evidence for each
+line below is one `storix` command on the development machine — full numbers in
+[docs/10-bench-1b.md](10-bench-1b.md) and [docs/11-apps-validation.md](11-apps-validation.md).
+
+- [x] `classify` engine: rule model, embedded catalog (288 rules, not the original ~150 estimate),
+  specificity ordering, inheritance, conflict resolution, provenance. — `Engine.Run` 29 ms over
+  495k retained nodes, catalog compiles in 0.35 ms (`internal/classify/bench_test.go`); Other is
+  0.0% of used space with the catalog plus detectors together.
+- [x] `probe` helper with timeouts, concurrency with the walk, captured fixtures. — slowest probe
+  (`apps`, 12.79 s, dominated by one `lsregister` timeout) finishes well inside the 21.17 s walk
+  it runs alongside; every detector's Probe has recorded or documentation-derived fixtures.
+- [x] Detectors in priority order: `homebrew`, `node`, `python`, `go`, `rust`, `xcode`, `ide`,
+  `projects`, `orbstack`, `docker`, then `apps` (inventory → footprint → orphans), then `jvm`,
+  `ruby`, `aimodels`, `colima`, `vms`, `nix`, `backups`, `cli-tools` (shipped as `ecosystems`, not
+  `other-ecosystems` — the directory name and every other detector both agree, see
+  `internal/detect/ecosystems`'s package doc). — 22 detectors registered (including `apps`);
+  `storix doctor` lists
+  every one and which of its tools it found; none panicked in `scripts/accept-1b.sh`.
+- [x] Ledger view with 12 buckets, reclaimable sub-bars. — `storix scan --report`; 102.65 GB
+  (54.6% of used) reclaimable across the twelve buckets.
+- [x] Apps view (footprints, orphan candidates with evidence). — `storix apps`: 55 bundles with
+  footprints, 4 cask-only, 14 orphan-likely with evidence, 108 unknown-owner residue.
+- [x] Developer view (tools, versions with current markers, projects with last activity). —
+  `storix dev`: pnpm's three coexisting store generations (v10 current, v3/v11 superseded — the
+  current generation is measured via `pnpm store path`, not asserted, per the M10 critique fix),
+  nvm's v22.20.0 marked current, six largest code-root projects by artifact bytes.
+- [x] Containers view (host allocated vs guest reported). — OrbStack: 18.76 GB host allocated vs
+  19.83 GB guest reported, both shown, neither hidden.
+- [x] "Why" panel showing provenance for any row. — `internal/tui/why.go`; `w` in every view.
+- [x] `storix explain PATH`, `storix apps`, `storix dev`. — all three registered CLI commands;
+  `storix doctor` gained a tools section listing every detector's external binaries and the Xcode
+  gate verdict.
+- [x] Curated alias table seeded with ~50 apps; a `testdata` corpus of real Library listings
+  (paths only, no contents) for regression. — `internal/apps/products.go` plus
+  `internal/apps/testdata/corpus`.
 
 Acceptance:
-- "Other" bucket under 5 % of used space on the planning machine after tuning.
-- Every installed app in `/Applications` appears in the Apps view with a footprint.
-- At least the known leftover data on the planning machine is surfaced as orphan-likely
-  with correct evidence (validated manually during review), and the known non-app software
-  directories (`stremio-server`, `com.wondershare.Installer`) are **not** flagged.
-- Each detector has fixture-based tests and degrades cleanly when its tool is absent.
-- **Not validatable on the planning machine:** Xcode/simulator and Docker Desktop detectors
-  (neither is installed). They ship from documentation with fixtures and are marked
-  unverified until run on a machine that has them.
+- [x] "Other" bucket under 5% of used space on the planning machine after tuning. — **met by a
+  wide margin: 0.0%** (docs/10), not just after tuning but with the catalog alone at the M8
+  milestone.
+- [x] Every installed app in `/Applications` appears in the Apps view with a footprint. — met:
+  55 of 55 bundles (docs/11).
+- [x] At least the known leftover data on the planning machine is surfaced as orphan-likely with
+  correct evidence (validated manually during review). — met: 14 orphan-likely owners with
+  per-owner evidence (docs/11), including two the original plan's corpus line got backwards
+  (GlobalProtect, expected installed; Wondershare, expected exempted — see the criterion amended
+  below) and were corrected against the running detector rather than left as written.
+- [x] ~~the known non-app software directories (`stremio-server`, `com.wondershare.Installer`)
+  are **not** flagged~~ — **amended (D38):** `stremio-server` is still correctly never flagged
+  (it is Stremio's own running-helper data, folded into the installed app's footprint).
+  `com.wondershare.Installer` **is** flagged orphan-likely, and correctly so: no `Wondershare.app`
+  exists anywhere on the volume by any route the backstop checks, which is exactly the case
+  orphan detection exists to catch, unlike a CLI helper's own data directory. The original
+  acceptance bullet asserted the opposite without having checked; docs/07 D38 records the
+  correction.
+- [x] Each detector has fixture-based tests and degrades cleanly when its tool is absent. — met:
+  `scripts/accept-1b.sh` shows six detectors (`colima`, `docker`, `podman`, `nix`, `vms`,
+  `ecosystems`) reporting `missing` cleanly on this machine with static-rule fallback, and none
+  reported `panic` or `timeout`.
+- [~] **Not fully validatable on the planning machine:** Docker Desktop, Colima and Podman are
+  not installed here and ship from documentation with fixtures, marked `Unverified()`. Xcode
+  **is** installed (unlike at design time) and its gate/probe pair ran for real — the
+  first-launch gate passed and `simctl` returned real, if empty (zero devices, zero runtimes),
+  JSON — but the device/runtime JSON parsers themselves are still exercised only against
+  documentation-derived fixtures since this machine has no simulator to produce non-empty output.
+  The sudo probe lane (`mac.InvokingUser`-based privilege drop) is implemented and unit-tested
+  but was not exercised end to end because no scan in this validation ran under `sudo`. Full
+  detail in docs/10-bench-1b.md § Not verified on this machine.
 
 ## Phase 2 — Reclaim (act through native tools)
 

@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/walk"
 )
@@ -55,6 +56,27 @@ type row struct {
 	partial  bool
 	dir      bool // a directory the cursor can descend into
 	openable bool // a directory that is not a bundle, or bundles are on
+
+	// owner and reclaim are the classification's answer for this row: who
+	// the bytes belong to and whether they can be had back. Both are empty
+	// for a row nothing claimed, and both are dropped from the layout on a
+	// terminal too narrow to carry them.
+	owner   string
+	reclaim classify.Reclaim
+	// classified says the reclaim tag means something. A row with no claim
+	// has the zero Reclaim, which is Regenerable, so the tag needs a flag
+	// beside it rather than a sentinel value.
+	classified bool
+
+	// chips are extra tags drawn after the reclaim column, used by the
+	// views that are lists of their own rows rather than of directories.
+	chips []chip
+}
+
+// chip is one short tag with the style that says how to read it.
+type chip struct {
+	text  string
+	style func(Styles) lipgloss.Style
 }
 
 // rowOpts is everything that decides which rows a directory has and in what
@@ -72,7 +94,7 @@ type rowOpts struct {
 // The small files the walker folded into the directory are shown as one
 // synthetic row rather than left out: a directory whose bytes are a hundred
 // thousand tiny files should say so instead of looking empty.
-func buildRows(dir *walk.Node, o rowOpts) []row {
+func buildRows(dir *walk.Node, o rowOpts, class *classify.Classification) []row {
 	if dir == nil {
 		return nil
 	}
@@ -82,7 +104,7 @@ func buildRows(dir *walk.Node, o rowOpts) []row {
 		if filter != "" && !strings.Contains(strings.ToLower(c.Name), filter) {
 			continue
 		}
-		rows = append(rows, nodeRow(c, o))
+		rows = append(rows, nodeRow(c, o, class))
 	}
 	if filter == "" && dir.Small.Files > 0 {
 		rows = append(rows, smallRow(dir, o))
@@ -92,7 +114,7 @@ func buildRows(dir *walk.Node, o rowOpts) []row {
 }
 
 // nodeRow describes one child.
-func nodeRow(n *walk.Node, o rowOpts) row {
+func nodeRow(n *walk.Node, o rowOpts, class *classify.Classification) row {
 	r := row{
 		node:    n,
 		name:    n.Name,
@@ -114,6 +136,9 @@ func nodeRow(n *walk.Node, o rowOpts) row {
 		r.mark = markerDataless
 	}
 	r.openable = r.dir && (o.bundles || !n.Has(walk.FlagBundle))
+	if cl, ok := class.OfNode(n); ok {
+		r.owner, r.reclaim, r.classified = cl.Owner, cl.Reclaim, true
+	}
 	return r
 }
 
@@ -166,23 +191,36 @@ func sortRows(rows []row, o rowOpts) {
 // Column widths. The bar is the only column that gives way on a narrow
 // terminal, and the name column never falls below nameMin.
 const (
-	markerWidth = 2
-	bytesWidth  = 9
-	pctWidth    = 6
-	filesWidth  = 10
-	barWidth    = 14
-	nameMin     = 12
-	colGap      = 1
+	markerWidth  = 2
+	bytesWidth   = 9
+	pctWidth     = 6
+	filesWidth   = 10
+	barWidth     = 14
+	nameMin      = 12
+	colGap       = 1
+	ownerWidth   = 14
+	reclaimWidth = 5
 )
 
-// columns is the width of the two flexible columns at a given terminal width.
-type columns struct{ name, bar int }
+// chipsMinWidth is the terminal width at which the owner and reclaim columns
+// appear. Below it the name column would be squeezed to nothing to make room
+// for two tags, so the tags go and the why panel stays the way to read them.
+const chipsMinWidth = 100
 
-// layout divides the width between the name and the bar.
+// columns is the width of every column that varies with the terminal: the
+// two flexible ones, and the two that are present only on a wide screen.
+type columns struct{ name, bar, owner, reclaim int }
+
+// layout divides the width between the name and the bar, after the fixed
+// columns have taken theirs.
 func layout(width int) columns {
 	fixed := markerWidth + bytesWidth + pctWidth + filesWidth + 4*colGap
-	rest := width - fixed
 	c := columns{bar: barWidth}
+	if width >= chipsMinWidth {
+		c.owner, c.reclaim = ownerWidth, reclaimWidth
+		fixed += c.owner + c.reclaim + 2*colGap
+	}
+	rest := width - fixed
 	if rest < nameMin+barWidth+colGap {
 		c.bar = max(rest-nameMin-colGap, 0)
 	}
@@ -220,7 +258,25 @@ func renderRow(st Styles, u units.Format, r row, c columns, total int64, selecte
 	b.WriteString(" ")
 	files := count(r.files)
 	b.WriteString(padLeft(st.Dim.Render(files), filesWidth, files))
-	line := b.String()
+	if c.owner > 0 {
+		owner := truncate(r.owner, c.owner)
+		b.WriteString(" ")
+		b.WriteString(padRight(st.Dim.Render(owner), c.owner, owner))
+	}
+	if c.reclaim > 0 {
+		tag, style := "", st.ChipDim
+		if r.classified {
+			tag, style = reclaimChip(st, r.reclaim)
+		}
+		tag = truncate(tag, c.reclaim)
+		b.WriteString(" ")
+		b.WriteString(padRight(style.Render(tag), c.reclaim, tag))
+	}
+	for _, ch := range r.chips {
+		b.WriteString(" ")
+		b.WriteString(ch.style(st).Render(ch.text))
+	}
+	line := strings.TrimRight(b.String(), " ")
 	if selected {
 		return st.Selected.Render(stripStyles(line))
 	}

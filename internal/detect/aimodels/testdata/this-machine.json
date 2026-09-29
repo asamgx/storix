@@ -1,0 +1,18 @@
+[
+  {
+    "cmd": {
+      "Name": "ollama",
+      "Args": [
+        "list"
+      ],
+      "Env": null,
+      "Dir": "",
+      "Timeout": 0
+    },
+    "result": {
+      "stderr": "Error: ollama server not responding - could not find ollama app\n",
+      "exit_code": 1,
+      "duration_ns": 195158833
+    }
+  }
+]
