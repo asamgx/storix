@@ -23,8 +23,14 @@ type Bucket struct {
 	// purgeable space on a volume that reports none.
 	Known bool   `json:"known"`
 	Note  string `json:"note,omitempty"`
-	// Reclaimable is the regenerable, tool-managed and orphaned bytes.
+	// Reclaimable is the bytes that could be freed outright: the
+	// regenerable and orphaned ones, and for Purgeable the space the system
+	// frees on its own. Tool-managed bytes are never part of it (D43).
 	Reclaimable int64 `json:"reclaimable"`
+	// ToolManaged is the bytes the owning tool reclaims with its own
+	// command, which may keep what it considers live. It is shown beside
+	// Reclaimable and never summed into it.
+	ToolManaged int64 `json:"tool_managed"`
 	// ByReclaim is one line per non-zero reclaimability tag.
 	ByReclaim []Line `json:"by_reclaim,omitempty"`
 	// Categories and Owners are the largest eight of each, so the report
@@ -64,6 +70,7 @@ func (l *Ledger) fillBuckets(class *classify.Classification) {
 
 	l.fillMacOSBucket()
 	l.fillWalkedBuckets(class)
+	l.markUnreadableBuckets()
 	l.fillDerivedBuckets()
 }
 
@@ -97,7 +104,8 @@ func (l *Ledger) fillWalkedBuckets(class *classify.Classification) {
 		row := l.bucket(b)
 		row.Bytes = t.Bytes
 		row.Files = t.Files
-		row.Reclaimable = t.Reclaimable()
+		row.Reclaimable = t.Freeable()
+		row.ToolManaged = t.ByReclaim[classify.ToolManaged]
 		row.ByReclaim = reclaimLines(t)
 		row.Categories = topLines(t.Categories, t.Bytes)
 		row.Owners = ownerLines(class, b)

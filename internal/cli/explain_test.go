@@ -91,6 +91,93 @@ func explainReport() *apps.Report {
 	}
 }
 
+// newExplainNestedFixture builds a scan where one owner carries an explicit
+// claim on a directory and another explicit claim on something nested inside
+// it — the same shape a real machine has when a detector claims both a
+// tool's dotfile and its extensions directory underneath it — plus a claim on
+// an unrelated directory the same owner also claims, so the fix is checked
+// against bytes that must drop out and bytes that must still be counted.
+func newExplainNestedFixture(t *testing.T) explainFixture {
+	t.Helper()
+
+	root := &walk.Node{Name: mac.DataRoot, Kind: walk.KindDir}
+	lib := dirAt(root, "Users", "andrew", "Library")
+	pnpm := leafDir(lib, "pnpm", 200<<20, 20)
+	store := leafDir(pnpm, "store", 300<<20, 40) // nested inside pnpm
+	global := leafDir(lib, "pnpm-global", 50<<20, 5)
+
+	tree := &walk.Tree{Root: root}
+	finalize(tree, root)
+
+	engine, err := classify.New(catalog.Rules(), classify.Context{Home: "/Users/andrew"})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	claim := func(n *walk.Node) classify.Claim {
+		return classify.Claim{
+			Node: n, Bucket: classify.BucketDeveloper, Category: "Package cache",
+			Owner: "pnpm", OwnerKeys: []string{"cli:pnpm"}, Reclaim: classify.Regenerable,
+			Source: classify.Source{Kind: classify.SourceDetector, ID: "node", Detector: "node"},
+		}
+	}
+	extra := []classify.Claim{claim(pnpm), claim(store), claim(global)}
+	class := engine.Run(tree, extra)
+
+	res := &scan.Result{
+		Tree: tree, Class: class,
+		FromCache: true, CacheAge: 90 * time.Minute,
+	}
+	return explainFixture{res: res, det: pnpm.Display()}
+}
+
+// newExplainAliasFixture builds a scan where a claim carries an owner key the
+// application inventory does not use for that owner: "cask:widget", the
+// token for an application the inventory has since reclassified as an orphan
+// under "product:widget" once its bundle disappeared. It is the same alias
+// gap internal/apps/footprint.go's own aliasedOwner bridges for its own
+// footprint, and explain needs to bridge it too so the two never disagree
+// about the owner's total.
+func newExplainAliasFixture(t *testing.T) explainFixture {
+	t.Helper()
+
+	root := &walk.Node{Name: mac.DataRoot, Kind: walk.KindDir}
+	widget := dirAt(root, "Users", "andrew", ".widget")
+	widget.Bytes, widget.Files = 900<<20, 30
+
+	tree := &walk.Tree{Root: root}
+	finalize(tree, root)
+
+	engine, err := classify.New(catalog.Rules(), classify.Context{Home: "/Users/andrew"})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	extra := []classify.Claim{{
+		Node: widget, Bucket: classify.BucketDeveloper, Category: "Package cache",
+		Owner: "Widget", OwnerKeys: []string{"cask:widget"}, Reclaim: classify.Regenerable,
+		Source: classify.Source{Kind: classify.SourceDetector, ID: "node", Detector: "node"},
+	}}
+	class := engine.Run(tree, extra)
+
+	rep := &apps.Report{
+		Schema: apps.ReportSchema,
+		Orphans: []apps.Entry{{
+			Owner: "product:widget", Label: "Widget", State: "orphan-likely",
+			Confidence: "likely",
+			Footprint:  apps.Sizes{Dev: 900 << 20, Total: 900 << 20},
+			Components: []apps.ComponentRef{
+				{Path: widget.Display(), Bytes: 900 << 20, Bucket: "developer", Source: "detector:node"},
+			},
+			Evidence: []string{"no application bundle for Widget anywhere on the volume"},
+		}},
+	}
+
+	res := &scan.Result{
+		Tree: tree, Class: class, Apps: rep,
+		FromCache: true, CacheAge: 90 * time.Minute,
+	}
+	return explainFixture{res: res, det: widget.Display()}
+}
+
 // dirAt creates a chain of directories under parent and returns the deepest.
 func dirAt(parent *walk.Node, names ...string) *walk.Node {
 	n := parent
@@ -307,6 +394,78 @@ func TestExplainOwnerFallsBackToTheClassificationJoin(t *testing.T) {
 		t.Errorf("explain pnpm: %v", err)
 	} else if !strings.Contains(bare, "4 Developer") {
 		t.Errorf("the unprefixed owner key was not expanded:\n%s", bare)
+	}
+}
+
+// TestExplainOwnerDropsNestedClaimsFromTheFootprintTotal is the owner-mode
+// regression for the double count `storix explain cask:cursor` printed: an
+// owner claimed on a directory and again on something nested inside it must
+// contribute the parent's bytes once, not the parent's total plus the
+// child's.
+func TestExplainOwnerDropsNestedClaimsFromTheFootprintTotal(t *testing.T) {
+	f := newExplainNestedFixture(t)
+
+	doc, err := explainOf(f.res, "cli:pnpm")
+	if err != nil {
+		t.Fatalf("explain cli:pnpm: %v", err)
+	}
+	if doc.Owner == nil {
+		t.Fatal("no owner answer")
+	}
+	// pnpm (500 MB, itself nesting store) plus pnpm-global (50 MB): 550 MB,
+	// not 850 MB, which is what summing every claimed node's own subtree
+	// total, nested or not, would give.
+	if want := int64(550 << 20); doc.Owner.Footprint.Total != want {
+		t.Errorf("footprint total = %d, want %d (nested claim double counted)", doc.Owner.Footprint.Total, want)
+	}
+	if len(doc.Owner.Components) != 2 {
+		t.Errorf("components = %+v, want the parent and the unrelated directory only", doc.Owner.Components)
+	}
+	for _, c := range doc.Owner.Components {
+		if strings.Contains(c.Path, "/pnpm/store") {
+			t.Errorf("the nested claim still has its own row: %+v", doc.Owner.Components)
+		}
+	}
+}
+
+// TestExplainPathFootprintDropsNestedClaims is the path-mode counterpart:
+// asking about the unrelated directory still reports the owner's whole
+// footprint, and that footprint is the deduplicated total.
+func TestExplainPathFootprintDropsNestedClaims(t *testing.T) {
+	f := newExplainNestedFixture(t)
+
+	doc, err := explainOf(f.res, f.det) // f.det is the pnpm directory itself
+	if err != nil {
+		t.Fatalf("explain %s: %v", f.det, err)
+	}
+	if doc.Path == nil || doc.Path.Footprint == nil {
+		t.Fatalf("no footprint on the path answer: %+v", doc.Path)
+	}
+	if want := int64(550 << 20); doc.Path.Footprint.Footprint.Total != want {
+		t.Errorf("footprint total = %d, want %d", doc.Path.Footprint.Footprint.Total, want)
+	}
+}
+
+// TestExplainOwnerMatchesAppsReportByAliasedOwnerKey is the parity check: an
+// owner key a detector still sets ("cask:widget") but the inventory now
+// tracks the owner under a different key ("product:widget", once the cask's
+// application went missing) must resolve to the inventory's own entry, so
+// `storix explain` and `storix apps` never disagree about the same owner.
+func TestExplainOwnerMatchesAppsReportByAliasedOwnerKey(t *testing.T) {
+	f := newExplainAliasFixture(t)
+
+	doc, err := explainOf(f.res, "cask:widget")
+	if err != nil {
+		t.Fatalf("explain cask:widget: %v", err)
+	}
+	if doc.Owner == nil {
+		t.Fatal("no owner answer")
+	}
+	if doc.Owner.Key != "product:widget" {
+		t.Errorf("key = %q, want the inventory's own owner key product:widget", doc.Owner.Key)
+	}
+	if want := int64(900 << 20); doc.Owner.Footprint.Total != want {
+		t.Errorf("footprint total = %d, want %d, the same figure the apps report carries", doc.Owner.Footprint.Total, want)
 	}
 }
 
@@ -560,5 +719,53 @@ func TestRunExplainResolvesARelativePath(t *testing.T) {
 		if want := mac.DisplayPath(f.Path("Library/Caches/com.example.app")); !strings.Contains(out.String(), want) {
 			t.Errorf("explain %s does not name %s:\n%s", arg, want, out.String())
 		}
+	}
+}
+
+// TestExplainNestedFolderShowsItsOwnersFootprint is the case the "equal to the
+// line above" rule must not swallow: after nested components are dropped an
+// owner may have a single component — its root — and explaining a folder
+// inside that root must still show the root's total, since it is not the
+// line above. Only a footprint that is exactly the explained directory is
+// suppressed.
+func TestExplainNestedFolderShowsItsOwnersFootprint(t *testing.T) {
+	root := &walk.Node{Name: mac.DataRoot, Kind: walk.KindDir}
+	code := dirAt(root, "Users", "andrew", "code")
+	project := leafDir(code, "armchair", 400<<20, 40)
+	env := leafDir(project, "env", 1<<20, 6) // nested inside the project
+	tree := &walk.Tree{Root: root}
+	finalize(tree, root)
+
+	engine, err := classify.New(catalog.Rules(), classify.Context{Home: "/Users/andrew"})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	claim := func(n *walk.Node) classify.Claim {
+		return classify.Claim{
+			Node: n, Bucket: classify.BucketDeveloper, Category: "Project source",
+			Owner: "armchair", OwnerKeys: []string{"project:armchair"}, Reclaim: classify.UserData,
+			Source: classify.Source{Kind: classify.SourceDetector, ID: "projects", Detector: "projects"},
+		}
+	}
+	res := &scan.Result{Tree: tree, Class: engine.Run(tree, []classify.Claim{claim(project), claim(env)}),
+		FromCache: true, CacheAge: time.Minute}
+
+	doc, err := explainOf(res, env.Display())
+	if err != nil {
+		t.Fatalf("explain %s: %v", env.Display(), err)
+	}
+	if doc.Path == nil || doc.Path.Footprint == nil {
+		t.Fatal("a folder inside a project lost its owner's footprint")
+	}
+	if want := project.Bytes; doc.Path.Footprint.Footprint.Total != want {
+		t.Errorf("footprint total = %d, want the project's %d", doc.Path.Footprint.Footprint.Total, want)
+	}
+
+	top, err := explainOf(res, project.Display())
+	if err != nil {
+		t.Fatalf("explain %s: %v", project.Display(), err)
+	}
+	if top.Path != nil && top.Path.Footprint != nil {
+		t.Error("the project root repeated its own size as a footprint")
 	}
 }

@@ -233,7 +233,10 @@ func bucketWhy(b ledger.Bucket, u units.Format) whyContent {
 		whyField{"size", u.Bytes(b.Bytes)},
 	)
 	if b.Reclaimable > 0 {
-		c.fields = append(c.fields, whyField{"free", u.Bytes(b.Reclaimable)})
+		c.fields = append(c.fields, whyField{"reclaimable", u.Bytes(b.Reclaimable)})
+	}
+	if b.ToolManaged > 0 {
+		c.fields = append(c.fields, whyField{"via tool", u.Bytes(b.ToolManaged)})
 	}
 	if b.Note != "" {
 		c.fields = append(c.fields, whyField{"note", b.Note})

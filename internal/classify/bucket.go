@@ -225,6 +225,16 @@ func (r Reclaim) Reclaimable() bool {
 	return r == Regenerable || r == ToolManaged || r == Orphaned
 }
 
+// Freeable reports whether the bytes could be freed outright, without asking
+// their owner: regenerable bytes come back on demand and orphaned ones belong
+// to nothing that is still installed. Tool-managed bytes are reclaimable but
+// not freeable, because the tool decides what is still live (a package store
+// in use, a container's volumes), so the ledger's headline figure counts only
+// these two and shows tool-managed bytes beside it (D43).
+func (r Reclaim) Freeable() bool {
+	return r == Regenerable || r == Orphaned
+}
+
 // Confidence is how sure an owner attribution is. Rules never set it above
 // None; the apps detector fills it in when it links data to a bundle. It
 // qualifies Claim.Owner and Claim.OwnerKeys and nothing else.

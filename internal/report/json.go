@@ -24,7 +24,12 @@ import (
 // 2 (2026-09-27, D42): every "reclaim" tag is its name ("regenerable")
 // rather than a number, because the numbering changed so that the zero value
 // could never mean "safe to delete".
-const SchemaVersion = 2
+//
+// 3 (2026-09-29, D43): a ledger bucket's "reclaimable" is the bytes that can
+// be freed outright (regenerable, orphaned, purgeable) and no longer includes
+// tool-managed bytes, which are the new "tool_managed" beside it. A bucket
+// whose locations could not be read is "known": false rather than a zero.
+const SchemaVersion = 3
 
 // JSON writes the machine-readable report.
 //

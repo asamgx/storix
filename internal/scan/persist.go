@@ -319,6 +319,7 @@ type bucketDoc struct {
 	Bytes       int64            `json:"bytes"`
 	Files       int64            `json:"files"`
 	Reclaimable int64            `json:"reclaimable"`
+	ToolManaged int64            `json:"tool_managed,omitempty"`
 	ByReclaim   map[string]int64 `json:"by_reclaim,omitempty"`
 }
 
@@ -363,7 +364,8 @@ func bucketDocs(class *classify.Classification) []bucketDoc {
 			Label:       b.Label(),
 			Bytes:       t.Bytes,
 			Files:       t.Files,
-			Reclaimable: t.Reclaimable(),
+			Reclaimable: t.Freeable(),
+			ToolManaged: t.ByReclaim[classify.ToolManaged],
 			ByReclaim:   reclaimMap(t),
 		})
 	}

@@ -365,16 +365,47 @@ func explainSubtree(class *classify.Classification, root *walk.Node) []explainBu
 }
 
 // explainOwner answers about one owner: a bundle id, an owner key or a label.
+//
+// The application inventory answers first, and not only on a literal match of
+// the argument: a claim can carry an owner key the inventory itself does not
+// use for that owner — a cask token once the bundle behind it is gone, kept
+// only because a detector set it — so the classification's own claims are
+// asked what display label that key resolves to, and the inventory is tried
+// again under that label, before the answer falls back to the classification
+// join. Skipping that step is how explain used to answer "cask:cursor" with
+// its own uncapped sum of the detector's claims instead of the inventory's
+// number, the same figure `storix apps` prints for the owner.
 func explainOwner(res *scan.Result, arg string) (*explainOwnerDoc, error) {
 	if rep, ok := scan.Apps(res); ok {
 		if e, ok := matchEntry(rep, arg); ok {
 			return ownerDocOf(e), nil
+		}
+		if label, ok := ownerLabelForKey(res.Class, ownerKeyCandidates(arg)); ok {
+			if e, ok := matchEntry(rep, label); ok {
+				return ownerDocOf(e), nil
+			}
 		}
 	}
 	if d, ok := ownerFromClassification(res.Class, arg); ok {
 		return d, nil
 	}
 	return nil, &ConfigError{Err: ownerNotFound(res, arg)}
+}
+
+// ownerLabelForKey finds the display label a winning claim recorded under one
+// of these owner keys.
+func ownerLabelForKey(class *classify.Classification, keys []string) (string, bool) {
+	if class == nil {
+		return "", false
+	}
+	for _, key := range keys {
+		for _, id := range class.ByOwnerKey(key) {
+			if cl, ok := class.Of(id); ok && cl.Owner != "" {
+				return cl.Owner, true
+			}
+		}
+	}
+	return "", false
 }
 
 // ownerDocOf turns an application inventory entry into the answer.
@@ -410,7 +441,13 @@ func pathFootprint(res *scan.Result, cl classify.Claim) *explainOwnerDoc {
 		}
 	}
 	d, ok := footprintFor(res.Class, cl.OwnerKeys, cl.Owner)
-	if !ok || len(d.Components) < 2 {
+	if !ok || len(d.Components) == 0 {
+		return nil
+	}
+	// Suppress only a footprint that is exactly this directory. A single
+	// component elsewhere — the project root above a nested folder — is the
+	// answer the reader is missing, not a repeat of the line above.
+	if len(d.Components) == 1 && cl.Node != nil && d.Components[0].Path == cl.Node.Display() {
 		return nil
 	}
 	return d
@@ -435,6 +472,13 @@ func ownerFromClassification(class *classify.Classification, arg string) (*expla
 
 // footprintFor joins the classification on a set of owner keys and builds the
 // footprint they share.
+//
+// The join is over explicit claims, and an owner can carry one on a
+// directory and another on something underneath it — the ide detector
+// claims a tool's dotfile and its extensions directory alike — so the
+// components are deduplicated before they are summed into the footprint;
+// otherwise the nested bytes are counted once for the child and again for
+// the parent's subtree total.
 func footprintFor(class *classify.Classification, keys []string, label string) (*explainOwnerDoc, bool) {
 	if class == nil {
 		return nil, false
@@ -455,7 +499,6 @@ func footprintFor(class *classify.Classification, keys []string, label string) (
 				Path: cl.Node.Display(), Bytes: cl.Node.Bytes, Bucket: cl.Bucket.ID(),
 				Category: cl.Category, Source: sourceText(cl.Source), Reclaim: cl.Reclaim.String(),
 			})
-			addToSizes(&d.Footprint, cl.Bucket, cl.Category, cl.Node.Bytes)
 		}
 	}
 	if len(d.Components) == 0 {
@@ -464,8 +507,44 @@ func footprintFor(class *classify.Classification, keys []string, label string) (
 	if d.Label == "" {
 		d.Label = label
 	}
+	d.Components = dropNestedComponents(d.Components)
+	for _, c := range d.Components {
+		addToSizes(&d.Footprint, bucketByID(c.Bucket), c.Category, c.Bytes)
+	}
 	sortComponents(d.Components)
 	return d, true
+}
+
+// dropNestedComponents removes a component whose path lies inside another
+// kept component, so a directory an owner claims explicitly and something
+// under it that carries an explicit claim of its own do not have their bytes
+// summed twice. It is the same rule internal/apps/footprint.go's dropNested
+// applies to an owner's own footprint: explain's join is built independently
+// of that package's, over the raw claims rather than the resolved footprints,
+// and needs the same guard so the two never disagree about the same owner's
+// total.
+func dropNestedComponents(cs []apps.ComponentRef) []apps.ComponentRef {
+	if len(cs) < 2 {
+		return cs
+	}
+	sort.SliceStable(cs, func(i, j int) bool { return cs[i].Path < cs[j].Path })
+	out := cs[:0]
+	var kept []string
+	for _, c := range cs {
+		nested := false
+		for _, p := range kept {
+			if strings.HasPrefix(c.Path, p+"/") {
+				nested = true
+				break
+			}
+		}
+		if nested {
+			continue
+		}
+		kept = append(kept, c.Path)
+		out = append(out, c)
+	}
+	return out
 }
 
 // ownerByLabel finds an owner total by its display label, case-insensitively.

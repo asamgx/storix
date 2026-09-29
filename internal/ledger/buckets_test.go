@@ -129,7 +129,8 @@ func TestBucketReclaimableAndLines(t *testing.T) {
 	class.Owners["pnpm"].ByBucket[classify.BucketDeveloper] = 9_600_000_000
 	dev := &class.Buckets[classify.BucketDeveloper]
 	dev.Bytes = 13_600_000_000
-	dev.ByReclaim[classify.Regenerable] = 4_000_000_000
+	dev.ByReclaim[classify.Regenerable] = 3_000_000_000
+	dev.ByReclaim[classify.Orphaned] = 1_000_000_000
 	dev.ByReclaim[classify.ToolManaged] = 9_600_000_000
 	dev.Categories = map[string]int64{"Package store": 9_600_000_000, "Homebrew": 4_000_000_000}
 
@@ -137,10 +138,16 @@ func TestBucketReclaimableAndLines(t *testing.T) {
 		tree(mac.DataRoot, 13_600_000_000), units.Decimal, class)
 
 	b := l.bucket(classify.BucketDeveloper)
-	if b.Reclaimable != 13_600_000_000 {
-		t.Errorf("reclaimable = %d, want regenerable plus tool-managed", b.Reclaimable)
+	// D43: the headline figure is what could be freed outright. The
+	// tool-managed bytes (a live package store, here) are a figure of their
+	// own and never part of it.
+	if b.Reclaimable != 4_000_000_000 {
+		t.Errorf("reclaimable = %d, want 4000000000: regenerable plus orphaned, not tool-managed", b.Reclaimable)
 	}
-	if len(b.ByReclaim) != 2 || b.ByReclaim[0].Label != "tool-managed" {
+	if b.ToolManaged != 9_600_000_000 {
+		t.Errorf("tool-managed = %d, want 9600000000", b.ToolManaged)
+	}
+	if len(b.ByReclaim) != 3 || b.ByReclaim[0].Label != "tool-managed" {
 		t.Errorf("reclaim lines = %+v, want the largest first", b.ByReclaim)
 	}
 	if len(b.Categories) != 2 || b.Categories[0].Label != "Package store" {
