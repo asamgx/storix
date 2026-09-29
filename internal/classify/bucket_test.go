@@ -71,3 +71,28 @@ func TestReclaimEncodesByName(t *testing.T) {
 		}
 	}
 }
+
+// TestFreeableIsRegenerableAndOrphanedOnly: the ledger's headline figure
+// counts only what storix could free itself without losing anything the
+// owner needs (D43). Tool-managed bytes are freed by their tool, which may
+// keep what it considers live, so they are reclaimable but not freeable.
+func TestFreeableIsRegenerableAndOrphanedOnly(t *testing.T) {
+	want := map[Reclaim]bool{Regenerable: true, Orphaned: true}
+	for r := Reclaim(0); int(r) < numReclaim; r++ {
+		if got := r.Freeable(); got != want[r] {
+			t.Errorf("%s.Freeable() = %v, want %v", r, got, want[r])
+		}
+	}
+	var b BucketTotal
+	b.ByReclaim[Regenerable] = 1
+	b.ByReclaim[ToolManaged] = 10
+	b.ByReclaim[Orphaned] = 100
+	b.ByReclaim[UserData] = 1000
+	b.ByReclaim[Unknown] = 10000
+	if got := b.Freeable(); got != 101 {
+		t.Errorf("Freeable() = %d, want 101: regenerable plus orphaned, never tool-managed", got)
+	}
+	if got := b.Reclaimable(); got != 111 {
+		t.Errorf("Reclaimable() = %d, want 111: D43 leaves the classify predicate alone", got)
+	}
+}

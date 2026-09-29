@@ -287,7 +287,8 @@ type ledgerCols struct{ label, bar, rbar, note int }
 func ledgerLayout(width int) ledgerCols {
 	c := ledgerCols{label: bucketLabelWidth, bar: barWidth, rbar: reclaimBarWidth}
 	fixed := func(rbar int) int {
-		n := markerWidth + c.label + colGap + c.bar + colGap + bytesWidth + colGap + pctWidth + colGap + bytesWidth
+		n := markerWidth + c.label + colGap + c.bar + colGap + bytesWidth + colGap + pctWidth +
+			colGap + bytesWidth + colGap + bytesWidth
 		if rbar > 0 {
 			n += rbar + colGap
 		}
@@ -301,7 +302,7 @@ func ledgerLayout(width int) ledgerCols {
 	}
 	if width < fixed(0) {
 		c.bar = max(c.bar-(fixed(0)-width), 0)
-		c.label = max(min(c.label, width-markerWidth-bytesWidth-pctWidth-bytesWidth-3*colGap), 8)
+		c.label = max(min(c.label, width-markerWidth-3*bytesWidth-pctWidth-4*colGap), 8)
 	}
 	return c
 }
@@ -360,7 +361,8 @@ func (m *ledgerModel) columnsLine(st Styles, c ledgerCols) string {
 	if c.rbar > 0 {
 		sb.WriteString(" " + strings.Repeat(" ", c.rbar))
 	}
-	sb.WriteString(" " + padLeft("free", bytesWidth, "free"))
+	sb.WriteString(" " + padLeft("reclaim", bytesWidth, "reclaim"))
+	sb.WriteString(" " + padLeft("via tool", bytesWidth, "via tool"))
 	if c.note > 0 {
 		sb.WriteString(" " + "note")
 	}
@@ -386,11 +388,18 @@ func (m *ledgerModel) bucketRow(st Styles, u units.Format, c ledgerCols, i int, 
 	if c.rbar > 0 {
 		sb.WriteString(" " + reclaimBar(st, b.Reclaimable, b.Bytes, c.rbar))
 	}
-	free := ""
+	// D43: the reclaim figure is what can be freed outright. Tool-managed
+	// bytes are freed only through their tool, so they get a column of
+	// their own and are never added to it.
+	free, tool := "", ""
 	if b.Reclaimable > 0 {
 		free = u.Fixed(b.Reclaimable)
 	}
+	if b.ToolManaged > 0 {
+		tool = u.Fixed(b.ToolManaged)
+	}
 	sb.WriteString(" " + padLeft(st.Good.Render(free), bytesWidth, free))
+	sb.WriteString(" " + padLeft(st.Dim.Render(tool), bytesWidth, tool))
 	if c.note > 0 && b.Note != "" {
 		note := truncate(b.Note, c.note)
 		sb.WriteString(" " + st.Dim.Render(note))

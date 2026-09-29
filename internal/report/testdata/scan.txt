@@ -5,20 +5,23 @@ storix scan
   source   live
 
 LEDGER  (every byte of used space, in one of twelve buckets)
-  ██░░░░░░░░░░░░   28.13 GB  13.4%                1  macOS
-  █░░░░░░░░░░░░░     1.4 GB   0.7%                2  Applications
-  █░░░░░░░░░░░░░       7 GB   3.3%     7 GB free  3  App data
-  █░░░░░░░░░░░░░    4.68 GB   2.2%   4.2 GB free  4  Developer
-  █░░░░░░░░░░░░░    18.7 GB   8.9%  18.7 GB free  5  Containers & VMs
-  █░░░░░░░░░░░░░      49 KB   0.0%                6  Personal files
-  █░░░░░░░░░░░░░     3.1 GB   1.5%                7  Backups
-  ░░░░░░░░░░░░░░    0 bytes   0.0%                8  System caches & logs
-  █░░░░░░░░░░░░░     900 MB   0.4%   900 MB free  9  Trash
-  █░░░░░░░░░░░░░    1.57 GB   0.7%  1.57 GB free  10  Purgeable
-  █░░░░░░░░░░░░░     260 MB   0.1%                11  Other
-  ██████████░░░░  144.87 GB  68.8%                12  Unreadable / unaccounted
-  ────────────────────────────────────────────────────────────────────────────
-                  210.61 GB                       used (container)
+                       size      %  reclaimable  via tool  bucket
+  ██░░░░░░░░░░░░   28.13 GB  13.4%                         1  macOS
+  █░░░░░░░░░░░░░     1.4 GB   0.7%                         2  Applications
+  █░░░░░░░░░░░░░       7 GB   3.3%         7 GB            3  App data
+  █░░░░░░░░░░░░░    4.68 GB   2.2%       4.2 GB            4  Developer
+  █░░░░░░░░░░░░░    18.7 GB   8.9%                18.7 GB  5  Containers & VMs
+  █░░░░░░░░░░░░░      49 KB   0.0%                         6  Personal files
+  █░░░░░░░░░░░░░     3.1 GB   1.5%                         7  Backups
+  ░░░░░░░░░░░░░░    0 bytes   0.0%                         8  System caches & logs
+  █░░░░░░░░░░░░░     900 MB   0.4%                 900 MB  9  Trash
+  █░░░░░░░░░░░░░    1.57 GB   0.7%      1.57 GB            10  Purgeable
+  █░░░░░░░░░░░░░     260 MB   0.1%                         11  Other
+  ██████████░░░░  144.87 GB  68.8%                         12  Unreadable / unaccounted
+  ─────────────────────────────────────────────────────────────────────────────────────
+                  210.61 GB            12.77 GB   19.6 GB  used (container)
+  reclaim   12.77 GB (6.1% of used) can be freed outright; 19.6 GB more only through its tool, which
+            keeps what is still in use
   identity  buckets 2–9 and 11 sum to the 36.04 GB the walk saw; 1, 10 and 12 are read from the
             volumes, not walked
 
@@ -50,6 +53,8 @@ BUCKETS  (what is inside each one)
   owner     18.7 GB  100.0%  OrbStack
 
   Personal files — 49 KB, 13 files
+            partial: 1 location unreadable without Full Disk Access; the rest is counted in
+            Unreadable / unaccounted
   reclaim   49 KB user-data
   category  49 KB  100.0%  Desktop
   owner     49 KB  100.0%  Desktop

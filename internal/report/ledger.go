@@ -24,14 +24,26 @@ func (t *textReport) ledgerSection() {
 	used := l.BucketDenominator()
 
 	t.section("LEDGER  (every byte of used space, in one of twelve buckets)")
-	tbl := newTable(t.st, false, true, true, true, false)
+	tbl := newTable(t.st, false, true, true, true, true, false)
+	tbl.add(
+		cell{"", lipgloss.NewStyle()},
+		cell{"size", t.st.note},
+		cell{"%", t.st.note},
+		cell{"reclaimable", t.st.note},
+		cell{"via tool", t.st.note},
+		cell{"bucket", t.st.note},
+	)
+	var freeable, tool int64
 	for i := range l.Buckets {
 		b := &l.Buckets[i]
+		freeable += b.Reclaimable
+		tool += b.ToolManaged
 		tbl.add(
 			cell{bar(t.st, b.Bytes, used, barWidth), lipgloss.NewStyle()},
 			t.bucketBytes(b),
 			cell{units.Percent(b.Bytes, used), t.st.note},
-			t.reclaimCell(b),
+			t.reclaimCell(b.Reclaimable, t.st.good),
+			t.reclaimCell(b.ToolManaged, t.st.note),
 			cell{fmt.Sprintf("%d  %s", i+1, b.Label), t.st.label},
 		)
 	}
@@ -40,10 +52,14 @@ func (t *textReport) ledgerSection() {
 		cell{"", lipgloss.NewStyle()},
 		t.bytes(used),
 		cell{"", t.st.note},
-		cell{"", t.st.note},
+		t.reclaimCell(freeable, t.st.good),
+		t.reclaimCell(tool, t.st.note),
 		cell{l.BucketDenominatorLabel(), t.st.label},
 	)
 	tbl.render(t.w)
+	t.field("reclaim", fmt.Sprintf(
+		"%s (%s of used) can be freed outright; %s more only through its tool, which keeps what is still in use",
+		t.u.Bytes(freeable), units.Percent(freeable, used), t.u.Bytes(tool)), t.st.note)
 	walked := l.WalkedBucketBytes()
 	identity := fmt.Sprintf(
 		"buckets 2–9 and 11 sum to the %s the walk saw; 1, 10 and 12 are read from the volumes, not walked",
@@ -73,12 +89,13 @@ func (t *textReport) bucketBytes(b *ledger.Bucket) cell {
 	return cell{t.u.Bytes(b.Bytes), t.st.num}
 }
 
-// reclaimCell is how much of a bucket could be freed.
-func (t *textReport) reclaimCell(b *ledger.Bucket) cell {
-	if b.Reclaimable <= 0 {
+// reclaimCell is one of a bucket's two reclaim figures, blank when it is
+// zero so the column reads as the few buckets that have something to give.
+func (t *textReport) reclaimCell(n int64, st lipgloss.Style) cell {
+	if n <= 0 {
 		return cell{"", t.st.note}
 	}
-	return cell{t.u.Bytes(b.Reclaimable) + " free", t.st.good}
+	return cell{t.u.Bytes(n), st}
 }
 
 // bucketNote warns when Other is large enough to matter, because a large

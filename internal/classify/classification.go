@@ -36,6 +36,18 @@ func (b BucketTotal) Reclaimable() int64 {
 	return n
 }
 
+// Freeable is the bytes in the bucket that could be freed outright, the
+// regenerable and orphaned ones. See Reclaim.Freeable.
+func (b BucketTotal) Freeable() int64 {
+	var n int64
+	for r := Reclaim(0); int(r) < numReclaim; r++ {
+		if r.Freeable() {
+			n += b.ByReclaim[r]
+		}
+	}
+	return n
+}
+
 // OwnerTotal is one owner's bytes across the buckets. An application's data
 // is spread over Applications, App data and often Developer, and the point of
 // the owner key is that those three add up to one number.

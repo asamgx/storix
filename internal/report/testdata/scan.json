@@ -1,5 +1,5 @@
 {
-  "schema": 2,
+  "schema": 3,
   "storix": "v0.0.0-test",
   "root": "/",
   "units": "decimal",
@@ -78,7 +78,8 @@
         "files": 0,
         "known": true,
         "note": "sealed system, Preboot, VM, Update and Recovery volumes, read from statfs",
-        "reclaimable": 0
+        "reclaimable": 0,
+        "tool_managed": 0
       },
       {
         "id": "apps",
@@ -87,6 +88,7 @@
         "files": 1,
         "known": true,
         "reclaimable": 0,
+        "tool_managed": 0,
         "by_reclaim": [
           {
             "id": "user-data",
@@ -121,6 +123,7 @@
         "files": 1,
         "known": true,
         "reclaimable": 7000000000,
+        "tool_managed": 0,
         "by_reclaim": [
           {
             "id": "regenerable",
@@ -155,6 +158,7 @@
         "files": 3,
         "known": true,
         "reclaimable": 4200000000,
+        "tool_managed": 0,
         "by_reclaim": [
           {
             "id": "regenerable",
@@ -208,7 +212,8 @@
         "bytes": 18700000000,
         "files": 1,
         "known": true,
-        "reclaimable": 18700000000,
+        "reclaimable": 0,
+        "tool_managed": 18700000000,
         "by_reclaim": [
           {
             "id": "tool-managed",
@@ -242,7 +247,9 @@
         "bytes": 49152,
         "files": 13,
         "known": true,
+        "note": "partial: 1 location unreadable without Full Disk Access; the rest is counted in Unreadable / unaccounted",
         "reclaimable": 0,
+        "tool_managed": 0,
         "by_reclaim": [
           {
             "id": "user-data",
@@ -277,6 +284,7 @@
         "files": 1,
         "known": true,
         "reclaimable": 0,
+        "tool_managed": 0,
         "by_reclaim": [
           {
             "id": "user-data",
@@ -310,7 +318,8 @@
         "bytes": 0,
         "files": 0,
         "known": true,
-        "reclaimable": 0
+        "reclaimable": 0,
+        "tool_managed": 0
       },
       {
         "id": "trash",
@@ -318,7 +327,8 @@
         "bytes": 900000000,
         "files": 1,
         "known": true,
-        "reclaimable": 900000000,
+        "reclaimable": 0,
+        "tool_managed": 900000000,
         "by_reclaim": [
           {
             "id": "tool-managed",
@@ -353,7 +363,8 @@
         "files": 0,
         "known": true,
         "note": "freed when space runs short; may overlap scanned bytes",
-        "reclaimable": 1573741824
+        "reclaimable": 1573741824,
+        "tool_managed": 0
       },
       {
         "id": "other",
@@ -363,6 +374,7 @@
         "known": true,
         "note": "scanned but matched no rule; a large Other means the catalog needs work",
         "reclaimable": 0,
+        "tool_managed": 0,
         "by_reclaim": [
           {
             "id": "unknown",
@@ -379,7 +391,8 @@
         "files": 0,
         "known": true,
         "note": "filesystem metadata, content of 4 unreadable directories, and unaccounted (4 unreadable paths); 1.44 GB of container overhead",
-        "reclaimable": 0
+        "reclaimable": 0,
+        "tool_managed": 0
       }
     ],
     "macos": [
