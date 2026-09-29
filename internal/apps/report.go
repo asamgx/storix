@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/asamgx/storix/internal/classify"
+	"github.com/asamgx/storix/internal/walk"
 )
 
 // ReportSchema is the version of the document below. It is the same number
@@ -181,7 +182,7 @@ func BuildReport(a *Analysis, winners []classify.Claim) *Report {
 	// catalog rule for the same path — so it has no footprint to render.
 	// It still belongs in the report, which is where a reader and the next
 	// round of alias-table rows come from.
-	r.Unknown = append(r.Unknown, unknownEntries(a, rendered)...)
+	r.Unknown = append(r.Unknown, unknownEntries(a, rendered, detectorNodes(winners))...)
 	sortEntries(r.Unknown, false)
 
 	for _, c := range a.CaskOnlyCasks() {
@@ -201,7 +202,12 @@ func BuildReport(a *Analysis, winners []classify.Claim) *Report {
 // unknownEntries lists the directories nothing could be attributed to,
 // largest first. Owners already rendered from their footprint are skipped, so
 // that an owner which is unknown but did claim its bytes appears once.
-func unknownEntries(a *Analysis, rendered map[string]bool) []Entry {
+//
+// So is a directory a tool detector claimed. This package has no name for
+// ~/Library/Caches/go-build, but the go detector does, and listing it under
+// "unknown owner" told the reader nobody knew what the largest caches on the
+// machine were.
+func unknownEntries(a *Analysis, rendered map[string]bool, detected map[*walk.Node]bool) []Entry {
 	var out []Entry
 	for _, key := range a.OwnerKeys() {
 		o := a.Owners[key]
@@ -212,22 +218,52 @@ func unknownEntries(a *Analysis, rendered map[string]bool) []Entry {
 		e := Entry{
 			Owner: key, Label: o.Owner.Label, State: v.State.String(),
 			Confidence: v.Confidence.String(),
-			Footprint:  Sizes{Data: o.Bytes, Total: o.Bytes},
 			LastWrite:  v.LastWrite,
 			Evidence:   v.Evidence,
 			Keep:       v.Keep,
 		}
+		var bytes int64
 		for _, i := range o.Members {
 			c := a.Candidates[i]
+			if claimedByDetector(c.Node, detected) {
+				continue
+			}
+			bytes += c.Bytes()
 			e.Components = append(e.Components, ComponentRef{
 				Path: c.Path, Bytes: c.Bytes(), Bucket: classify.BucketAppData.ID(),
 				Category: c.Loc.Category,
 			})
 		}
+		if len(e.Components) == 0 {
+			continue
+		}
+		e.Footprint = Sizes{Data: bytes, Total: bytes}
 		out = append(out, e)
 	}
 	sortEntries(out, false)
 	return out
+}
+
+// detectorNodes are the nodes a tool detector's claim won.
+func detectorNodes(winners []classify.Claim) map[*walk.Node]bool {
+	out := make(map[*walk.Node]bool)
+	for _, cl := range winners {
+		if cl.Node != nil && cl.Source.Kind == classify.SourceDetector {
+			out[cl.Node] = true
+		}
+	}
+	return out
+}
+
+// claimedByDetector reports whether a node or a directory above it is one a
+// detector's claim won, which is what the node inherits.
+func claimedByDetector(n *walk.Node, detected map[*walk.Node]bool) bool {
+	for p := n; p != nil; p = p.Parent {
+		if detected[p] {
+			return true
+		}
+	}
+	return false
 }
 
 // sortEntries orders one list the way the report shows it: by size, which is

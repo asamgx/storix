@@ -241,7 +241,7 @@ func (a *Analysis) decide(o *OwnerResult, now time.Time, window time.Duration) *
 	switch {
 	case len(stale) > 0:
 		v.State = StateOrphanLikely
-		v.Evidence = append(v.Evidence, a.staleCopyNote(stale[0]))
+		v.Evidence = append(v.Evidence, a.staleCopyNote(o, stale[0]))
 	case o.Owner.Kind == KindUnknown:
 		// Nothing identified the directory in the first place, so there
 		// is no application to say is missing. An unknown owner is not
@@ -484,11 +484,26 @@ func (a *Analysis) bundlesFor(o *OwnerResult) (live, stale, trashed []*Bundle) {
 }
 
 // staleCopyNote says what sort of copy was found in place of an installation.
-func (a *Analysis) staleCopyNote(b *Bundle) string {
+//
+// A copy inside the owner's own data is a staged update. One anywhere else is
+// only a bundle that happens to share the name — Playwright's test Chromium
+// under its own cache is not a Chromium update — and calling it an update
+// would be a claim the evidence does not make.
+func (a *Analysis) staleCopyNote(o *OwnerResult, b *Bundle) string {
 	if !a.Inventory.Paths.OnVolume(b.Path) {
 		return "the only copy is on another volume at " + b.Path
 	}
-	return "the only copy is a staged update at " + b.Path
+	for _, i := range o.Members {
+		if dir := a.Candidates[i].Path; strings.HasPrefix(b.Path, dir+"/") {
+			return "the only copy is a staged update at " + b.Path
+		}
+	}
+	for _, id := range o.IDs {
+		if strings.Contains(b.Path, "/"+id+"/") {
+			return "the only copy is a staged update at " + b.Path
+		}
+	}
+	return "the only copy is inside another program's data, not an installation: " + b.Path
 }
 
 // vendorInstalled reports whether any of a publisher's products is installed,

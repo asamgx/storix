@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/asamgx/storix/internal/classify"
 	"github.com/asamgx/storix/internal/probe"
+	"github.com/asamgx/storix/internal/walk"
 )
 
 // TestTheLaunchServicesDumpIsGivenRoomForItsSize is the cap on the one command
@@ -522,5 +524,42 @@ func TestANameOnlyOrphanIsReportedAsPossible(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("TabNine is not in the report's orphans: %+v", rep.Orphans)
+	}
+}
+
+// TestUnknownOwnersLeaveOutWhatADetectorNamed: go-build has no application,
+// so the apps analysis cannot name it, but the go detector did. The report
+// listed it, and pnpm's and Homebrew's caches, as "unknown owner".
+func TestUnknownOwnersLeaveOutWhatADetectorNamed(t *testing.T) {
+	t.Parallel()
+	vf := newVerdictFixture(t,
+		"Users/andrewsam/Library/Caches/go-build",
+		"Users/andrewsam/Library/Caches/SomethingNobodyKnows")
+	a := vf.analyze(t, &Facts{}, Options{})
+
+	var goBuild *walk.Node
+	for _, n := range vf.tree.Nodes {
+		if strings.HasSuffix(n.Display(), "/Library/Caches/go-build") {
+			goBuild = n
+		}
+	}
+	if goBuild == nil {
+		t.Fatal("fixture has no go-build node")
+	}
+	winners := append(a.Claims(), classify.Claim{
+		Node: goBuild, Bucket: classify.BucketDeveloper, Owner: "Go",
+		OwnerKeys: []string{"cli:go"}, Reclaim: classify.Regenerable,
+		Source: classify.Source{Kind: classify.SourceDetector, ID: "go"},
+	})
+
+	var labels []string
+	for _, e := range BuildReport(a, winners).Unknown {
+		labels = append(labels, e.Label)
+	}
+	if slices.Contains(labels, "go-build") {
+		t.Errorf("go-build, claimed by the go detector, is listed as unknown: %v", labels)
+	}
+	if !slices.Contains(labels, "SomethingNobodyKnows") {
+		t.Errorf("a directory nothing claimed is missing from the unknown list: %v", labels)
 	}
 }

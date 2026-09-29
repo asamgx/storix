@@ -35,7 +35,7 @@ IN THE TRASH  (1, 5.4 MB)
   DynamicLake Pro  5.4 MB  in-trash
             the only copy is in the Trash: ~/.Trash/DynamicLakePro.app
 
-UNKNOWN OWNER  (1 of 553 directories, largest first)
+UNKNOWN OWNER  (1 of 1, largest first)
   SomethingNobodyKnows  122.8 MB  ~/Library/Caches/SomethingNobodyKnows
 
 DEGRADED PROBES
