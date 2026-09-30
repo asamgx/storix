@@ -12,6 +12,7 @@ import (
 	"github.com/asamgx/storix/internal/detect"
 	"github.com/asamgx/storix/internal/ledger"
 	"github.com/asamgx/storix/internal/mac"
+	"github.com/asamgx/storix/internal/reclaim"
 	"github.com/asamgx/storix/internal/scan"
 	"github.com/asamgx/storix/internal/units"
 	"github.com/asamgx/storix/internal/volume"
@@ -74,6 +75,10 @@ func JSON(w io.Writer, r *scan.Result, o Options) error {
 	if inventory, ok := scan.Apps(r); ok {
 		e.field("apps", inventory)
 	}
+	// The plan's totals only; `storix reclaim --json` carries the items.
+	if p := reclaim.Build(r, reclaim.Options{}); len(p.Items) > 0 {
+		e.field("plan_summary", planSummaryJSON{Freeable: p.Freeable(), Totals: p.Totals, Trash: p.Trash})
+	}
 	e.field("facts", factsJSON(r.Facts))
 	e.field("counters", r.Ledger.Counters)
 	e.field("errors", errorsJSON(r.Tree.Errors))
@@ -87,6 +92,14 @@ func JSON(w io.Writer, r *scan.Result, o Options) error {
 		return e.err
 	}
 	return bw.Flush()
+}
+
+// planSummaryJSON is the reclaim plan in the scan document: what each tier
+// would free, without the items.
+type planSummaryJSON struct {
+	Freeable int64                            `json:"freeable"`
+	Totals   map[reclaim.Tier]*reclaim.Totals `json:"totals"`
+	Trash    reclaim.TrashState               `json:"trash"`
 }
 
 // unitName records which formatting the text report would have used. The

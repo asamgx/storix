@@ -57,6 +57,11 @@ type location struct {
 	reclaim classify.Reclaim
 	kind    string
 	explain string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the four managers' directories, plus the two Parallels keeps
@@ -91,6 +96,8 @@ var locations = []location{
 		rel: ".vagrant.d", owner: "Vagrant", key: "cli:vagrant",
 		reclaim: classify.ToolManaged, kind: "image",
 		explain: "Vagrant boxes; `vagrant box prune` removes the superseded ones",
+		command: "vagrant box prune",
+		impact:  "keeps the newest version of each box",
 	},
 }
 
@@ -124,7 +131,7 @@ func (*Detector) Classify(t *walk.Tree, _ detect.Facts, cx classify.Context) ([]
 		targets = append(targets, detect.Target{
 			Path: path.Join(home, loc.rel), Bucket: classify.BucketContainers,
 			Category: "Virtual machines", Owner: loc.owner, OwnerKeys: []string{loc.key},
-			Reclaim: loc.reclaim, Explain: loc.explain, Kind: loc.kind,
+			Reclaim: loc.reclaim, Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind,
 			Evidence: []string{loc.owner + " keeps its data in " + path.Join(home, loc.rel)},
 		})
 	}

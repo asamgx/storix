@@ -2,6 +2,7 @@ package ide_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/asamgx/storix/internal/classify"
@@ -192,5 +193,26 @@ func TestClassifyWithoutAHome(t *testing.T) {
 	claims, sum := ide.New().Classify(f.Tree, &ide.Facts{}, classify.Context{})
 	if len(claims) != 0 || !sum.Empty() {
 		t.Errorf("%d claims with no home", len(claims))
+	}
+}
+
+// TestPlanTiersSayQuitTheEditorFirst: an editor's caches come back on its
+// next start, but only if it is not running while they go.
+func TestPlanTiersSayQuitTheEditorFirst(t *testing.T) {
+	f := detecttest.Build(t, corpus())
+	facts, err := detecttest.Probe(t, ide.New(), f.Env(t, "testdata/this-machine.json"))
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	_, sum := ide.New().Classify(f.Tree, facts, f.Context)
+	tool, ok := detecttest.Tool(sum, home+"/Library/Application Support/Code/CachedData")
+	if !ok {
+		t.Fatal("no row for VS Code CachedData")
+	}
+	if tool.EffectiveTier() != detect.TierRedownload || !strings.Contains(tool.Impact, "quit VS Code first") {
+		t.Errorf("CachedData = %s %q, want redownload and a quit-first impact", tool.EffectiveTier(), tool.Impact)
+	}
+	if ext, ok := detecttest.Tool(sum, home+"/.vscode/extensions"); ok && ext.EffectiveTier() != detect.TierInUse {
+		t.Errorf("an installed editor's extensions are %s, want in-use", ext.EffectiveTier())
 	}
 }

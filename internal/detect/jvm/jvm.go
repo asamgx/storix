@@ -69,6 +69,11 @@ type location struct {
 	kind     string
 	name     string
 	explain  string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the directories docs/04 names, deepest-first within each
@@ -86,6 +91,7 @@ var locations = []location{
 		rel: ".gradle/caches", owner: "Gradle", keys: []string{"cli:gradle"}, category: "Gradle",
 		reclaim: classify.Regenerable, kind: "cache", name: "Gradle caches",
 		explain: "downloaded dependencies and compiled build scripts; the next build fetches them again",
+		impact:  "stop the Gradle daemons first (`gradle --stop`); the next build downloads again",
 	},
 	{
 		rel: ".gradle/wrapper", owner: "Gradle", keys: []string{"cli:gradle"}, category: "Gradle",
@@ -96,6 +102,8 @@ var locations = []location{
 		rel: ".gradle/daemon", owner: "Gradle", keys: []string{"cli:gradle"}, category: "Gradle",
 		reclaim: classify.Regenerable, kind: "data", name: "Gradle daemon logs",
 		explain: "logs from past daemon processes",
+		tier:    detect.TierSafe,
+		impact:  "logs only",
 	},
 	{
 		rel: ".gradle/native", owner: "Gradle", keys: []string{"cli:gradle"}, category: "Gradle",
@@ -113,6 +121,7 @@ var locations = []location{
 		rel: ".m2/repository", owner: "Maven", keys: []string{"cli:mvn"}, category: "Maven",
 		reclaim: classify.Regenerable, kind: "cache", name: "Maven repository",
 		explain: "every artifact Maven has downloaded; a build re-resolves what it needs",
+		impact:  "the next build downloads again what it needs",
 	},
 
 	// Version managers and JDKs.
@@ -120,6 +129,8 @@ var locations = []location{
 		rel: ".sdkman", owner: "SDKMAN", keys: []string{"cli:sdk"}, category: "JDKs",
 		reclaim: classify.ToolManaged, kind: "versions",
 		explain: "JVM toolchains SDKMAN installed; `sdk uninstall` removes one",
+		tier:    detect.TierInUse,
+		command: "sdk uninstall java <version>",
 	},
 	{
 		rel: "Library/Java/JavaVirtualMachines", owner: "Java", keys: []string{"cli:java"}, category: "JDKs",
@@ -226,7 +237,7 @@ func (*Detector) Classify(t *walk.Tree, _ detect.Facts, cx classify.Context) ([]
 		targets = append(targets, detect.Target{
 			Path: p, Bucket: classify.BucketDeveloper, Category: loc.category,
 			Owner: loc.owner, OwnerKeys: loc.keys, Reclaim: loc.reclaim,
-			Explain: loc.explain, Kind: loc.kind, Name: name, Priority: priority,
+			Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind, Name: name, Priority: priority,
 		})
 	}
 

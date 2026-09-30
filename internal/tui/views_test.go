@@ -403,7 +403,7 @@ func TestViewKeysReachEveryView(t *testing.T) {
 	}{
 		{"1", viewLedger}, {"2", viewBrowse}, {"3", viewApps},
 		{"4", viewDeveloper}, {"5", viewContainers}, {"6", viewUnaccounted},
-		{"u", viewUnaccounted}, {"1", viewLedger},
+		{"u", viewUnaccounted}, {"7", viewPlan}, {"1", viewLedger},
 	} {
 		sendKey(m, c.key)
 		if m.view != c.want {
@@ -411,7 +411,7 @@ func TestViewKeysReachEveryView(t *testing.T) {
 		}
 	}
 
-	// tab cycles the six in order and wraps.
+	// tab cycles the seven in order and wraps.
 	m.view = viewLedger
 	for _, want := range append(resultViews[1:], resultViews[0]) {
 		m.toggleView()
@@ -674,5 +674,65 @@ func TestLedgerDoesNotOpenBucketsWithNoDirectories(t *testing.T) {
 	}
 	if !strings.Contains(u.status, "not classified") {
 		t.Errorf("status = %q, want Other's note", u.status)
+	}
+}
+
+// TestPlanViewListsTheTiers goldens the Plan view: tier headings with their
+// totals, each item with what it frees and the command or action.
+func TestPlanViewListsTheTiers(t *testing.T) {
+	m := newClassifiedModel(t)
+	tm := start(t, m)
+	waitFor(t, tm, "LEDGER")
+	press(tm, "7")
+	waitFor(t, tm, "RECLAIM PLAN")
+	final := finish(t, tm)
+	if final.view != viewPlan {
+		t.Fatalf("7 left the view at %d, want the plan", final.view)
+	}
+	teatest.RequireEqualOutput(t, screen(final))
+}
+
+// TestPlanWhyShowsTheCommandAndItsCost goldens the why panel beside the
+// plan: the tier, the command, what it costs, and that nothing was changed.
+func TestPlanWhyShowsTheCommandAndItsCost(t *testing.T) {
+	m := newClassifiedModel(t)
+	tm := start(t, m)
+	waitFor(t, tm, "LEDGER")
+	press(tm, "7")
+	waitFor(t, tm, "RECLAIM PLAN")
+	press(tm, "w")
+	waitFor(t, tm, "read-only: storix has changed nothing")
+	final := finish(t, tm)
+	teatest.RequireEqualOutput(t, screen(final))
+}
+
+// TestPlanEnterOpensTheItemInBrowse: enter on a plan item lands in Browse at
+// the directory it would free.
+func TestPlanEnterOpensTheItemInBrowse(t *testing.T) {
+	m := newClassifiedModel(t)
+	m.w, m.h = termWidth, termHeight
+	m.view = viewPlan
+	m.resize()
+
+	// The first rows can be a tool's own figure, which no directory holds;
+	// move to the first item the walk saw.
+	it, ok := m.plan.selected()
+	for tries := 0; ok && it.Node < 0 && tries < len(m.plan.visible()); tries++ {
+		m.plan.move(1)
+		it, ok = m.plan.selected()
+	}
+	if !ok || it.Node < 0 {
+		t.Fatal("the plan has no item with a directory")
+	}
+	n, ok := m.plan.open()
+	if !ok {
+		t.Fatalf("enter found no node for %+v", it)
+	}
+	m.openInBrowse(n)
+	if m.view != viewBrowse {
+		t.Fatalf("enter left the view at %d, want browse", m.view)
+	}
+	if got := mac.DisplayPath(n.Path()); got != it.Path {
+		t.Errorf("enter opened %s, want %s", got, it.Path)
 	}
 }

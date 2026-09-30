@@ -31,7 +31,7 @@ func TestRunDoctor(t *testing.T) {
 			t.Errorf("doctor output has no %q section", s)
 		}
 	}
-	for _, s := range []string{mac.DataRoot, "full disk access", "scan cache"} {
+	for _, s := range []string{mac.DataRoot, "full disk access", "trash", "scan cache"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("doctor output does not mention %q", s)
 		}

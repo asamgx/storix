@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -198,6 +200,7 @@ func doctorPermissions(w io.Writer, f *volume.Facts) {
 		doctorRow(tw, "full disk access", "not granted: %v", f.FDA.Err)
 		doctorRow(tw, "hint", "%s", mac.FullDiskAccessHint(t.AppName))
 	}
+	doctorRow(tw, "trash", "%s", trashReadable(t.AppName))
 	uid, gid, viaSudo := mac.InvokingUser()
 	doctorRow(tw, "euid", "%d", f.Euid)
 	if viaSudo {
@@ -206,6 +209,29 @@ func doctorPermissions(w io.Writer, f *volume.Facts) {
 		doctorRow(tw, "sudo", "no; root-owned directories will be reported as unreadable")
 	}
 	_ = tw.Flush()
+}
+
+// trashReadable says whether the Trash can be listed. Its contents are what
+// the reclaim plan's "frees once the Trash is emptied" figures wait on, and
+// macOS keeps it behind Full Disk Access: listing it without the grant fails
+// with a permission error, which is not the same thing as an empty Trash.
+func trashReadable(terminal string) string {
+	_, home, _ := mac.InvokingHome()
+	if home == "" {
+		return "unknown: the invoking user's home could not be found"
+	}
+	dir := filepath.Join(home, ".Trash")
+	entries, err := os.ReadDir(dir)
+	switch {
+	case err == nil:
+		return fmt.Sprintf("readable (%s, %d items)", dir, len(entries))
+	case errors.Is(err, fs.ErrNotExist):
+		return "no Trash folder at " + dir
+	case errors.Is(err, fs.ErrPermission):
+		return "not readable, so its size is unknown; " + mac.FullDiskAccessHint(terminal)
+	default:
+		return "not readable: " + err.Error()
+	}
 }
 
 func doctorContainer(w io.Writer, f *volume.Facts) {

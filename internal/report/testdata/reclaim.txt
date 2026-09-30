@@ -1,0 +1,34 @@
+
+RECLAIM PLAN  (read-only; nothing has been changed)
+  freeable  5.58 GB could be freed across the suggested tiers, each byte counted once; 4.68 GB of it
+            only once the Trash is emptied
+  reported  148.7 MB more by the tools' own figures (brew cleanup, docker), which overlap the walked
+            bytes
+  stale     projects untouched for 30 days count as stale; --stale-after changes it
+
+  Safe — 0 bytes walked, 148.7 MB reported, 1 item
+   ~148.7 MB  homebrew: what the tool itself would free
+              run brew cleanup
+              `brew cleanup -n` would free 148.7 MB (148.6 MB across 5 entries)
+
+  Re-download — 4.2 GB, 1 item
+      4.2 GB  build cache  /Users/u/Library/Caches/go-build
+              move to the Trash
+              frees space once the Trash is emptied
+
+  Reinstall — 480 MB, 1 item
+      480 MB  storix/node_modules  /Users/u/code/storix
+              move to the Trash
+              untouched since 2026-06-14
+              frees space once the Trash is emptied
+
+  Check first — 900 MB, 1 item
+      900 MB  the Trash  /Users/u/.Trash
+              empty the Trash in Finder
+              cannot be undone; look through it first
+
+  In use — 18.7 GB, 1 item  (listed to account for it, never suggested)
+     18.7 GB  data.img.raw  /Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data/data.img.raw
+  note      purgeable space is not in the plan: macOS frees it on its own when space runs short
+  note      figures marked "reported" are the tools' own and overlap the walked bytes, so they are
+            never added to them

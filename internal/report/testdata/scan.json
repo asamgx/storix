@@ -909,6 +909,57 @@
     ],
     "timing_ns": 180000000
   },
+  "plan_summary": {
+    "freeable": 5580000000,
+    "totals": {
+      "": {
+        "walked": 0,
+        "reported": 11091200000,
+        "after_trash": 0,
+        "items": 4
+      },
+      "check": {
+        "walked": 900000000,
+        "reported": 0,
+        "after_trash": 0,
+        "items": 1
+      },
+      "in-use": {
+        "walked": 18700000000,
+        "reported": 0,
+        "after_trash": 0,
+        "items": 1
+      },
+      "never": {
+        "walked": 0,
+        "reported": 0,
+        "after_trash": 0,
+        "items": 0
+      },
+      "redownload": {
+        "walked": 4200000000,
+        "reported": 0,
+        "after_trash": 4200000000,
+        "items": 1
+      },
+      "reinstall": {
+        "walked": 480000000,
+        "reported": 0,
+        "after_trash": 480000000,
+        "items": 1
+      },
+      "safe": {
+        "walked": 0,
+        "reported": 148700000,
+        "after_trash": 0,
+        "items": 1
+      }
+    },
+    "trash": {
+      "bytes": 900000000,
+      "known": true
+    }
+  },
   "facts": {
     "root": "/",
     "euid": 501,

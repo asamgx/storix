@@ -363,6 +363,11 @@ type location struct {
 	kind     string
 	name     string
 	explain  string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the directories docs/04 names.
@@ -380,6 +385,7 @@ var locations = []location{
 		rel: "Library/Developer/Xcode/DerivedData", category: "Xcode", owner: "Xcode", keys: xcodeKeys,
 		reclaim: classify.Regenerable, kind: "cache", name: "DerivedData",
 		explain: "build products and indexes for every project ever opened; Xcode rebuilds them",
+		impact:  "quit Xcode first; each project builds and indexes again when opened",
 	},
 	{
 		rel: "Library/Developer/Xcode/iOS DeviceSupport", category: "Xcode", owner: "Xcode", keys: xcodeKeys,
@@ -410,6 +416,8 @@ var locations = []location{
 		rel: "Library/Developer/CoreSimulator/Devices", category: "Simulators", owner: "Xcode", keys: xcodeKeys,
 		reclaim: classify.ToolManaged, kind: "data", name: "Simulator devices",
 		explain: "one directory per simulator; `xcrun simctl delete unavailable` removes the dead ones",
+		command: "xcrun simctl delete unavailable",
+		impact:  "removes only simulators whose runtime is gone; the rest stay",
 	},
 	{
 		rel: "Library/Developer/CoreSimulator/Caches", category: "Simulators", owner: "Xcode", keys: xcodeKeys,
@@ -420,11 +428,15 @@ var locations = []location{
 		rel: "Library/Developer/XCTestDevices", category: "Simulators", owner: "Xcode", keys: xcodeKeys,
 		reclaim: classify.Regenerable, kind: "data", name: "XCTest devices",
 		explain: "simulators created for test runs; they are recreated by the next run",
+		tier:    detect.TierSafe,
+		impact:  "the next test run creates them again",
 	},
 	{
 		rel: "Library/Caches/com.apple.dt.Xcode", category: "Xcode", owner: "Xcode", keys: xcodeKeys,
 		reclaim: classify.Regenerable, kind: "cache", name: "Xcode cache",
 		explain: "Xcode's own cache, rebuilt on demand",
+		tier:    detect.TierSafe,
+		impact:  "Xcode rebuilds it on demand",
 	},
 	{
 		abs: "/Library/Developer", category: "Xcode", owner: "Xcode", keys: xcodeKeys,
@@ -435,6 +447,7 @@ var locations = []location{
 		abs: "/Library/Developer/CommandLineTools", category: "Xcode", owner: "Command Line Tools",
 		keys: xcodeKeys, reclaim: classify.ToolManaged, kind: "toolchain", name: "Command line tools",
 		explain: "the standalone toolchain; `xcode-select --install` reinstalls it",
+		tier:    detect.TierInUse,
 	},
 	{
 		abs: "/Library/Developer/CoreSimulator/Images", category: "Simulators", owner: "Xcode", keys: xcodeKeys,
@@ -491,7 +504,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 		targets = append(targets, detect.Target{
 			Path: p, Bucket: classify.BucketDeveloper, Category: loc.category,
 			Owner: loc.owner, OwnerKeys: loc.keys, Reclaim: loc.reclaim,
-			Explain: loc.explain, Kind: loc.kind, Name: loc.name, Evidence: evidence,
+			Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind, Name: loc.name, Evidence: evidence,
 		})
 	}
 	targets = append(targets, deviceTargets(cx.Home, facts, evidence)...)

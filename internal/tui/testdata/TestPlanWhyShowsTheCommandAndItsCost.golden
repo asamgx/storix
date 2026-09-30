@@ -1,0 +1,40 @@
+RECLAIM PLAN                           901 KB could be freed  read-only WHY                                             
+      frees item                                                        node: what the tool itself would free           
+SAFE  0 bytes + ~4 MB reported  (1 item)                                                                                
+    ~4.0 MB node: what the tool itself would free                       tier       Safe                                 
+CHECK FIRST  901 KB  (1 item)                                           frees      ~4 MB (the tool's own figure)        
+     901 KB the Trash                                                   found by   node                                 
+IN USE  18 MB  (1 item, listed only)                                                                                    
+    18.0 MB OrbStack — data.img                                         pnpm store prune                                
+                                                                                                                        
+                                                                        read-only: storix has changed nothing           
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+                                                                                                                        
+
+↑/k up • ↓/j down • enter/l open • bksp/h parent • s sort by size • / filter • w why • tab switch view • ? help • q quit

@@ -66,6 +66,11 @@ type location struct {
 	kind     string
 	name     string
 	explain  string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the directories docs/04 names.
@@ -74,6 +79,9 @@ var locations = []location{
 		rel: ".gem", owner: "RubyGems", keys: []string{"cli:gem"}, category: "Ruby gems",
 		reclaim: classify.ToolManaged, kind: "data", name: "User gems",
 		explain: "gems installed for this user; `gem uninstall` removes one",
+		tier:    detect.TierInUse,
+		command: "gem cleanup",
+		impact:  "removes superseded versions of installed gems only",
 	},
 	{
 		abs: "/Library/Ruby/Gems", owner: "RubyGems", keys: []string{"cli:gem"}, category: "Ruby gems",
@@ -104,6 +112,7 @@ var locations = []location{
 		rel: ".bundle/cache", owner: "Bundler", keys: []string{"cli:bundle"}, category: "Ruby gems",
 		reclaim: classify.Regenerable, kind: "cache", name: "Bundler cache",
 		explain: "gem archives Bundler kept; `bundle install` downloads them again",
+		impact:  "`bundle install` downloads them again",
 	},
 }
 
@@ -164,7 +173,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 		targets = append(targets, detect.Target{
 			Path: p, Bucket: classify.BucketDeveloper, Category: loc.category,
 			Owner: loc.owner, OwnerKeys: loc.keys, Reclaim: loc.reclaim,
-			Explain: loc.explain, Kind: loc.kind, Name: name, Evidence: evidence,
+			Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind, Name: name, Evidence: evidence,
 		})
 	}
 	targets = append(targets, versionTargets(t, cx.Home, facts, evidence)...)

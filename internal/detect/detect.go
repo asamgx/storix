@@ -131,6 +131,11 @@ type Tool struct {
 	Current bool   `json:"current,omitempty"`
 	Version string `json:"version,omitempty"`
 	Note    string `json:"note,omitempty"`
+	// Tier, Command and Impact are what the reclaim plan says about the
+	// row; see Target.
+	Tier    Tier   `json:"tier,omitempty"`
+	Command string `json:"command,omitempty"`
+	Impact  string `json:"impact,omitempty"`
 }
 
 // Project is one source project under a code root, with what its build
@@ -166,6 +171,10 @@ type Line struct {
 	// images, stopped containers and build cache are tool-managed, named
 	// volumes are user data because they hold databases.
 	Reclaim classify.Reclaim `json:"reclaim"`
+	// Tier and Command are the plan's view of the row's reclaimable share.
+	Tier    Tier   `json:"tier,omitempty"`
+	Command string `json:"command,omitempty"`
+	Impact  string `json:"impact,omitempty"`
 }
 
 // Runtime is one container runtime or virtual machine manager, reported as

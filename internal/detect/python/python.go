@@ -163,29 +163,39 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Reclaim: classify.ToolManaged, Kind: "toolchain", Name: "pyenv",
 			Note:    pyenvNote(facts, len(installed)),
 			Explain: "Python interpreters pyenv built; `pyenv uninstall <version>` removes one",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path:     measured(get(func(f *Facts) string { return f.UvCache }), path.Join(home, ".cache/uv")),
 			Category: "Package cache", Owner: "uv", OwnerKeys: []string{"cli:uv"},
 			Reclaim: classify.Regenerable, Kind: "cache", Name: "uv wheel cache",
 			Explain: "wheels and source distributions uv unpacked; `uv cache clean` clears it",
+			Tier:    detect.TierSafe,
+			Command: "uv cache clean",
+			Impact:  "uv downloads and unpacks again what a project needs",
 		},
 		{
 			Path:     measured(get(func(f *Facts) string { return f.UvPython }), path.Join(home, ".local/share/uv/python")),
 			Category: "Toolchain", Owner: "uv", OwnerKeys: []string{"cli:uv"},
 			Reclaim: classify.ToolManaged, Kind: "toolchain", Name: "uv interpreters",
 			Explain: "Python builds uv downloaded to run projects against",
+			Tier:    detect.TierInUse,
+			Command: "uv python uninstall <version>",
 		},
 		{
 			Path: path.Join(home, ".local/share/uv"), Category: "Toolchain", Owner: "uv",
 			OwnerKeys: []string{"cli:uv"}, Reclaim: classify.ToolManaged,
 			Explain: "uv's per-user data",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path:     measured(get(func(f *Facts) string { return f.PipCache }), path.Join(home, "Library/Caches/pip")),
 			Category: "Package cache", Owner: "pip", OwnerKeys: []string{"cli:pip"},
 			Reclaim: classify.Regenerable, Kind: "cache", Name: "pip cache",
 			Explain: "wheels pip downloaded; `pip cache purge` clears it",
+			Tier:    detect.TierSafe,
+			Command: "pip cache purge",
+			Impact:  "pip downloads again what an install needs",
 		},
 		{
 			Path:     measured(get(func(f *Facts) string { return f.PoetryCache }), path.Join(home, "Library/Caches/pypoetry")),
@@ -193,18 +203,25 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Reclaim: classify.Regenerable, Kind: "cache", Name: "Poetry cache",
 			Note:    "Poetry keeps project virtual environments in here as well as downloads",
 			Explain: "Poetry's download cache and its virtual environments",
+			Tier:    detect.TierCheck,
+			Command: "poetry cache clear --all .",
+			Impact:  "the virtual environments here belong to projects; poetry recreates them on install",
 		},
 		{
 			Path: path.Join(home, ".local/pipx"), Category: "Toolchain", Owner: "pipx",
 			OwnerKeys: []string{"cli:pipx"}, Reclaim: classify.ToolManaged,
 			Kind: "toolchain", Name: "pipx environments",
 			Explain: "applications pipx installed, each in its own environment",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(home, ".cache/pre-commit"), Category: "Tool cache", Owner: "pre-commit",
 			OwnerKeys: []string{"cli:pre-commit"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "pre-commit hooks",
 			Explain: "hook environments pre-commit built; `pre-commit clean` removes them",
+			Tier:    detect.TierSafe,
+			Command: "pre-commit clean",
+			Impact:  "the next commit in a repository rebuilds its hook environments",
 		},
 	}
 	targets = append(targets, condaTargets(facts, m, home)...)
@@ -241,6 +258,8 @@ func condaTargets(f *Facts, m *detect.Measure, home string) []detect.Target {
 			Path: p, Category: "Toolchain", Owner: "Conda", OwnerKeys: []string{"cli:conda"},
 			Reclaim: classify.ToolManaged, Kind: "toolchain", Name: "conda",
 			Explain: "a conda installation: its environments and its package cache",
+			Tier:    detect.TierInUse,
+			Command: "conda clean --all",
 		})
 	}
 	return out
@@ -270,6 +289,8 @@ func interpreters(f *Facts, root string, versions []string) []detect.Target {
 			OwnerKeys: []string{"cli:pyenv"}, Reclaim: classify.ToolManaged,
 			Kind: "versions", Name: "python", Version: v, Current: v == current, Note: note,
 			Explain: "the Python " + v + " interpreter pyenv built, and its site-packages",
+			Command: "pyenv uninstall " + v,
+			Impact:  "its site-packages go with it; a project pinned to it builds it again",
 		})
 	}
 	return out

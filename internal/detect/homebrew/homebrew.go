@@ -364,31 +364,42 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 		{
 			Path: d.prefix, Category: "Homebrew", Owner: Owner, Reclaim: classify.ToolManaged,
 			Explain: "the Homebrew prefix; everything under it is brew's to remove",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: d.cellar, Category: "Homebrew formulae", Owner: Owner, Reclaim: classify.ToolManaged,
 			Kind: "toolchain", Name: "Cellar", Note: cellarNote(facts),
 			Explain: "installed formulae; `brew cleanup` removes superseded versions",
+			Tier:    detect.TierInUse,
+			Command: "brew cleanup",
+			Impact:  "only superseded versions go; installed formulae stay",
 		},
 		{
 			Path: d.cache, Category: "Package cache", Owner: Owner, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "download cache",
 			Explain: "bottles and casks brew downloaded; `brew cleanup` clears them",
+			Tier:    detect.TierSafe,
+			Command: "brew cleanup --prune=all",
+			Impact:  "brew downloads a bottle again only to install or upgrade it",
 		},
 		{
 			Path: path.Join(home, "Library/Logs/Homebrew"), Category: "Homebrew metadata", Owner: Owner,
 			Reclaim: classify.Regenerable, Kind: "cache", Name: "build logs",
 			Explain: "logs from formulae brew built from source",
+			Tier:    detect.TierSafe,
+			Impact:  "build logs",
 		},
 		{
 			Path: path.Join(d.prefix, "Library/Taps"), Category: "Homebrew metadata", Owner: Owner,
 			Reclaim: classify.Regenerable, Kind: "data", Name: "taps",
 			Explain: "tap clones; brew refetches them",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(d.prefix, ".git"), Category: "Homebrew metadata", Owner: Owner,
 			Reclaim: classify.ToolManaged, Kind: "data", Name: "brew repository",
 			Explain: "Homebrew's own git history",
+			Tier:    detect.TierInUse,
 		},
 	}
 	for i := range targets {
@@ -442,6 +453,7 @@ func kegs(t *walk.Tree, f *Facts, d defaults, ev []string) ([]classify.Claim, []
 			Evidence:  ev,
 		}
 		if fm, ok := multi[name]; ok {
+			tg.Tier = detect.TierInUse
 			tg.Kind = "versions"
 			tg.Name = name
 			tg.Version = strings.Join(fm.Versions, ", ")
@@ -473,13 +485,23 @@ func kegs(t *walk.Tree, f *Facts, d defaults, ev []string) ([]classify.Claim, []
 				note = "superseded keg; `brew cleanup -n` lists it for removal"
 				reclaim = classify.Regenerable
 			}
-			versionTargets = append(versionTargets, detect.Target{
+			tg := detect.Target{
 				Path: keg, Bucket: classify.BucketDeveloper,
 				Category: "Homebrew formulae", Owner: fm.Name, OwnerKeys: []string{"cli:" + fm.Name},
 				Reclaim: reclaim, Kind: "versions", Name: fm.Name, Version: v, Current: current,
 				Note: note, Evidence: ev,
 				Explain: "version " + v + " of the formula " + fm.Name,
-			})
+			}
+			switch {
+			case reclaim == classify.Regenerable:
+				tg.Tier, tg.Command = detect.TierSafe, "brew cleanup "+fm.Name
+				tg.Impact = "brew lists this keg for removal itself"
+			case !current:
+				// brew is keeping it — pinned, or depended on — and
+				// its own cleanup is the only judge of that.
+				tg.Tier = detect.TierInUse
+			}
+			versionTargets = append(versionTargets, tg)
 		}
 	}
 	vClaims, vTools := detect.Claims(t, Name, versionTargets)

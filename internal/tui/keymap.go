@@ -26,14 +26,15 @@ type KeyMap struct {
 	Copy      key.Binding
 	Switch    key.Binding
 
-	// The six result views, in the order of docs/03: the digits select one
-	// directly and tab cycles through them.
+	// The seven result views, in the order of docs/03: the digits select
+	// one directly and tab cycles through them.
 	Ledger     key.Binding
 	Browse     key.Binding
 	Apps       key.Binding
 	Developer  key.Binding
 	Containers key.Binding
 	Unacc      key.Binding
+	Plan       key.Binding
 
 	// Why toggles the panel that says where a row's classification came
 	// from. It is the same panel in every view that has a selection.
@@ -75,6 +76,7 @@ func DefaultKeyMap() KeyMap {
 		// u is the alias the fingers find: the unaccounted view moved from
 		// 2 to 6 when the ledger took the first digit.
 		Unacc: key.NewBinding(key.WithKeys("6", "u"), key.WithHelp("6/u", "unaccounted")),
+		Plan:  key.NewBinding(key.WithKeys("7"), key.WithHelp("7", "plan")),
 		Why:   key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "why")),
 
 		Rescan: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rescan")),
@@ -95,7 +97,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Open, k.Parent, k.Bundles, k.Filter, k.Escape},
 		{k.SortSize, k.SortName, k.SortMtime, k.SortCount, k.Apparent},
 		{k.Finder, k.Copy, k.Why, k.Switch},
-		{k.Ledger, k.Browse, k.Apps, k.Developer, k.Containers, k.Unacc},
+		{k.Ledger, k.Browse, k.Apps, k.Developer, k.Containers, k.Unacc, k.Plan},
 		{k.Rescan, k.Help, k.Quit},
 	}
 }

@@ -55,6 +55,11 @@ type location struct {
 	reclaim classify.Reclaim
 	kind    string
 	explain string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the four directories docs/04 names. The kubectl cache is
@@ -65,21 +70,30 @@ var locations = []location{
 		rel: ".kube", owner: "kubectl", key: "cli:kubectl",
 		reclaim: classify.UserData, kind: "data",
 		explain: "your kubeconfig: credentials and cluster addresses, not something to delete",
+		tier:    detect.TierNever,
 	},
 	{
 		rel: ".kube/cache", owner: "kubectl", key: "cli:kubectl",
 		reclaim: classify.Regenerable, kind: "cache",
 		explain: "kubectl's API discovery cache, rebuilt on the next command",
+		tier:    detect.TierSafe,
+		impact:  "rebuilt on the next kubectl command",
 	},
 	{
 		rel: ".minikube", owner: "minikube", key: "cli:minikube",
 		reclaim: classify.ToolManaged, kind: "image",
 		explain: "minikube's cluster disks and cached images; `minikube delete --all` reclaims them",
+		tier:    detect.TierCheck,
+		command: "minikube delete --all",
+		impact:  "deletes every minikube cluster and what runs in it",
 	},
 	{
 		rel: ".kind", owner: "kind", key: "cli:kind",
 		reclaim: classify.ToolManaged, kind: "image",
 		explain: "kind's cluster state; `kind delete clusters --all` reclaims it",
+		tier:    detect.TierCheck,
+		command: "kind delete clusters --all",
+		impact:  "deletes every kind cluster",
 	},
 	{
 		rel: ".rd", owner: "Rancher Desktop", key: "app:io.rancherdesktop.app",
@@ -116,7 +130,7 @@ func (*Detector) Classify(t *walk.Tree, _ detect.Facts, cx classify.Context) ([]
 		targets = append(targets, detect.Target{
 			Path: path.Join(home, loc.rel), Bucket: classify.BucketContainers,
 			Category: "Kubernetes", Owner: loc.owner, OwnerKeys: []string{loc.key},
-			Reclaim: loc.reclaim, Explain: loc.explain, Kind: loc.kind,
+			Reclaim: loc.reclaim, Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind,
 			Name:     loc.owner,
 			Evidence: []string{loc.owner + " keeps its data in " + path.Join(home, loc.rel)},
 		})

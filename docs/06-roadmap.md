@@ -117,7 +117,30 @@ Acceptance:
   but was not exercised end to end because no scan in this validation ran under `sudo`. Full
   detail in docs/10-bench-1b.md § Not verified on this machine.
 
-## Phase 2 — Reclaim (act through native tools)
+## Phase 1.5 — Reclaim plan (read-only)
+
+Deliverable: storix says what could be freed, with which command and at what cost, and
+changes nothing. Added 2026-09-30 after a hand cleanup of the reference machine showed the
+tiering, the commands and the pitfalls (`pnpm store prune` emptied the live store) had to be
+worked out by hand.
+
+- [x] Tiers on detector rows: Safe, Re-download, Reinstall, Check first, In use, Never (D48);
+  a structured `Command` and `Impact` per row (D50); Safe only when a detector asserts it.
+- [x] `internal/reclaim.Build`: one plan per scan, each walked byte counted once; tool-reported
+  figures (`brew cleanup -n`, `docker system df`) totalled apart (D49); "frees once the Trash is
+  emptied" per item; project build output grouped per project and split by `--stale-after`
+  (30 days); orphans with kept paths, config links and Brewfile/shell edits.
+- [x] Docker split: build cache (Safe), unused images (Re-download), stopped containers (Check
+  first), volumes (Never), each with its own command.
+- [x] `storix reclaim [--plan] [--tier …] [--stale-after 30d] [--all] [--json]`; a RECLAIM
+  summary in the full report and `plan_summary` in `scan --json`.
+- [x] `storix doctor` says whether the Trash is readable (Full Disk Access).
+- [x] TUI Plan view on `7` with enter-to-Browse and the why panel (D52).
+
+## Phase 2 — Reclaim (act through native tools) — **parked**
+
+Parked on 2026-09-30: phase 1.5's read-only plan comes first, and running it waits until the
+plan has been used for a while. The notes below stand as the design.
 
 Deliverable: guided, dry-run-first cleanup.
 

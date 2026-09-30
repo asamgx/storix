@@ -277,6 +277,8 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Path: path.Join(home, container), Category: "Docker Desktop", Kind: "image",
 			Reclaim: classify.ToolManaged,
 			Explain: "Docker Desktop's virtual machine disk (Docker.raw); `docker system prune` frees space inside it",
+			Tier:    detect.TierInUse,
+			Impact:  "space freed inside it by the docker prunes below is returned to the host by Docker Desktop",
 		},
 		{
 			Path: path.Join(home, "Library/Group Containers/group.com.docker"), Category: "Docker Desktop", Kind: "data",
@@ -286,6 +288,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Path: path.Join(home, ".docker"), Category: "Docker Desktop", Kind: "cache",
 			Reclaim: classify.Regenerable,
 			Explain: "the Docker CLI's configuration, contexts, buildx state and Scout cache",
+			Tier:    detect.TierNever,
 		},
 	}
 	for i := range targets {
@@ -336,12 +339,14 @@ func runtime(t *walk.Tree, f *Facts, home string, tools []detect.Tool) detect.Ru
 
 	rt.Context = f.Context
 	for _, row := range f.DF {
-		rt.GuestReported = append(rt.GuestReported, detect.Line{
+		line := detect.Line{
 			Type: row.Type, Size: row.Size, Reclaimable: row.Reclaimable,
 			Percent: row.Percent, Known: row.PercentOK,
 			Count: row.Count, Active: row.Active,
 			Reclaim: rowReclaim(row.Type),
-		})
+		}
+		detect.PlanDockerRow(&line, f.Context)
+		rt.GuestReported = append(rt.GuestReported, line)
 	}
 	rt.Note = note(rt, f)
 	return rt

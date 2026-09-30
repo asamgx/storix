@@ -96,6 +96,11 @@ type entry struct {
 	reclaim  classify.Reclaim
 	explain  string
 	note     string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // libraryCaches are the ~/Library/Caches directories that belong to a
@@ -109,6 +114,8 @@ var libraryCaches = map[string]entry{
 		owner: "Playwright", key: "playwright", kind: "cache", category: "Tool cache",
 		reclaim: classify.ToolManaged,
 		explain: "browser builds Playwright downloaded; `npx playwright uninstall` removes them",
+		command: "npx playwright uninstall --all",
+		impact:  "each project's next `npx playwright install` downloads its browsers again",
 	},
 	"ms-playwright-go": {
 		owner: "Playwright", key: "playwright", kind: "cache", category: "Tool cache",
@@ -124,6 +131,9 @@ var libraryCaches = map[string]entry{
 		owner: "Cypress", key: "cypress", kind: "cache", category: "Tool cache",
 		reclaim: classify.ToolManaged,
 		explain: "one Cypress binary per version ever used; `cypress cache prune` keeps the current one",
+		tier:    detect.TierSafe,
+		command: "npx cypress cache prune",
+		impact:  "keeps the binary of the installed version",
 	},
 	"puppeteer": {
 		owner: "Puppeteer", key: "puppeteer", kind: "cache", category: "Tool cache",
@@ -133,6 +143,7 @@ var libraryCaches = map[string]entry{
 	"node-gyp": {
 		owner: "node-gyp", kind: "cache", category: "Package cache", reclaim: classify.Regenerable,
 		explain: "node headers native modules are compiled against, one set per node version",
+		impact:  "the next native module build downloads the headers again",
 	},
 	"typescript": {
 		owner: "TypeScript", key: "tsc", kind: "cache", category: "Tool cache",
@@ -152,6 +163,8 @@ var libraryCaches = map[string]entry{
 		owner: "Helm", key: "helm", kind: "cache", category: "Tool cache",
 		reclaim: classify.Regenerable,
 		explain: "chart repository indexes and downloaded charts; `helm repo update` refills them",
+		command: "helm repo update",
+		impact:  "indexes are fetched again; downloaded charts are pulled again on use",
 	},
 	"org.swift.swiftpm": {
 		owner: "SwiftPM", key: "swift", kind: "cache", category: "Package cache",
@@ -161,18 +174,27 @@ var libraryCaches = map[string]entry{
 	"gopls": {
 		owner: "gopls", kind: "cache", category: "Tool cache", reclaim: classify.Regenerable,
 		explain: "the Go language server's index; it rebuilds on the next editor session",
+		tier:    detect.TierSafe,
+		impact:  "gopls reindexes on the next editor session",
 	},
 	"golangci-lint": {
 		owner: "golangci-lint", kind: "cache", category: "Tool cache", reclaim: classify.Regenerable,
 		explain: "golangci-lint's analysis cache",
+		tier:    detect.TierSafe,
+		command: "golangci-lint cache clean",
+		impact:  "the next lint run is slower",
 	},
 	"goimports": {
 		owner: "goimports", kind: "cache", category: "Tool cache", reclaim: classify.Regenerable,
 		explain: "goimports' index of importable packages",
+		tier:    detect.TierSafe,
+		impact:  "goimports rebuilds its index on next use",
 	},
 	"staticcheck": {
 		owner: "staticcheck", kind: "cache", category: "Tool cache", reclaim: classify.Regenerable,
 		explain: "staticcheck's analysis cache",
+		tier:    detect.TierSafe,
+		impact:  "the next check run is slower",
 	},
 	"JNA": {
 		owner: "Java", key: "java", kind: "cache", category: "Tool cache", reclaim: classify.Regenerable,
@@ -396,7 +418,7 @@ func target(p, name string, e entry) detect.Target {
 	}
 	return detect.Target{
 		Path: p, Category: e.category, Owner: owner, OwnerKeys: []string{"cli:" + key},
-		Reclaim: e.reclaim, Kind: e.kind, Name: owner, Note: e.note, Explain: e.explain,
+		Reclaim: e.reclaim, Kind: e.kind, Name: owner, Note: e.note, Explain: e.explain, Tier: e.tier, Command: e.command, Impact: e.impact,
 	}
 }
 

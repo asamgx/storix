@@ -38,13 +38,14 @@ const (
 	viewDeveloper
 	viewContainers
 	viewUnaccounted
+	viewPlan
 	viewHelp
 )
 
 // resultViews are the views a finished scan can show, in the order of
-// docs/03: the digits 1 to 6 select one directly and tab cycles them.
+// docs/03: the digits 1 to 7 select one directly and tab cycles them.
 var resultViews = []view{
-	viewLedger, viewBrowse, viewApps, viewDeveloper, viewContainers, viewUnaccounted,
+	viewLedger, viewBrowse, viewApps, viewDeveloper, viewContainers, viewUnaccounted, viewPlan,
 }
 
 // Model is the root model: it owns the scan session and routes keys to the
@@ -77,6 +78,7 @@ type Model struct {
 	dev      sectionModel
 	cont     sectionModel
 	unacc    sectionModel
+	plan     planModel
 	why      whyModel
 
 	// input is the filter prompt, shared by every table that has one;
@@ -111,6 +113,7 @@ func New(ctx context.Context, cfg scan.Config, initial *scan.Result) *Model {
 		dev:      newDeveloper(),
 		cont:     newContainers(),
 		unacc:    newUnaccounted(),
+		plan:     newPlan(),
 	}
 	m.browse = newBrowse(nil)
 	if initial != nil {
@@ -184,6 +187,7 @@ func (m *Model) adopt(res *scan.Result) {
 	m.dev.setResult(res, o)
 	m.cont.setResult(res, o)
 	m.unacc.setResult(res, o)
+	m.plan.setResult(res)
 	m.resize()
 }
 
@@ -376,6 +380,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.show(viewContainers)
 	case key.Matches(msg, m.keys.Unacc):
 		return m.show(viewUnaccounted)
+	case key.Matches(msg, m.keys.Plan):
+		return m.show(viewPlan)
 	}
 
 	switch m.view {
@@ -391,6 +397,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		return m.cont.Update(msg)
 	case viewUnaccounted:
 		return m.unacc.Update(msg)
+	case viewPlan:
+		return m.planKey(msg)
 	default:
 		return nil
 	}
@@ -479,6 +487,44 @@ func (m *Model) appsKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Escape):
 		if a.filter != "" {
 			a.setFilter("")
+			m.status = "filter cleared"
+		}
+	case key.Matches(msg, m.keys.Finder):
+		return m.reveal()
+	case key.Matches(msg, m.keys.Copy):
+		return m.copy()
+	}
+	return nil
+}
+
+// planKey drives the Plan view: the same movement, filter, Finder and copy
+// keys as the Apps table, and enter opens the item's directory in Browse.
+func (m *Model) planKey(msg tea.KeyPressMsg) tea.Cmd {
+	p := &m.plan
+	switch {
+	case key.Matches(msg, m.keys.Up):
+		p.move(-1)
+	case key.Matches(msg, m.keys.Down):
+		p.move(1)
+	case key.Matches(msg, m.keys.PageUp):
+		p.move(-p.height)
+	case key.Matches(msg, m.keys.PageDown):
+		p.move(p.height)
+	case key.Matches(msg, m.keys.Top):
+		p.moveTo(0)
+	case key.Matches(msg, m.keys.Bottom):
+		p.moveTo(len(p.visible()) - 1)
+	case key.Matches(msg, m.keys.Open):
+		if n, ok := p.open(); ok {
+			m.openInBrowse(n)
+		} else {
+			m.status = "this item is a tool's own figure; no directory holds it"
+		}
+	case key.Matches(msg, m.keys.Filter):
+		m.startFilter()
+	case key.Matches(msg, m.keys.Escape):
+		if p.filter != "" {
+			p.setFilter("")
 			m.status = "filter cleared"
 		}
 	case key.Matches(msg, m.keys.Finder):
@@ -614,16 +660,23 @@ func (m *Model) startFilter() {
 
 // currentFilter is the filter the view in front already has.
 func (m *Model) currentFilter() string {
-	if m.view == viewApps {
+	switch m.view {
+	case viewApps:
 		return m.apps.filter
+	case viewPlan:
+		return m.plan.filter
 	}
 	return m.browse.opts.filter
 }
 
 // applyFilter hands the typed text to the view the prompt was opened over.
 func (m *Model) applyFilter(s string) {
-	if m.filterFor == viewApps {
+	switch m.filterFor {
+	case viewApps:
 		m.apps.setFilter(s)
+		return
+	case viewPlan:
+		m.plan.setFilter(s)
 		return
 	}
 	m.browse.setFilter(s)
@@ -683,6 +736,12 @@ func (m *Model) selectedPath() (string, bool) {
 		return "", false
 	case viewApps:
 		return m.apps.selectedPath()
+	case viewPlan:
+		return m.plan.selectedPath()
+	case viewDeveloper, viewContainers, viewUnaccounted:
+		// A text view has no selection; acting on the Browse cursor
+		// behind it would reveal a path the reader cannot see.
+		return "", false
 	}
 	r, ok := m.browse.selected()
 	if !ok || m.browse.dir == nil {
@@ -703,6 +762,7 @@ func (m *Model) resize() {
 	m.ledger.setSize(w, tableH)
 	m.browse.setSize(w, tableH)
 	m.apps.setSize(w, tableH)
+	m.plan.setSize(w, tableH)
 	m.dev.setSize(w, textH)
 	m.cont.setSize(w, textH)
 	m.unacc.setSize(w, textH)
@@ -783,6 +843,8 @@ func (m *Model) resultView() string {
 		return m.cont.View(m.st)
 	case viewUnaccounted:
 		return m.unacc.View(m.st)
+	case viewPlan:
+		return m.plan.View(m.st, m.cfg.Units)
 	default:
 		return m.browseView()
 	}
@@ -845,6 +907,10 @@ func (m *Model) whyContent() whyContent {
 	case viewApps:
 		if e, ok := m.apps.selected(); ok {
 			return appWhy(e, m.cfg.Units)
+		}
+	case viewPlan:
+		if it, ok := m.plan.selected(); ok {
+			return planWhy(it, m.cfg.Units)
 		}
 	}
 	return whyContent{}

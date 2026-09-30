@@ -385,11 +385,14 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Path: path.Join(home, group), Category: "OrbStack", Kind: "data",
 			Reclaim: classify.ToolManaged,
 			Explain: "OrbStack's disk image and swap; the image is sparse, so this is what the host has actually given it",
+			Tier:    detect.TierInUse,
+			Impact:  "the image gives space back on its own after the docker prunes below",
 		},
 		{
 			Path: path.Join(home, ".orbstack"), Category: "OrbStack", Kind: "data",
 			Reclaim: classify.Regenerable,
 			Explain: "OrbStack's configuration, sockets and logs",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(home, "Library/Caches/dev.orbstack.OrbStack"), Category: "OrbStack", Kind: "cache",
@@ -457,12 +460,14 @@ func runtime(t *walk.Tree, f *Facts, home string, evidence []string) detect.Runt
 		rt.Machines = append(rt.Machines, label)
 	}
 	for _, row := range f.DF {
-		rt.GuestReported = append(rt.GuestReported, detect.Line{
+		line := detect.Line{
 			Type: row.Type, Size: row.Size, Reclaimable: row.Reclaimable,
 			Percent: row.Percent, Known: row.PercentOK,
 			Count: row.Count, Active: row.Active,
 			Reclaim: rowReclaim(row.Type),
-		})
+		}
+		detect.PlanDockerRow(&line, f.Context)
+		rt.GuestReported = append(rt.GuestReported, line)
 	}
 	rt.Note = note(rt, f, evidence)
 	return rt

@@ -134,41 +134,50 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Path: cargo, Category: "Toolchain", Owner: "Cargo", OwnerKeys: []string{"cli:cargo"},
 			Reclaim: classify.ToolManaged,
 			Explain: "Cargo's home: downloaded crates, git checkouts and installed binaries",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(cargo, "registry"), Category: "Package cache", Owner: "Cargo",
 			OwnerKeys: []string{"cli:cargo"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "crate registry",
 			Explain: "crates.io downloads and their unpacked sources; Cargo refetches them",
+			Impact:  "no command clears it; the next build downloads the crates again",
 		},
 		{
 			Path: path.Join(cargo, "git"), Category: "Package cache", Owner: "Cargo",
 			OwnerKeys: []string{"cli:cargo"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "git dependencies",
 			Explain: "git dependencies Cargo cloned",
+			Impact:  "the next build clones them again",
 		},
 		{
 			Path: path.Join(cargo, "bin"), Category: "Toolchain", Owner: "Cargo",
 			OwnerKeys: []string{"cli:cargo"}, Reclaim: classify.ToolManaged,
 			Kind: "toolchain", Name: "installed binaries",
 			Explain: "binaries `cargo install` built",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: rustup, Category: "Toolchain", Owner: "rustup", OwnerKeys: []string{"cli:rustup"},
 			Reclaim: classify.ToolManaged, Note: toolchainNote(facts),
 			Explain: "Rust toolchains; `rustup toolchain uninstall <name>` removes one",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(rustup, "downloads"), Category: "Package cache", Owner: "rustup",
 			OwnerKeys: []string{"cli:rustup"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "toolchain downloads",
 			Explain: "archives rustup downloaded and has already unpacked",
+			Tier:    detect.TierSafe,
+			Impact:  "rustup keeps them only until an install finishes",
 		},
 		{
 			Path: path.Join(rustup, "tmp"), Category: "Package cache", Owner: "rustup",
 			OwnerKeys: []string{"cli:rustup"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "rustup scratch",
 			Explain: "rustup's working directory, left behind by interrupted installs",
+			Tier:    detect.TierSafe,
+			Impact:  "left behind by an interrupted install",
 		},
 	}
 	targets = append(targets, toolchains(t, facts, rustup)...)
@@ -208,6 +217,8 @@ func toolchains(t *walk.Tree, f *Facts, rustup string) []detect.Target {
 			OwnerKeys: []string{"cli:rustup"}, Reclaim: classify.ToolManaged,
 			Kind: "versions", Name: "toolchain", Version: name, Current: defaults[name], Note: note,
 			Explain: "the " + name + " toolchain: rustc, cargo and the standard library",
+			Command: "rustup toolchain uninstall " + name,
+			Impact:  "a project pinned to it installs it again",
 		})
 	}
 	return out

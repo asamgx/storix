@@ -383,3 +383,28 @@ func TestNothingInstalled(t *testing.T) {
 		t.Errorf("commands were run with nothing installed: %v", rec.Records())
 	}
 }
+
+// TestPlanTiers: Xcode's own cache is safe; stale simulators are removed by
+// simctl itself, which keeps the ones whose runtime is installed.
+func TestPlanTiers(t *testing.T) {
+	f := tree(t)
+	env, _ := envFor(t, f, "testdata/this-machine.json", "/Applications/Xcode.app")
+	facts, err := detecttest.Probe(t, xcode.New(), env)
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	_, sum := xcode.New().Classify(f.Tree, facts, f.Context)
+	cache, ok := detecttest.Tool(sum, home+"/Library/Caches/com.apple.dt.Xcode")
+	if !ok || cache.EffectiveTier() != detect.TierSafe {
+		t.Errorf("Xcode cache = %+v, want safe", cache)
+	}
+	var simctl bool
+	for _, tool := range sum.Tools {
+		if tool.Command == "xcrun simctl delete unavailable" {
+			simctl = true
+		}
+	}
+	if !simctl {
+		t.Error("no row names `xcrun simctl delete unavailable`")
+	}
+}
