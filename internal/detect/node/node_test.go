@@ -382,3 +382,39 @@ func TestClaimEvidenceIsAboutTheClaimedPath(t *testing.T) {
 		}
 	}
 }
+
+// TestPlanTiers: the node rows the reclaim plan reads. The live pnpm store is
+// named with its command but kept in use, because `pnpm store prune` emptied
+// it outright on the reference machine (D51).
+func TestPlanTiers(t *testing.T) {
+	f := tree(t)
+	det := node.New()
+	facts, err := detecttest.Probe(t, det, f.Env(t, "testdata/this-machine.json"))
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	_, sum := det.Classify(f.Tree, facts, f.Context)
+	for _, tc := range []struct {
+		path    string
+		tier    detect.Tier
+		command string
+	}{
+		{home + "/.npm", detect.TierSafe, "npm cache clean --force"},
+		{store + "/v10", detect.TierInUse, "pnpm store prune"},
+		{store + "/v3", detect.TierRedownload, ""},
+		{store + "/v11", detect.TierCheck, ""},
+	} {
+		tool, ok := detecttest.Tool(sum, tc.path)
+		if !ok {
+			t.Errorf("no tool row for %s", tc.path)
+			continue
+		}
+		if got := tool.EffectiveTier(); got != tc.tier || tool.Command != tc.command {
+			t.Errorf("%s: tier %s command %q, want %s %q", tc.path, got, tool.Command, tc.tier, tc.command)
+		}
+	}
+	live, _ := detecttest.Tool(sum, store+"/v10")
+	if !strings.Contains(live.Impact, "whole store") {
+		t.Errorf("the live store's impact does not warn about prune's reach: %q", live.Impact)
+	}
+}

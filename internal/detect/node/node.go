@@ -328,12 +328,17 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Owner: "npm", OwnerKeys: []string{"cli:npm"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "npm cache",
 			Explain: "packages npm downloaded; `npm cache clean --force` clears it",
+			Tier:    detect.TierSafe,
+			Command: "npm cache clean --force",
+			Impact:  "the next install downloads again what it needs",
 		},
 		{
 			Path: path.Join(home, ".npm/_npx"), Category: "Package cache",
 			Owner: "npm", OwnerKeys: []string{"cli:npx"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "npx one-off packages",
 			Explain: "packages npx downloaded to run once and never cleaned up",
+			Tier:    detect.TierSafe,
+			Impact:  "inside the npm cache, so `npm cache clean --force` clears it too; npx downloads again on next use",
 		},
 		{
 			Path: path.Join(home, "Library/Caches/pnpm"), Category: "Package cache",
@@ -341,24 +346,32 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Kind: "cache", Name: "pnpm metadata cache",
 			Note:    "separate from the store: registry metadata and side effects, not package content",
 			Explain: "pnpm's metadata cache; it is rebuilt from the registry on demand",
+			Tier:    detect.TierSafe,
+			Impact:  "no command clears it; move it to the Trash. pnpm rebuilds it from the registry",
 		},
 		{
 			Path: path.Join(home, "Library/Caches/Yarn"), Category: "Package cache",
 			Owner: "Yarn", OwnerKeys: []string{"cli:yarn"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "Yarn 1 cache",
 			Explain: "the Yarn 1.x cache; `yarn cache clean` clears it",
+			Tier:    detect.TierSafe,
+			Command: "yarn cache clean",
+			Impact:  "the next install downloads again what it needs",
 		},
 		{
 			Path: path.Join(home, ".yarn"), Category: "Package cache",
 			Owner: "Yarn", OwnerKeys: []string{"cli:yarn"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "Yarn Berry global folder",
 			Explain: "Yarn Berry's global cache and releases",
+			Command: "yarn cache clean --mirror",
+			Impact:  "Berry re-downloads packages and its own releases on next install",
 		},
 		{
 			Path: path.Join(home, ".bun"), Category: "Toolchain",
 			Owner: "Bun", OwnerKeys: []string{"cli:bun"}, Reclaim: classify.ToolManaged,
 			Kind: "toolchain", Name: "Bun",
 			Explain: "the Bun runtime and everything it installs",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(home, ".bun/install/cache"), Category: "Package cache",
@@ -366,12 +379,16 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Kind: "cache", Name: "Bun install cache",
 			Note:    "`bun pm cache` cannot be asked outside a project, so this is Bun's documented default",
 			Explain: "packages Bun downloaded; `bun pm cache rm` clears it, run from inside a project directory (it refuses anywhere without a package.json)",
+			Tier:    detect.TierSafe,
+			Command: "bun pm cache rm",
+			Impact:  "run it inside any project: it refuses where there is no package.json",
 		},
 		{
 			Path: path.Join(home, "Library/Caches/node/corepack"), Category: "Package cache",
 			Owner: "Node.js", OwnerKeys: []string{"cli:corepack"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "corepack cache",
 			Explain: "package manager releases corepack downloaded to run `pnpm` and `yarn`",
+			Impact:  "corepack downloads a package manager release again on next use",
 		},
 		{
 			Path: path.Join(home, "Library/Caches/node"), Category: "Package cache",
@@ -383,12 +400,14 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Owner: "Volta", OwnerKeys: []string{"cli:volta"}, Reclaim: classify.ToolManaged,
 			Kind: "toolchain", Name: "Volta",
 			Explain: "toolchains Volta pinned per project",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(home, ".local/share/fnm"), Category: "Toolchain",
 			Owner: "fnm", OwnerKeys: []string{"cli:fnm"}, Reclaim: classify.ToolManaged,
 			Kind: "toolchain", Name: "fnm",
 			Explain: "node versions fnm installed",
+			Tier:    detect.TierInUse,
 		},
 	}
 	targets = append(targets, pnpmStores(t, facts, m, home)...)
@@ -444,6 +463,9 @@ func yarnMeasured(t *walk.Tree, f *Facts, m *detect.Measure, home string) []dete
 		Reclaim: classify.Regenerable, Kind: "cache", Name: name, Version: path.Base(cache),
 		Note:    "the cache directory Yarn " + f.YarnVersion + " reported",
 		Explain: "packages Yarn downloaded; `yarn cache clean` clears them",
+		Tier:    detect.TierSafe,
+		Command: "yarn cache clean",
+		Impact:  "the next install downloads again what it needs",
 	}}
 }
 
@@ -462,6 +484,7 @@ func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 			Reclaim: classify.ToolManaged, Kind: "data", Name: "pnpm store root",
 			Note:    "node_modules hard-link into this store, so its bytes are counted here once",
 			Explain: "the pnpm content-addressed store; every project's dependencies live here",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(home, ".pnpm-store"), Category: "Package store", Owner: "pnpm",
@@ -469,6 +492,7 @@ func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 			Kind: "versions", Name: "pnpm store", Version: "legacy location",
 			Note:    "superseded store generation; pnpm no longer writes here",
 			Explain: "an older pnpm store location, left behind by a pnpm upgrade",
+			Impact:  "no pnpm writes here any more; move it to the Trash",
 		},
 	}
 
@@ -496,12 +520,25 @@ func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 			note = "newer than the live " + path.Base(live) + "; a newer pnpm (corepack, a project's packageManager) may still use it — check before removing"
 			reclaim = classify.Unknown
 		}
-		out = append(out, detect.Target{
+		tg := detect.Target{
 			Path: gen, Category: "Package store", Owner: "pnpm", OwnerKeys: []string{"cli:pnpm"},
 			Reclaim: reclaim, Kind: "versions", Name: "pnpm store", Version: path.Base(gen),
 			Current: current, Note: note,
 			Explain: "pnpm store generation " + path.Base(gen),
-		})
+		}
+		switch {
+		case current:
+			// Observed on the reference machine (D51): `pnpm store prune`
+			// emptied the live store outright. The projects kept their
+			// files through hard links, but every one of them downloads
+			// its packages again on its next install. So the command is
+			// named, and the store is not offered.
+			tg.Tier, tg.Command = detect.TierInUse, "pnpm store prune"
+			tg.Impact = "prune removes every package no project on record references, which can be the whole store; each project's next install downloads again"
+		case reclaim == classify.Regenerable:
+			tg.Impact = "no pnpm writes this generation any more; move it to the Trash"
+		}
+		out = append(out, tg)
 	}
 	return out
 }
@@ -554,12 +591,16 @@ func nvmTargets(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 			Path: nvm, Category: "Toolchain", Owner: "nvm", OwnerKeys: []string{"cli:nvm"},
 			Reclaim: classify.ToolManaged, Kind: "toolchain", Name: "nvm",
 			Explain: "node versions nvm installed; `nvm uninstall <version>` removes one",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path: path.Join(nvm, ".cache"), Category: "Package cache", Owner: "nvm",
 			OwnerKeys: []string{"cli:nvm"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "nvm download cache",
 			Explain: "node tarballs nvm downloaded; `nvm cache clear` removes them",
+			Tier:    detect.TierSafe,
+			Command: "nvm cache clear",
+			Impact:  "nvm downloads a tarball again only to install a version",
 		},
 	}
 
@@ -581,6 +622,8 @@ func nvmTargets(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 			Owner: "Node.js", OwnerKeys: []string{"cli:node"}, Reclaim: classify.ToolManaged,
 			Kind: "versions", Name: "node", Version: v, Current: v == current, Note: note,
 			Explain: "node " + v + " and the packages installed globally into it",
+			Command: "nvm uninstall " + strings.TrimPrefix(v, "v"),
+			Impact:  "its globally installed packages go with it; a project pinned to it needs it again",
 		})
 	}
 	return out

@@ -448,6 +448,28 @@ type artifact struct {
 	explain string
 }
 
+// restore says how each artifact comes back, for the reclaim plan. The plan
+// decides the tier from the project's last activity (D48); a tier set here
+// overrides that, for the few artifacts that hold more than build output.
+var restores = map[string]struct {
+	tier   detect.Tier
+	impact string
+}{
+	"node_modules": {impact: "the project's package manager reinstalls it: `pnpm install`, `npm install` or `yarn`"},
+	".pnpm-store":  {impact: "`pnpm install` refills it"},
+	"target":       {impact: "`cargo build` recreates it"},
+	".next":        {impact: "the next `next build` or `next dev` recreates it"},
+	".venv":        {impact: "recreate it from the lockfile: `uv sync`, `poetry install` or `pip install -r`"},
+	"venv":         {impact: "recreate it from the lockfile: `uv sync`, `poetry install` or `pip install -r`"},
+	"env":          {impact: "recreate it from the lockfile: `uv sync`, `poetry install` or `pip install -r`"},
+	".build":       {impact: "`swift build` recreates it"},
+	"Pods":         {impact: "`pod install` recreates it"},
+	".gradle":      {impact: "the next Gradle build recreates it"},
+	// A JetBrains project directory keeps run configurations and code style
+	// beside its index, and those are not rebuilt by anything.
+	".idea": {tier: detect.TierCheck, impact: "holds run configurations and code style as well as the index; check before removing"},
+}
+
 // artifacts are the directory names docs/04 lists as build output, with what
 // each one is. Everything here is regenerable except `vendor`, which is
 // decided per directory by [vendorArtifact]; the generic names among them
@@ -756,9 +778,11 @@ func gather(n *walk.Node, display, rel, project string, keys []string, git map[s
 			if a.reclaim != classify.UserData {
 				p.ArtifactBytes += child.Bytes
 			}
+			r := restores[child.Name]
 			p.Artifacts = append(p.Artifacts, detect.Tool{
 				Name: child.Name, Kind: "cache", Path: childPath, Node: child.ID,
 				Bytes: child.Bytes, Reclaim: a.reclaim, Note: a.explain,
+				Tier: r.tier, Impact: r.impact,
 			})
 		default:
 			gather(child, childPath, childRel, project, keys, git, depth+1, targets, p)

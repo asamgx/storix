@@ -78,6 +78,11 @@ type location struct {
 	kind     string
 	name     string
 	explain  string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the directories docs/04 names.
@@ -91,6 +96,9 @@ var locations = []location{
 		rel: ".ollama/models", owner: "Ollama", keys: ollamaKeys, category: "Ollama",
 		reclaim: classify.ToolManaged, kind: "data", name: "Ollama models",
 		explain: "model weights ollama pulled; `ollama rm <model>` removes one and `ollama pull` fetches it again",
+		tier:    detect.TierCheck,
+		command: "ollama rm <model>",
+		impact:  "a removed model is downloaded again in full by `ollama pull`",
 	},
 	{
 		rel: ".cache/huggingface", owner: "Hugging Face", keys: []string{"cli:huggingface-cli"},
@@ -101,6 +109,9 @@ var locations = []location{
 		rel: ".cache/huggingface/hub", owner: "Hugging Face", keys: []string{"cli:huggingface-cli"},
 		category: "Hugging Face", reclaim: classify.ToolManaged, kind: "cache", name: "Hugging Face hub",
 		explain: "downloaded model checkpoints; `huggingface-cli delete-cache` removes them and the next run re-downloads",
+		tier:    detect.TierCheck,
+		command: "huggingface-cli delete-cache",
+		impact:  "models are downloaded again in full on next use",
 	},
 	{
 		rel: ".cache/torch", owner: "PyTorch", keys: []string{"cli:python3"}, category: "PyTorch",
@@ -215,7 +226,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 		tg := detect.Target{
 			Path: path.Join(home, loc.rel), Bucket: classify.BucketDeveloper,
 			Category: loc.category, Owner: loc.owner, OwnerKeys: loc.keys,
-			Reclaim: loc.reclaim, Explain: loc.explain, Kind: loc.kind, Name: name,
+			Reclaim: loc.reclaim, Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind, Name: name,
 		}
 		if loc.owner == "Ollama" {
 			tg.Evidence = ollamaEvidence

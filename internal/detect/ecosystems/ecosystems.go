@@ -68,6 +68,11 @@ type location struct {
 	kind     string
 	name     string
 	explain  string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the per-user directories, grouped by ecosystem in the order
@@ -134,11 +139,16 @@ var locations = []location{
 		rel: ".ccache", owner: "ccache", keys: []string{"cli:ccache"}, category: "Compiler caches",
 		reclaim: classify.Regenerable, kind: "cache",
 		explain: "cached C and C++ object files; `ccache -C` clears it and builds refill it",
+		tier:    detect.TierSafe,
+		command: "ccache -C",
+		impact:  "the next builds compile from scratch",
 	},
 	{
 		rel: ".conan2", owner: "Conan", keys: []string{"cli:conan"}, category: "Compiler caches",
 		reclaim: classify.Regenerable, kind: "cache",
 		explain: "Conan's package cache; `conan cache clean` reclaims it",
+		command: "conan cache clean",
+		impact:  "packages are downloaded or rebuilt again on next install",
 	},
 
 	// Apple's third-party dependency manager.
@@ -180,6 +190,9 @@ var locations = []location{
 		rel: ".composer/cache", owner: "Composer", keys: []string{"cli:composer"}, category: "PHP",
 		reclaim: classify.Regenerable, kind: "cache", name: "Composer cache",
 		explain: "downloaded package archives; `composer clear-cache` reclaims them",
+		tier:    detect.TierSafe,
+		command: "composer clear-cache",
+		impact:  "the next install downloads again what it needs",
 	},
 
 	// Zig.
@@ -187,6 +200,8 @@ var locations = []location{
 		rel: ".cache/zig", owner: "Zig", keys: []string{"cli:zig"}, category: "Zig",
 		reclaim: classify.Regenerable, kind: "cache",
 		explain: "Zig's global build cache, rebuilt by the next build",
+		tier:    detect.TierSafe,
+		impact:  "the next build compiles again",
 	},
 	{
 		rel: ".zvm", owner: "zvm", keys: []string{"cli:zvm"}, category: "Zig",
@@ -237,7 +252,7 @@ func (*Detector) Classify(t *walk.Tree, _ detect.Facts, cx classify.Context) ([]
 		targets = append(targets, detect.Target{
 			Path: path.Join(home, loc.rel), Bucket: classify.BucketDeveloper,
 			Category: loc.category, Owner: loc.owner, OwnerKeys: loc.keys,
-			Reclaim: loc.reclaim, Explain: loc.explain, Kind: loc.kind, Name: name,
+			Reclaim: loc.reclaim, Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind, Name: name,
 		})
 	}
 	if b := bazelPath(home); b != "" {

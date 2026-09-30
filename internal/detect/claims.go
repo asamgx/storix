@@ -101,6 +101,15 @@ type Target struct {
 	// Evidence are extra why-panel lines, beyond the one naming the
 	// detector and the path.
 	Evidence []string
+	// Tier is what freeing the path costs (D48). Unset derives it from
+	// Reclaim and Current, conservatively and never as Safe.
+	Tier Tier
+	// Command is the tool's own way of freeing the path, preferred over
+	// moving it to the Trash; empty when the tool has none.
+	Command string
+	// Impact is one line on what running Command costs and how far it
+	// reaches beyond the path.
+	Impact string
 }
 
 // Claims turns a detector's targets into claims and summary rows.
@@ -169,6 +178,9 @@ func ToolOf(n *walk.Node, tg Target) Tool {
 		Current: tg.Current,
 		Version: tg.Version,
 		Note:    tg.Note,
+		Tier:    tg.Tier,
+		Command: tg.Command,
+		Impact:  tg.Impact,
 	}
 }
 

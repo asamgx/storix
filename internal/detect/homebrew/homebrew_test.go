@@ -337,3 +337,22 @@ func stateOf(err error) (detect.State, string) {
 		return detect.Degraded, err.Error()
 	}
 }
+
+// TestPlanTiers: brew's download cache is safe to clear with brew's own
+// command; the Cellar is in use.
+func TestPlanTiers(t *testing.T) {
+	f := tree(t)
+	det := homebrew.New()
+	facts, err := detecttest.Probe(t, det, f.Env(t, "testdata/this-machine.json"))
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	_, sum := det.Classify(f.Tree, facts, f.Context)
+	cache, ok := detecttest.Tool(sum, home+"/Library/Caches/Homebrew")
+	if !ok || cache.EffectiveTier() != detect.TierSafe || cache.Command != "brew cleanup --prune=all" {
+		t.Errorf("brew cache row = %+v, want safe with `brew cleanup --prune=all`", cache)
+	}
+	if c, ok := detecttest.Tool(sum, cellar); ok && c.EffectiveTier() != detect.TierInUse {
+		t.Errorf("the Cellar is %s, want in-use", c.EffectiveTier())
+	}
+}

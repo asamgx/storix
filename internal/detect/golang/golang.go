@@ -113,12 +113,16 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 		{
 			Path: gopath, Category: "Toolchain", Owner: "Go", Reclaim: classify.ToolManaged,
 			Explain: "the Go workspace: the module cache and the binaries `go install` wrote",
+			Tier:    detect.TierInUse,
 		},
 		{
 			Path:     measured(get(func(f *Facts) string { return f.GoCache }), path.Join(home, "Library/Caches/go-build")),
 			Category: "Build cache", Owner: "Go", Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "build cache",
 			Explain: "compiled package objects; `go clean -cache` clears it and the next build refills it",
+			Tier:    detect.TierSafe,
+			Command: "go clean -cache",
+			Impact:  "the next build compiles again what it needs",
 		},
 		{
 			Path:     measured(get(func(f *Facts) string { return f.GoModCache }), path.Join(home, "go/pkg/mod")),
@@ -126,11 +130,14 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Kind: "cache", Name: "module cache",
 			Note:    "read-only on disk; `go clean -modcache` is the only way to remove it",
 			Explain: "every version of every module any build has needed",
+			Command: "go clean -modcache",
+			Impact:  "every module is downloaded again by the next build that needs it",
 		},
 		{
 			Path: path.Join(gopath, "bin"), Category: "Toolchain", Owner: "Go",
 			Reclaim: classify.ToolManaged, Kind: "toolchain", Name: "installed binaries",
 			Explain: "binaries `go install` wrote; reinstalling rebuilds them",
+			Tier:    detect.TierInUse,
 		},
 	}
 	ev := detect.RebaseScoped(evidence(facts), m)

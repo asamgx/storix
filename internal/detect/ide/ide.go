@@ -152,6 +152,11 @@ type location struct {
 	kind    string
 	name    string
 	explain string
+	// tier, command and impact are the reclaim plan's view of the
+	// path (D48, D50); unset derives the tier from reclaim.
+	tier    detect.Tier
+	command string
+	impact  string
 }
 
 // locations are the editors, terminals and agents with their own layouts.
@@ -172,6 +177,7 @@ var locations = []location{
 		rel: "Library/Application Support/Zed/languages", owner: "Zed", keys: []string{"app:dev.zed.Zed", "cli:zed"},
 		category: "Zed", reclaim: classify.ToolManaged, kind: "toolchain",
 		explain: "language servers Zed downloaded; it downloads them again when a file needs one",
+		impact:  "quit Zed first; it downloads a language server again when a file needs one",
 	},
 	{
 		rel: "Library/Caches/Zed", owner: "Zed", keys: []string{"app:dev.zed.Zed", "cli:zed"},
@@ -203,6 +209,7 @@ var locations = []location{
 		rel: "Library/Caches/JetBrains", owner: "JetBrains", keys: []string{"vendor:com.jetbrains"},
 		category: "JetBrains", reclaim: classify.Regenerable, kind: "cache",
 		explain: "project indexes, rebuilt the next time a project is opened",
+		impact:  "quit the IDE first; the next open of each project reindexes it",
 	},
 	{
 		rel: "Library/Logs/JetBrains", owner: "JetBrains", keys: []string{"vendor:com.jetbrains"},
@@ -217,21 +224,26 @@ var locations = []location{
 		rel: ".cache/nvim", owner: "Neovim", keys: []string{"cli:nvim"},
 		category: "Neovim", reclaim: classify.Regenerable, kind: "cache",
 		explain: "Neovim's compiled Lua and shada cache",
+		tier:    detect.TierSafe,
+		impact:  "Neovim recompiles it on the next start",
 	},
 	{
 		rel: ".claude", owner: "Claude Code", keys: []string{"cli:claude-code"},
 		category: "Coding agents", reclaim: classify.Unknown, kind: "data",
 		explain: "Claude Code's configuration, session transcripts and project state",
+		tier:    detect.TierNever,
 	},
 	{
 		rel: ".codex", owner: "Codex", keys: []string{"cli:codex", "cask:codex"},
 		category: "Coding agents", reclaim: classify.Unknown, kind: "data",
 		explain: "the Codex CLI's configuration and session history",
+		tier:    detect.TierNever,
 	},
 	{
 		rel: ".cache/codex-runtimes", owner: "Codex", keys: []string{"cli:codex", "cask:codex"},
 		category: "Coding agents", reclaim: classify.Regenerable, kind: "cache",
 		explain: "language runtimes Codex downloaded to run code in; it downloads them again on demand",
+		impact:  "Codex downloads a runtime again when it next runs code in it",
 	},
 	{
 		rel: "Library/Application Support/Codex", owner: "Codex", keys: []string{"cli:codex", "cask:codex"},
@@ -242,6 +254,7 @@ var locations = []location{
 		rel: ".gemini", owner: "Gemini CLI", keys: []string{"cli:gemini"},
 		category: "Coding agents", reclaim: classify.Unknown, kind: "data",
 		explain: "the Gemini CLI's configuration and session history",
+		tier:    detect.TierNever,
 	},
 }
 
@@ -296,7 +309,7 @@ func (*Detector) Classify(t *walk.Tree, _ detect.Facts, cx classify.Context) ([]
 		targets = append(targets, detect.Target{
 			Path: path.Join(home, loc.rel), Bucket: classify.BucketDeveloper,
 			Category: loc.category, Owner: loc.owner, OwnerKeys: loc.keys,
-			Reclaim: loc.reclaim, Explain: loc.explain, Kind: loc.kind, Name: name,
+			Reclaim: loc.reclaim, Explain: loc.explain, Tier: loc.tier, Command: loc.command, Impact: loc.impact, Kind: loc.kind, Name: name,
 			Priority: priority,
 		})
 	}
@@ -333,12 +346,22 @@ const priority = 1
 func editorTargets(home string, ed editor) []detect.Target {
 	out := make([]detect.Target, 0, len(supportParts)+3)
 	add := func(rel string, reclaim classify.Reclaim, kind, name, explain string) {
-		out = append(out, detect.Target{
+		tg := detect.Target{
 			Path: path.Join(home, rel), Bucket: classify.BucketDeveloper,
 			Category: ed.owner, Owner: ed.owner, OwnerKeys: ed.keys,
 			Reclaim: reclaim, Explain: explain, Kind: kind, Name: name,
 			Priority: priority,
-		})
+		}
+		switch reclaim {
+		case classify.Regenerable:
+			tg.Impact = "quit " + ed.owner + " first; it rebuilds this on its next start"
+		case classify.ToolManaged:
+			// The editor's own directories are in use while it is
+			// installed; when it is gone the apps verdict retags
+			// them Orphaned (D44), which the plan reads first.
+			tg.Tier = detect.TierInUse
+		}
+		out = append(out, tg)
 	}
 
 	if ed.dot != "" {

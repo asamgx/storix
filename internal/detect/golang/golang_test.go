@@ -153,3 +153,31 @@ func TestShortOutput(t *testing.T) {
 		t.Error("the missing lines did not fall back to the documented defaults")
 	}
 }
+
+// TestPlanTiers: the build cache is rebuilt by the next build and costs
+// nothing else; the module cache has to be downloaded again.
+func TestPlanTiers(t *testing.T) {
+	f := tree(t)
+	det := golang.New()
+	facts, err := detecttest.Probe(t, det, f.Env(t, "testdata/this-machine.json"))
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	_, sum := det.Classify(f.Tree, facts, f.Context)
+	for path, want := range map[string]struct {
+		tier    detect.Tier
+		command string
+	}{
+		home + "/Library/Caches/go-build": {detect.TierSafe, "go clean -cache"},
+		home + "/go/pkg/mod":              {detect.TierRedownload, "go clean -modcache"},
+	} {
+		tool, ok := detecttest.Tool(sum, path)
+		if !ok {
+			t.Errorf("no tool row for %s", path)
+			continue
+		}
+		if tool.EffectiveTier() != want.tier || tool.Command != want.command {
+			t.Errorf("%s: %s %q, want %s %q", path, tool.EffectiveTier(), tool.Command, want.tier, want.command)
+		}
+	}
+}
