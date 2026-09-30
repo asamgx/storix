@@ -107,11 +107,15 @@ func DefaultTier(r classify.Reclaim, current bool) Tier {
 
 // EffectiveTier is the row's tier: its own when a detector set one, the
 // default otherwise.
+//
+// "Not current" only means something for a row that is one version among
+// several — a node or a toolchain beside the default. Any other tool-managed
+// row is the tool's own working set, and reads as in use.
 func (t Tool) EffectiveTier() Tier {
 	if t.Tier != TierUnset {
 		return t.Tier
 	}
-	return DefaultTier(t.Reclaim, t.Current)
+	return DefaultTier(t.Reclaim, t.Current || t.Kind != "versions")
 }
 
 // PlanDockerRow fills in the plan's view of one `docker system df` row: the

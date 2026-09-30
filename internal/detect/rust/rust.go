@@ -141,7 +141,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			OwnerKeys: []string{"cli:cargo"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "crate registry",
 			Explain: "crates.io downloads and their unpacked sources; Cargo refetches them",
-			Impact:  "no command clears it; move it to the Trash, and the next build downloads the crates again",
+			Impact:  "no command clears it; the next build downloads the crates again",
 		},
 		{
 			Path: path.Join(cargo, "git"), Category: "Package cache", Owner: "Cargo",
@@ -169,7 +169,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Kind: "cache", Name: "toolchain downloads",
 			Explain: "archives rustup downloaded and has already unpacked",
 			Tier:    detect.TierSafe,
-			Impact:  "rustup keeps them only until an install finishes; move them to the Trash",
+			Impact:  "rustup keeps them only until an install finishes",
 		},
 		{
 			Path: path.Join(rustup, "tmp"), Category: "Package cache", Owner: "rustup",
@@ -177,7 +177,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Kind: "cache", Name: "rustup scratch",
 			Explain: "rustup's working directory, left behind by interrupted installs",
 			Tier:    detect.TierSafe,
-			Impact:  "left behind by an interrupted install; move it to the Trash",
+			Impact:  "left behind by an interrupted install",
 		},
 	}
 	targets = append(targets, toolchains(t, facts, rustup)...)

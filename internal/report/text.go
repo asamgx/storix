@@ -97,6 +97,7 @@ func Text(w io.Writer, r *scan.Result, o Options) error {
 	t := &textReport{w: w, r: r, l: r.Ledger, o: o, st: st, u: u}
 	t.header()
 	t.ledgerSection()
+	t.planSummary()
 	t.buckets()
 	t.developer()
 	t.containers()

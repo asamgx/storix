@@ -347,7 +347,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Note:    "separate from the store: registry metadata and side effects, not package content",
 			Explain: "pnpm's metadata cache; it is rebuilt from the registry on demand",
 			Tier:    detect.TierSafe,
-			Impact:  "no command clears it; move it to the Trash. pnpm rebuilds it from the registry",
+			Impact:  "no command clears it; pnpm rebuilds it from the registry",
 		},
 		{
 			Path: path.Join(home, "Library/Caches/Yarn"), Category: "Package cache",
@@ -492,7 +492,7 @@ func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 			Kind: "versions", Name: "pnpm store", Version: "legacy location",
 			Note:    "superseded store generation; pnpm no longer writes here",
 			Explain: "an older pnpm store location, left behind by a pnpm upgrade",
-			Impact:  "no pnpm writes here any more; move it to the Trash",
+			Impact:  "no pnpm writes here any more",
 		},
 	}
 
@@ -536,7 +536,7 @@ func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 			tg.Tier, tg.Command = detect.TierInUse, "pnpm store prune"
 			tg.Impact = "prune removes every package no project on record references, which can be the whole store; each project's next install downloads again"
 		case reclaim == classify.Regenerable:
-			tg.Impact = "no pnpm writes this generation any more; move it to the Trash"
+			tg.Impact = "no pnpm writes this generation any more"
 		}
 		out = append(out, tg)
 	}

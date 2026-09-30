@@ -387,7 +387,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Reclaim: classify.Regenerable, Kind: "cache", Name: "build logs",
 			Explain: "logs from formulae brew built from source",
 			Tier:    detect.TierSafe,
-			Impact:  "build logs; move them to the Trash",
+			Impact:  "build logs",
 		},
 		{
 			Path: path.Join(d.prefix, "Library/Taps"), Category: "Homebrew metadata", Owner: Owner,
@@ -492,9 +492,14 @@ func kegs(t *walk.Tree, f *Facts, d defaults, ev []string) ([]classify.Claim, []
 				Note: note, Evidence: ev,
 				Explain: "version " + v + " of the formula " + fm.Name,
 			}
-			if reclaim == classify.Regenerable {
+			switch {
+			case reclaim == classify.Regenerable:
 				tg.Tier, tg.Command = detect.TierSafe, "brew cleanup "+fm.Name
 				tg.Impact = "brew lists this keg for removal itself"
+			case !current:
+				// brew is keeping it — pinned, or depended on — and
+				// its own cleanup is the only judge of that.
+				tg.Tier = detect.TierInUse
 			}
 			versionTargets = append(versionTargets, tg)
 		}

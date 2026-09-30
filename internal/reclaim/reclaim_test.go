@@ -113,9 +113,9 @@ func fixture(t *testing.T) *scan.Result {
 				{Type: "Local Volumes", Size: 5 * gb, Reclaimable: gb},
 			}}}},
 			"projects": {Projects: []detect.Project{
-				{Root: home + "/code/old", LastActivity: now.Add(-90 * 24 * time.Hour),
+				{Root: home + "/code/old", Node: at(home + "/code/old").ID, LastActivity: now.Add(-90 * 24 * time.Hour),
 					Artifacts: []detect.Tool{artifact(home + "/code/old/node_modules")}},
-				{Root: home + "/code/new", LastActivity: now.Add(-2 * 24 * time.Hour),
+				{Root: home + "/code/new", Node: at(home + "/code/new").ID, LastActivity: now.Add(-2 * 24 * time.Hour),
 					Artifacts: []detect.Tool{artifact(home + "/code/new/node_modules")}},
 			}},
 		},
@@ -180,7 +180,6 @@ func TestEachByteIsCountedOnce(t *testing.T) {
 	for display, want := range map[string]int64{
 		home + "/.npm":                   3 * gb,
 		home + "/.npm/_npx":              gb / 2,
-		home + "/Library/pnpm":           0,
 		home + "/Library/pnpm/store/v10": 6 * gb,
 		home + "/Library/pnpm/store/v3":  gb,
 	} {
@@ -192,6 +191,12 @@ func TestEachByteIsCountedOnce(t *testing.T) {
 		if it.Bytes != want {
 			t.Errorf("%s bytes = %d, want %d", display, it.Bytes, want)
 		}
+	}
+
+	// The store root holds nothing of its own once its generations are
+	// items, so it is not listed.
+	if it, ok := byPath(p, home+"/Library/pnpm"); ok {
+		t.Errorf("the pnpm store root is listed with %d bytes of its own", it.Bytes)
 	}
 
 	var walked int64
@@ -221,8 +226,8 @@ func TestTiers(t *testing.T) {
 		home + "/.npm":                               Safe,
 		home + "/Library/pnpm/store/v10":             InUse,
 		home + "/Library/pnpm/store/v3":              Redownload, // unset → derived, never Safe
-		home + "/code/old/node_modules":              Reinstall,  // untouched for 90 days
-		home + "/code/new/node_modules":              InUse,      // used two days ago
+		home + "/code/old":                           Reinstall,  // untouched for 90 days
+		home + "/code/new":                           InUse,      // used two days ago
 		home + "/Library/Caches/com.spotify.client":  Redownload,
 		home + "/.cursor":                            Never, // cursor-agent reads it
 		home + "/.cursor/extensions":                 Check,
@@ -264,7 +269,7 @@ func TestReportedFiguresStayApart(t *testing.T) {
 func TestStaleAfterMovesProjects(t *testing.T) {
 	t.Parallel()
 	p := Build(fixture(t), Options{StaleAfter: 24 * time.Hour})
-	if it, _ := byPath(p, home+"/code/new/node_modules"); it.Tier != Reinstall {
+	if it, _ := byPath(p, home+"/code/new"); it.Tier != Reinstall {
 		t.Errorf("with a one-day threshold the active project is %s, want reinstall", it.Tier)
 	}
 }

@@ -45,6 +45,9 @@ const (
 	Never      = detect.TierNever
 )
 
+// TierOrder is the tiers in the order the plan prints them.
+func TierOrder() []Tier { return detect.Tiers }
+
 // DefaultStaleAfter is how long a project must have gone untouched before
 // its build output is offered for reinstalling rather than listed as in use.
 const DefaultStaleAfter = 30 * 24 * time.Hour
@@ -92,6 +95,9 @@ type Item struct {
 	Evidence []string `json:"evidence,omitempty"`
 
 	node *walk.Node
+	// dirs are the directories a grouped item stands for; each one takes
+	// part in counting bytes once as if it were its own item.
+	dirs []*walk.Node
 }
 
 // Edit is a line of the user's own files that names software already gone:
@@ -248,9 +254,16 @@ func (b *builder) orphan(e apps.Entry) {
 		if it.node != nil {
 			it.Bytes = it.node.Bytes
 		}
-		if c.Kept != "" {
+		switch {
+		case c.Kept != "":
 			it.Tier, it.Impact = Never, "kept: "+c.Kept
-		} else {
+		case strings.HasPrefix(c.Path, "/private/var/db/receipts/"):
+			// An installer receipt is the package database's, and
+			// pkgutil is how it forgets one; the file is never moved.
+			pkg := strings.TrimSuffix(strings.TrimSuffix(path.Base(c.Path), ".bom"), ".plist")
+			it.Tier, it.Command = Check, "sudo pkgutil --forget "+pkg
+			it.Impact = why + "; forgetting the receipt removes both its files"
+		default:
 			it.Tier = Check
 			it.Impact = why + "; check nothing else still uses it before removing it"
 		}
@@ -377,36 +390,82 @@ func (b *builder) runtimes() {
 }
 
 // projects offers the build output of stale projects and accounts for that
-// of the active ones.
+// of the active ones, one item per project: a project's node_modules, .next
+// and forty __pycache__ directories are one decision, not forty-two.
 func (b *builder) projects() {
 	for _, st := range b.res.Detectors {
 		for _, pr := range b.res.Summaries[st.Name].Projects {
-			stale := !pr.LastActivity.IsZero() && b.o.Now.Sub(pr.LastActivity) >= b.o.StaleAfter
-			for _, a := range pr.Artifacts {
-				n := b.nodeByID(a.Node)
-				if n == nil || a.Reclaim == classify.UserData || n.Bytes == 0 {
-					continue
-				}
-				it := Item{
-					ID: "projects:" + a.Path, Title: path.Base(pr.Root) + "/" + a.Name,
-					node: n, Bytes: n.Bytes, Impact: a.Impact, Source: st.Name,
-				}
-				switch {
-				case a.Tier != detect.TierUnset:
-					it.Tier = a.Tier
-				case pr.LastActivity.IsZero():
-					it.Tier = Check
-					it.Impact = "when the project was last used is unknown; " + a.Impact
-				case stale:
-					it.Tier = Reinstall
-				default:
-					it.Tier = InUse
-					it.Impact = "the project was used " + pr.LastActivity.Format(time.DateOnly) + "; " + a.Impact
-				}
-				b.add(it)
-			}
+			b.project(st.Name, pr)
 		}
 	}
+}
+
+func (b *builder) project(source string, pr detect.Project) {
+	var dirs []*walk.Node
+	var names, impacts []string
+	var bytes int64
+	tier := detect.TierUnset
+	for _, a := range pr.Artifacts {
+		n := b.nodeByID(a.Node)
+		if n == nil || a.Reclaim == classify.UserData || n.Bytes == 0 || b.seen[n] {
+			continue
+		}
+		if a.Tier != detect.TierUnset {
+			// An artifact that holds more than build output (.idea)
+			// is its own decision and gets its own item.
+			b.add(Item{ID: "projects:" + a.Path, Tier: a.Tier, Title: path.Base(pr.Root) + "/" + a.Name,
+				node: n, Bytes: n.Bytes, Impact: a.Impact, Source: source})
+			continue
+		}
+		dirs = append(dirs, n)
+		bytes += n.Bytes
+		names = appendOnce(names, a.Name)
+		if a.Impact != "" {
+			impacts = appendOnce(impacts, a.Impact)
+		}
+	}
+	if len(dirs) == 0 {
+		return
+	}
+	stale := !pr.LastActivity.IsZero() && b.o.Now.Sub(pr.LastActivity) >= b.o.StaleAfter
+	var when string
+	switch {
+	case pr.LastActivity.IsZero():
+		tier, when = Check, "when the project was last used is unknown"
+	case stale:
+		tier, when = Reinstall, "untouched since "+pr.LastActivity.Format(time.DateOnly)
+	default:
+		tier, when = InUse, "used "+pr.LastActivity.Format(time.DateOnly)
+	}
+	impact := strings.Join(append([]string{when}, impacts...), "; ")
+	title := path.Base(pr.Root) + " — build output"
+	if len(dirs) == 1 {
+		title = path.Base(pr.Root) + "/" + names[0]
+	} else {
+		title += " (" + strings.Join(names, ", ") + ")"
+	}
+	ev := make([]string, 0, len(dirs))
+	for _, n := range dirs {
+		b.seen[n] = true
+		ev = append(ev, n.Display())
+	}
+	it := Item{
+		ID: "projects:" + pr.Root, Tier: tier, Title: title, Path: pr.Root,
+		Bytes: bytes, Impact: impact, Source: source, Evidence: ev, Action: moveToTrash,
+		dirs: dirs,
+	}
+	b.add(it)
+	b.plan.Items[len(b.plan.Items)-1].Node = pr.Node
+}
+
+// appendOnce adds s unless the list already holds it.
+func appendOnce(list []string, s string) []string {
+	for _, x := range list {
+		if x == s {
+			return list
+		}
+	}
+	return append(list, s)
 }
 
 // appCaches offers the caches of installed applications.
@@ -496,29 +555,53 @@ func (b *builder) notes() {
 }
 
 // dedupe gives every walked byte to exactly one item: the deepest one that
-// holds it. Items are sorted by path; each item's bytes are reduced by the
-// bytes of the items directly nested inside it.
+// holds it. The item directories are sorted by path, and each one's bytes
+// are reduced by the directories directly nested inside it. A grouped item
+// takes part through each of its directories.
+//
+// Items left with nothing — a cache already empty, a parent whose children
+// are all items of their own — are then dropped, except the never tier,
+// whose zero-byte entries (a configuration link) are the point.
 func (b *builder) dedupe() {
-	var idx []int
+	type entry struct {
+		item int
+		node *walk.Node
+	}
+	var es []entry
 	for i, it := range b.plan.Items {
-		if !it.Reported && it.node != nil {
-			idx = append(idx, i)
+		if it.Reported {
+			continue
+		}
+		if it.node != nil {
+			es = append(es, entry{i, it.node})
+		}
+		for _, d := range it.dirs {
+			es = append(es, entry{i, d})
 		}
 	}
-	sort.SliceStable(idx, func(x, y int) bool { return b.plan.Items[idx[x]].Path < b.plan.Items[idx[y]].Path })
+	sort.SliceStable(es, func(x, y int) bool { return es[x].node.Display() < es[y].node.Display() })
 
 	items := b.plan.Items
-	var stack []int
-	for _, i := range idx {
-		for len(stack) > 0 && !inside(items[i].node, items[stack[len(stack)-1]].node) {
+	var stack []entry
+	for _, e := range es {
+		for len(stack) > 0 && !inside(e.node, stack[len(stack)-1].node) {
 			stack = stack[:len(stack)-1]
 		}
 		if len(stack) > 0 {
-			parent := &items[stack[len(stack)-1]]
-			parent.Bytes = max(parent.Bytes-items[i].node.Bytes, 0)
+			parent := &items[stack[len(stack)-1].item]
+			parent.Bytes = max(parent.Bytes-e.node.Bytes, 0)
 		}
-		stack = append(stack, i)
+		stack = append(stack, e)
 	}
+
+	kept := items[:0]
+	for _, it := range items {
+		if it.Bytes == 0 && !it.Reported && it.Tier != Never {
+			continue
+		}
+		kept = append(kept, it)
+	}
+	b.plan.Items = kept
 }
 
 // inside reports whether n lies within dir in the tree.

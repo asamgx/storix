@@ -25,6 +25,13 @@ LEDGER  (every byte of used space, in one of twelve buckets)
   identity  buckets 2–9 and 11 sum to the 36.04 GB the walk saw; 1, 10 and 12 are read from the
             volumes, not walked
 
+RECLAIM  (what could be freed, by cost; `storix reclaim` has the details)
+  0 bytes  Safe         1 item  + ~148.7 MB by the tools' own figures
+   4.2 GB  Re-download  1 item
+   480 MB  Reinstall    1 item
+   900 MB  Check first  1 item
+  freeable  5.58 GB, each byte counted once; nothing has been changed
+
 BUCKETS  (what is inside each one)
 
   macOS — 28.13 GB

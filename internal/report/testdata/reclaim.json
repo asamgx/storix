@@ -1,0 +1,156 @@
+{
+  "items": [
+    {
+      "id": "homebrew:reported",
+      "tier": "safe",
+      "title": "homebrew: what the tool itself would free",
+      "node": -1,
+      "bytes": 148700000,
+      "reported": true,
+      "command": "brew cleanup",
+      "impact": "`brew cleanup -n` would free 148.7 MB (148.6 MB across 5 entries)",
+      "source": "homebrew"
+    },
+    {
+      "id": "orbstack:df:Images",
+      "tier": "",
+      "title": "OrbStack — images",
+      "node": -1,
+      "bytes": 5379000000,
+      "reported": true,
+      "source": "orbstack"
+    },
+    {
+      "id": "orbstack:df:Build Cache",
+      "tier": "",
+      "title": "OrbStack — build cache",
+      "node": -1,
+      "bytes": 4638000000,
+      "reported": true,
+      "source": "orbstack"
+    },
+    {
+      "id": "orbstack:df:Local Volumes",
+      "tier": "",
+      "title": "OrbStack — local volumes",
+      "node": -1,
+      "bytes": 938700000,
+      "reported": true,
+      "source": "orbstack"
+    },
+    {
+      "id": "orbstack:df:Containers",
+      "tier": "",
+      "title": "OrbStack — containers",
+      "node": -1,
+      "bytes": 135500000,
+      "reported": true,
+      "source": "orbstack"
+    },
+    {
+      "id": "go:/Users/u/Library/Caches/go-build",
+      "tier": "redownload",
+      "title": "build cache",
+      "path": "/Users/u/Library/Caches/go-build",
+      "node": 13,
+      "bytes": 4200000000,
+      "action": "move to the Trash",
+      "after_trash": true,
+      "source": "go",
+      "evidence": [
+        "rule dev.go.buildcache matched /Users/u/Library/Caches/go-build"
+      ]
+    },
+    {
+      "id": "projects:/Users/u/code/storix",
+      "tier": "reinstall",
+      "title": "storix/node_modules",
+      "path": "/Users/u/code/storix",
+      "node": 27,
+      "bytes": 480000000,
+      "action": "move to the Trash",
+      "impact": "untouched since 2026-06-14",
+      "after_trash": true,
+      "source": "projects",
+      "evidence": [
+        "/Users/u/code/storix/node_modules"
+      ]
+    },
+    {
+      "id": "ledger:/Users/u/.Trash",
+      "tier": "check",
+      "title": "the Trash",
+      "path": "/Users/u/.Trash",
+      "node": 24,
+      "bytes": 900000000,
+      "action": "empty the Trash in Finder",
+      "impact": "cannot be undone; look through it first",
+      "source": "ledger"
+    },
+    {
+      "id": "orbstack:/Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data/data.img.raw",
+      "tier": "in-use",
+      "title": "data.img.raw",
+      "path": "/Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack/data/data.img.raw",
+      "node": 20,
+      "bytes": 18700000000,
+      "source": "orbstack",
+      "evidence": [
+        "rule ctr.orbstack.group matched /Users/u/Library/Group Containers/HUAQ24HBR6.dev.orbstack"
+      ]
+    }
+  ],
+  "totals": {
+    "": {
+      "walked": 0,
+      "reported": 11091200000,
+      "after_trash": 0,
+      "items": 4
+    },
+    "check": {
+      "walked": 900000000,
+      "reported": 0,
+      "after_trash": 0,
+      "items": 1
+    },
+    "in-use": {
+      "walked": 18700000000,
+      "reported": 0,
+      "after_trash": 0,
+      "items": 1
+    },
+    "never": {
+      "walked": 0,
+      "reported": 0,
+      "after_trash": 0,
+      "items": 0
+    },
+    "redownload": {
+      "walked": 4200000000,
+      "reported": 0,
+      "after_trash": 4200000000,
+      "items": 1
+    },
+    "reinstall": {
+      "walked": 480000000,
+      "reported": 0,
+      "after_trash": 480000000,
+      "items": 1
+    },
+    "safe": {
+      "walked": 0,
+      "reported": 148700000,
+      "after_trash": 0,
+      "items": 1
+    }
+  },
+  "trash": {
+    "bytes": 900000000,
+    "known": true
+  },
+  "stale_after_ns": 2592000000000000,
+  "notes": [
+    "purgeable space is not in the plan: macOS frees it on its own when space runs short",
+    "figures marked \"reported\" are the tools' own and overlap the walked bytes, so they are never added to them"
+  ]
+}
