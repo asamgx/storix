@@ -404,7 +404,6 @@ func (b *builder) project(source string, pr detect.Project) {
 	var dirs []*walk.Node
 	var names, impacts []string
 	var bytes int64
-	tier := detect.TierUnset
 	for _, a := range pr.Artifacts {
 		n := b.nodeByID(a.Node)
 		if n == nil || a.Reclaim == classify.UserData || n.Bytes == 0 || b.seen[n] {
@@ -428,6 +427,7 @@ func (b *builder) project(source string, pr detect.Project) {
 		return
 	}
 	stale := !pr.LastActivity.IsZero() && b.o.Now.Sub(pr.LastActivity) >= b.o.StaleAfter
+	var tier Tier
 	var when string
 	switch {
 	case pr.LastActivity.IsZero():
