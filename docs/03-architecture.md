@@ -211,6 +211,9 @@ Views, switched with tabs/keys:
 5. **Containers** — per runtime: host image allocated size vs daemon-reported usage, split
    images/containers/volumes/build cache; machines list for OrbStack.
 6. **Unaccounted** — unreadable directories with errno and the permission hints.
+7. **Plan** — the read-only reclaim plan (phase 1.5): items under tier headings with what each
+   frees and the tool's own command; enter opens an item in Browse, `w` explains its cost.
+   Built by `internal/reclaim` from the finished scan, never computed in the TUI.
 
 Scanning shows a progress view (spinner, counters, current path, elapsed) and transitions
 into the Ledger when done.
