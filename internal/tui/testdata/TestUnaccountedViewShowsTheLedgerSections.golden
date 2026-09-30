@@ -1,3 +1,4 @@
+ 0 Home  1 Ledger  2 Browse  3 Apps  4 Developer  5 Containers  6 Unaccounted  7 Plan 
 VOLUME  —                                                                                                               
   scanned   allocated bytes                         4.3 MB                                                              
                                                    unknown                                                              
@@ -17,7 +18,6 @@ WALK
   unreadable       0  paths                                                                                             
   vanished         0  entries deleted mid-walk                                                                          
   timing              facts 0s, walk 0s, finish 0s, ledger 0s, total 0s                                                 
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

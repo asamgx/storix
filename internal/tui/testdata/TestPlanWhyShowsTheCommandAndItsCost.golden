@@ -1,12 +1,12 @@
-RECLAIM PLAN                           901 KB could be freed  read-only WHY                                             
-      frees item                                                        node: what the tool itself would free           
-SAFE  0 bytes + ~4 MB reported  (1 item)                                                                                
-    ~4.0 MB node: what the tool itself would free                       tier       Safe                                 
-CHECK FIRST  901 KB  (1 item)                                           frees      ~4 MB (the tool's own figure)        
-     901 KB the Trash                                                   found by   node                                 
-IN USE  18 MB  (1 item, listed only)                                                                                    
-    18.0 MB OrbStack — data.img                                         pnpm store prune                                
-                                                                                                                        
+ 0 Home  1 Led  2 Brw  3 Apps  4 Dev  5 Ctr  6 Unacc  7 Plan            WHY                                             
+RECLAIM PLAN                           901 KB could be freed  read-only node: what the tool itself would free           
+      frees item                                                                                                        
+SAFE  0 bytes + ~4 MB reported  (1 item)                                tier       Safe                                 
+    ~4.0 MB node: what the tool itself would free                       frees      ~4 MB (the tool's own figure)        
+CHECK FIRST  901 KB  (1 item)                                           found by   node                                 
+     901 KB the Trash                                                                                                   
+IN USE  18 MB  (1 item, listed only)                                    pnpm store prune                                
+    18.0 MB OrbStack — data.img                                                                                         
                                                                         read-only: storix has changed nothing           
                                                                                                                         
                                                                                                                         

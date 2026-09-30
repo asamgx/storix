@@ -1,23 +1,23 @@
  0 Home  1 Led  2 Brw  3 Apps  4 Dev  5 Ctr  6 Unacc  7 Plan            WHY                                             
-/                                                14.8 MB  8 files  live /Users                                          
-   name                                         size▼      %      files                                                 
-   Users/                    ███████████░░░   11.8 MB  80.0%          6 size       11.8 MB                              
-   Applications/             ███░░░░░░░░░░░    2.8 MB  19.0%          1 bucket     Personal files › Home folders        
-   Library/                  █░░░░░░░░░░░░░    152 KB   1.0%          1 owner      Home folders                         
-                                                                        reclaim    user-data                            
-                                                                        source     rule:personal.users.root             
+DISK  live scan · r rescans                                             node: what the tool itself would free           
+  14.8 MB scanned; the container's size is unknown for this volume                                                      
+                                                                        tier       Safe                                 
+RECLAIMABLE  read-only; nothing has been changed                        frees      ~4 MB (the tool's own figure)        
+  901 KB could be freed, each byte counted once                         found by   node                                 
+  Safe         ░░░░░░░░░░░░░░░░░░░░░░░░░░░       0 B  1 item                                                            
+  Check first  ███████████████████████████    901 KB  1 item            pnpm store prune                                
+  ~4 MB more by the tools' own figures (brew cleanup, docker)                                                           
+                                                                        read-only: storix has changed nothing           
+TOP WINS  enter opens it in the Plan, w explains it                                                                     
+    ~4.0 MB node: what the tool itself would free        Safe                                                           
+     901 KB the Trash                                    Check first                                                    
                                                                                                                         
-                                                                        evidence                                        
-                                                                          rule personal.users.root matched /Users       
+NEEDS ATTENTION                                                                                                         
+  2 removed apps left data behind (900 KB) · Apps (3)                                                                   
+  the Trash holds 901 KB; emptying it frees that                                                                        
                                                                                                                         
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
-                                                                                                                        
+BLIND SPOTS                                                                                                             
+  • 1 detector could not finish; `storix doctor` says why                                                               
                                                                                                                         
                                                                                                                         
                                                                                                                         

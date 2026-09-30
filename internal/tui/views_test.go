@@ -151,12 +151,12 @@ func newClassifiedModel(t *testing.T) *Model {
 	return newTestModel(t, classifiedResult(t))
 }
 
-// TestAFinishedScanLandsOnTheLedger is R6's first sentence: the view a reader
-// is given is the one that answers "what is on this disk".
-func TestAFinishedScanLandsOnTheLedger(t *testing.T) {
+// TestAFinishedScanLandsOnTheDashboard: the view a reader is given first is
+// the one that answers "how much can I get back" (D53).
+func TestAFinishedScanLandsOnTheDashboard(t *testing.T) {
 	m := newClassifiedModel(t)
-	if m.view != viewLedger {
-		t.Errorf("a result opened on view %d, want the ledger", m.view)
+	if m.view != viewDashboard {
+		t.Errorf("a result opened on view %d, want the dashboard", m.view)
 	}
 }
 
@@ -164,7 +164,9 @@ func TestAFinishedScanLandsOnTheLedger(t *testing.T) {
 func TestLedgerViewShowsTheTwelveBuckets(t *testing.T) {
 	m := newClassifiedModel(t)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
+	press(tm, "1")
+	waitFor(t, tm, "LEDGER  ")
 
 	final := finish(t, tm)
 	if got := len(final.ledger.buckets()); got != 12 {
@@ -241,7 +243,7 @@ func findBucket(t *testing.T, m *ledgerModel, want classify.Bucket) (int, bool) 
 func TestDeveloperViewRendersTheSection(t *testing.T) {
 	m := newClassifiedModel(t)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 	press(tm, "4")
 	waitFor(t, tm, "DEVELOPER")
 
@@ -256,7 +258,7 @@ func TestDeveloperViewRendersTheSection(t *testing.T) {
 func TestContainersViewRendersTheSection(t *testing.T) {
 	m := newClassifiedModel(t)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 	press(tm, "5")
 	waitFor(t, tm, "CONTAINERS")
 
@@ -272,7 +274,7 @@ func TestContainersViewRendersTheSection(t *testing.T) {
 func TestAppsViewListsFootprintsAndOrphans(t *testing.T) {
 	m := newClassifiedModel(t)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 	press(tm, "3")
 	waitFor(t, tm, "NEEDS ATTENTION")
 
@@ -312,7 +314,7 @@ func TestAppsEnterOpensTheLargestComponent(t *testing.T) {
 func TestWhyPanelShowsEvidenceInBrowse(t *testing.T) {
 	m := newClassifiedModel(t)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 	press(tm, "2")
 	waitFor(t, tm, "Users/")
 	press(tm, "w")
@@ -401,7 +403,7 @@ func TestViewKeysReachEveryView(t *testing.T) {
 		key  string
 		want view
 	}{
-		{"1", viewLedger}, {"2", viewBrowse}, {"3", viewApps},
+		{"0", viewDashboard}, {"1", viewLedger}, {"2", viewBrowse}, {"3", viewApps},
 		{"4", viewDeveloper}, {"5", viewContainers}, {"6", viewUnaccounted},
 		{"u", viewUnaccounted}, {"7", viewPlan}, {"1", viewLedger},
 	} {
@@ -411,8 +413,8 @@ func TestViewKeysReachEveryView(t *testing.T) {
 		}
 	}
 
-	// tab cycles the seven in order and wraps.
-	m.view = viewLedger
+	// tab cycles the eight in order and wraps.
+	m.view = resultViews[0]
 	for _, want := range append(resultViews[1:], resultViews[0]) {
 		m.toggleView()
 		if m.view != want {
@@ -622,6 +624,7 @@ func sectionEntries(c whyContent, title string) []whyEntry {
 func TestLedgerDoesNotOpenBucketsWithNoDirectories(t *testing.T) {
 	m := newClassifiedModel(t)
 	m.w, m.h = termWidth, termHeight
+	m.view = viewLedger
 	m.resize()
 
 	indexOf := func(want classify.Bucket) int {
@@ -662,6 +665,7 @@ func TestLedgerDoesNotOpenBucketsWithNoDirectories(t *testing.T) {
 	res.Ledger = ledger.BuildClassified(nil, res.Tree, units.Decimal, nil)
 	u := newTestModel(t, res)
 	u.w, u.h = termWidth, termHeight
+	u.view = viewLedger
 	u.resize()
 	for i := range u.ledger.buckets() {
 		if bucketAt(i) == classify.BucketOther {
@@ -682,7 +686,7 @@ func TestLedgerDoesNotOpenBucketsWithNoDirectories(t *testing.T) {
 func TestPlanViewListsTheTiers(t *testing.T) {
 	m := newClassifiedModel(t)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 	press(tm, "7")
 	waitFor(t, tm, "RECLAIM PLAN")
 	final := finish(t, tm)
@@ -697,7 +701,7 @@ func TestPlanViewListsTheTiers(t *testing.T) {
 func TestPlanWhyShowsTheCommandAndItsCost(t *testing.T) {
 	m := newClassifiedModel(t)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 	press(tm, "7")
 	waitFor(t, tm, "RECLAIM PLAN")
 	press(tm, "w")
@@ -734,5 +738,76 @@ func TestPlanEnterOpensTheItemInBrowse(t *testing.T) {
 	}
 	if got := mac.DisplayPath(n.Path()); got != it.Path {
 		t.Errorf("enter opened %s, want %s", got, it.Path)
+	}
+}
+
+// TestDashboardShowsReclaimable goldens the landing view: the disk, the
+// reclaimable total by tier, the top wins, and what needs attention.
+func TestDashboardShowsReclaimable(t *testing.T) {
+	m := newClassifiedModel(t)
+	tm := start(t, m)
+	waitReady(t, tm)
+	final := finish(t, tm)
+	if final.view != viewDashboard {
+		t.Fatalf("the interface opened on view %d, want the dashboard", final.view)
+	}
+	teatest.RequireEqualOutput(t, screen(final))
+}
+
+// TestDashboardWhyShowsTheCommand goldens the why panel beside a top win.
+func TestDashboardWhyShowsTheCommand(t *testing.T) {
+	m := newClassifiedModel(t)
+	tm := start(t, m)
+	waitReady(t, tm)
+	press(tm, "w")
+	waitFor(t, tm, "read-only: storix has changed nothing")
+	teatest.RequireEqualOutput(t, screen(finish(t, tm)))
+}
+
+// TestDashboardEnterOpensTheItemInPlan: enter on a top win lands in the Plan
+// view with the cursor on that same item.
+func TestDashboardEnterOpensTheItemInPlan(t *testing.T) {
+	m := newClassifiedModel(t)
+	m.w, m.h = termWidth, termHeight
+	m.resize()
+	want, ok := m.dash.selected()
+	if !ok {
+		t.Fatal("the dashboard has no top win")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.view != viewPlan {
+		t.Fatalf("enter left the view at %d, want the plan", m.view)
+	}
+	got, ok := m.plan.selected()
+	if !ok || got.ID != want.ID {
+		t.Errorf("the plan cursor is on %q, want %q", got.ID, want.ID)
+	}
+}
+
+// TestDashboardAndPlanShareOnePlan: the two views read the same plan, so
+// their totals cannot disagree (D53).
+func TestDashboardAndPlanShareOnePlan(t *testing.T) {
+	m := newClassifiedModel(t)
+	if m.dash.plan == nil || m.dash.plan != m.plan.plan {
+		t.Error("the dashboard and the Plan view were given different plans")
+	}
+}
+
+// TestDashboardDropsSectionsWhenShort: on a short terminal the lower
+// sections go first, with a line saying where the rest is, and nothing is
+// drawn past the height.
+func TestDashboardDropsSectionsWhenShort(t *testing.T) {
+	m := newClassifiedModel(t)
+	m.w, m.h = termWidth, 14
+	m.resize()
+	got := m.dash.View(m.st, units.Decimal)
+	if lines := strings.Count(got, "\n") + 1; lines > m.dash.height {
+		t.Errorf("the dashboard drew %d lines into %d", lines, m.dash.height)
+	}
+	if !strings.Contains(got, "RECLAIMABLE") {
+		t.Errorf("the reclaimable section was dropped:\n%s", got)
+	}
+	if !strings.Contains(got, "more in the Ledger (1) and Plan (7) views") {
+		t.Errorf("no line says where the dropped sections are:\n%s", got)
 	}
 }

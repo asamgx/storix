@@ -40,13 +40,31 @@ type planRow struct {
 
 func newPlan() planModel { return planModel{width: 80, height: 1} }
 
-// setResult builds the plan of a finished scan.
-func (m *planModel) setResult(res *scan.Result) {
-	m.plan, m.tree = reclaim.Build(res, reclaim.Options{}), res.Tree
+// setPlan takes a finished scan and the plan built from it. The root model
+// builds the plan once and hands the same one to the dashboard, so the two
+// views can never disagree about a number (D53).
+func (m *planModel) setPlan(res *scan.Result, p *reclaim.Plan) {
+	m.plan, m.tree = p, res.Tree
 	m.valid = false
 	m.cursor, m.offset = 0, 0
 	m.visible()
 	m.toSelectable(1)
+}
+
+// focus puts the cursor on the item with this id, clearing a filter that
+// would hide it. It reports whether the item is in the plan.
+func (m *planModel) focus(id string) bool {
+	if m.filter != "" {
+		m.setFilter("")
+	}
+	for i, r := range m.visible() {
+		if !r.heading && r.item.ID == id {
+			m.cursor = i
+			m.clamp()
+			return true
+		}
+	}
+	return false
 }
 
 func (m *planModel) setSize(w, h int) {

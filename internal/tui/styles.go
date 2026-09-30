@@ -44,6 +44,11 @@ type Styles struct {
 	// Panel and PanelTitle draw the why panel beside or under a view.
 	Panel      lipgloss.Style
 	PanelTitle lipgloss.Style
+
+	// Tab and TabActive draw the tab bar: every view dim, the one in front
+	// marked.
+	Tab       lipgloss.Style
+	TabActive lipgloss.Style
 }
 
 // NewStyles builds the palette. With color false every style renders its
@@ -56,6 +61,7 @@ func NewStyles(color, dark bool) Styles {
 		Warn: plain, Good: plain, Banner: plain, Status: plain,
 		Chip: plain, ChipOk: plain, ChipWarn: plain, ChipDim: plain,
 		Panel: plain, PanelTitle: plain,
+		Tab: plain, TabActive: plain,
 	}
 	if !color {
 		return s
@@ -87,6 +93,8 @@ func NewStyles(color, dark bool) Styles {
 	s.ChipDim = plain.Foreground(muted)
 	s.Panel = plain
 	s.PanelTitle = plain.Bold(true).Foreground(lipgloss.Color("6"))
+	s.Tab = plain.Foreground(muted)
+	s.TabActive = plain.Bold(true).Reverse(true).Foreground(lipgloss.Color("6"))
 	return s
 }
 

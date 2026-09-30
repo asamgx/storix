@@ -1,0 +1,40 @@
+ 0 Home  1 Ledger  2 Browse  3 Apps  4 Developer  5 Containers  6 Unaccounted  7 Plan 
+DISK  live scan · r rescans
+  14.8 MB scanned; the container's size is unknown for this volume
+
+RECLAIMABLE  read-only; nothing has been changed
+  901 KB could be freed, each byte counted once
+  Safe         ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░       0 B  1 item
+  Check first  ██████████████████████████████    901 KB  1 item
+  ~4 MB more by the tools' own figures (brew cleanup, docker)
+
+TOP WINS  enter opens it in the Plan, w explains it
+    ~4.0 MB node: what the tool itself would free                       Safe
+     901 KB the Trash                                                   Check first  empty the Trash in Finder
+
+NEEDS ATTENTION
+  2 removed apps left data behind (900 KB) · Apps (3)
+  the Trash holds 901 KB; emptying it frees that
+
+BLIND SPOTS
+  • 1 detector could not finish; `storix doctor` says why
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑/k up • ↓/j down • enter/l open • bksp/h parent • s sort by size • / filter • w why • tab switch view • ? help • q quit

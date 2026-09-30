@@ -136,6 +136,8 @@ worked out by hand.
   summary in the full report and `plan_summary` in `scan --json`.
 - [x] `storix doctor` says whether the Trash is readable (Full Disk Access).
 - [x] TUI Plan view on `7` with enter-to-Browse and the why panel (D52).
+- [x] **v0.3.1**: a dashboard on `0` as the landing view (disk, reclaimable by tier, top wins,
+  attention, blind spots; D53) and a tab bar over every view (D54).
 
 ## Phase 2 — Reclaim (act through native tools) — **parked**
 

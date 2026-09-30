@@ -1,10 +1,10 @@
+ 0 Home  1 Ledger  2 Browse  3 Apps  4 Developer  5 Containers  6 Unaccounted  7 Plan 
 CONTAINERS & VMs  (what the host gave, what the runtime says it uses)                                                   
   OrbStack                                                                                                              
   host   18 MB                  data image                                                                              
   guest  12 MB  5 MB free (0%)  Images      9, 0 in use                                                                 
   machines  docker                                                                                                      
   note      the image is sparse; the daemon counts what is inside it                                                    
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

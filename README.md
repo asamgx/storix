@@ -122,17 +122,20 @@ clear` deletes them all, and `storix cache path` prints the storage directory.
 
 ## The interactive browser
 
-Running `storix` with no subcommand opens a terminal UI with six views, switched with the
-number keys or `tab`:
+Running `storix` with no subcommand opens a terminal UI with eight views. A tab bar along the
+top shows them all and marks the one you are in; the number keys select one and `tab` cycles
+them. It opens on the dashboard:
 
 | Key | View | What it shows |
 |---|---|---|
+| `0` | Home | the dashboard: disk used and free, how much could be freed by tier (each byte counted once), the five biggest wins with their commands, what needs attention and what storix could not see; `enter` opens a win in the Plan |
 | `1` | Ledger | the twelve buckets as bars with bytes, percent, and a reclaimable sub-bar; `enter` drills into a bucket |
 | `2` | Browse | an ncdu-style directory table for any subtree, with owner and reclaim chips per row |
 | `3` | Apps | installed applications by footprint, then cask-only/orphan-likely/unknown owners |
 | `4` | Developer | tool detector rows (caches, toolchains, versions with a "current" marker) and code-root projects |
 | `5` | Containers | each runtime's host-allocated size next to what its daemon reports using |
 | `6` (or `u`) | Unaccounted | unreadable directories with their errno and a permission hint |
+| `7` | Plan | the read-only reclaim plan: every item by tier with the tool's own command and its cost; `enter` opens it in Browse |
 
 `w` toggles a "why" side panel in every view: for a Browse row it shows the rule, detector, or
 application inventory that claimed the node, the evidence behind that claim, and any claim that
