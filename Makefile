@@ -3,13 +3,25 @@ PKG      := github.com/asamgx/storix
 VERSION  ?= $(shell git describe --tags 2>/dev/null || echo dev)
 LDFLAGS  := -s -w -X $(PKG)/internal/cli.Version=$(VERSION)
 
-.PHONY: build build-nocgo test race lint bench record-probes tidy clean
+.PHONY: build build-nocgo install uninstall test race lint bench record-probes tidy clean
 
 build:
 	go build -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY) ./cmd/storix
 
 build-nocgo:
 	CGO_ENABLED=0 go build -trimpath -ldflags '$(LDFLAGS)' -o $(BINARY)-nocgo ./cmd/storix
+
+# install puts storix in Go's bin directory ($GOBIN, else $GOPATH/bin, usually
+# ~/go/bin), stamped with the same version as `make build`. Make sure that
+# directory is on your PATH.
+GOBIN_DIR := $(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
+
+install:
+	go install -trimpath -ldflags '$(LDFLAGS)' ./cmd/storix
+	@echo "installed $(GOBIN_DIR)/$(BINARY) ($(VERSION))"
+
+uninstall:
+	rm -f $(GOBIN_DIR)/$(BINARY)
 
 test:
 	go test ./...

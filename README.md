@@ -20,7 +20,11 @@ Build from source (no released binary yet):
 git clone https://github.com/asamgx/storix
 cd storix
 make build      # -> ./storix
+make install    # -> $(go env GOPATH)/bin/storix, usually ~/go/bin
 ```
+
+`make install` stamps the binary with `git describe`, like `make build`; make sure Go's bin
+directory is on your `PATH`. `make uninstall` removes it again.
 
 Requires Go 1.25+ on macOS (Apple silicon or Intel). `make build-nocgo` builds a
 `CGO_ENABLED=0` variant for testing cross-compilation; it still runs correctly, with the
