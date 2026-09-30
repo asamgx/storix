@@ -123,9 +123,11 @@ func TestBerryAsksTheOtherQuestion(t *testing.T) {
 }
 
 // TestPnpmGenerations is the milestone's pnpm gate: three generations on
-// disk, the one pnpm named marked current and the other two marked
-// superseded. The marker comes from the measurement and from nothing else —
-// v11 sorts after v10 and is still not the live one.
+// disk and the one pnpm named marked current. The marker comes from the
+// measurement and from nothing else — v11 sorts after v10 and is still not
+// the live one. An older generation is superseded; a newer one is not freed
+// on the PATH pnpm's word, because a newer pnpm that corepack runs for some
+// project may be the one writing it.
 func TestPnpmGenerations(t *testing.T) {
 	f := tree(t)
 	det := node.New()
@@ -142,7 +144,7 @@ func TestPnpmGenerations(t *testing.T) {
 	}{
 		{store + "/v10", true, classify.ToolManaged},
 		{store + "/v3", false, classify.Regenerable},
-		{store + "/v11", false, classify.Regenerable},
+		{store + "/v11", false, classify.Unknown},
 	} {
 		tool, ok := detecttest.Tool(sum, tc.path)
 		if !ok {
@@ -155,8 +157,12 @@ func TestPnpmGenerations(t *testing.T) {
 		if tool.Reclaim != tc.reclaim {
 			t.Errorf("%s reclaim = %s, want %s", tc.path, tool.Reclaim, tc.reclaim)
 		}
-		if !tc.current && !strings.Contains(tool.Note, "superseded") {
-			t.Errorf("%s note = %q, want it to say superseded", tc.path, tool.Note)
+		want := "superseded"
+		if tc.reclaim == classify.Unknown {
+			want = "newer than the live v10"
+		}
+		if !tc.current && !strings.Contains(tool.Note, want) {
+			t.Errorf("%s note = %q, want it to say %q", tc.path, tool.Note, want)
 		}
 	}
 
@@ -347,5 +353,32 @@ func TestYarnCacheInsideProjectIsNotClaimed(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no evidence note for the rejected path: %v", c.Evidence)
+	}
+}
+
+// TestClaimEvidenceIsAboutTheClaimedPath: `storix explain ~/Library/pnpm`
+// recited yarn's version and nvm's default, because the node detector gave
+// every one of its answers to every one of its claims.
+func TestClaimEvidenceIsAboutTheClaimedPath(t *testing.T) {
+	f := tree(t)
+	det := node.New()
+	facts, err := detecttest.Probe(t, det, f.Env(t, "testdata/this-machine.json"))
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	claims, _ := det.Classify(f.Tree, facts, f.Context)
+
+	c, ok := detecttest.ClaimAt(claims, home+"/Library/pnpm")
+	if !ok {
+		t.Fatal("no claim on the pnpm store root")
+	}
+	ev := strings.Join(c.Evidence, "\n")
+	if !strings.Contains(ev, "pnpm store path") {
+		t.Errorf("the pnpm store's evidence lost pnpm's own answer:\n%s", ev)
+	}
+	for _, other := range []string{"yarn --version", "npm config get cache", "nvm"} {
+		if strings.Contains(ev, other) {
+			t.Errorf("the pnpm store's evidence carries %q:\n%s", other, ev)
+		}
 	}
 }

@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/asamgx/storix/internal/classify"
@@ -364,7 +365,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Owner: "Bun", OwnerKeys: []string{"cli:bun"}, Reclaim: classify.Regenerable,
 			Kind: "cache", Name: "Bun install cache",
 			Note:    "`bun pm cache` cannot be asked outside a project, so this is Bun's documented default",
-			Explain: "packages Bun downloaded; `bun pm cache rm` clears it",
+			Explain: "packages Bun downloaded; `bun pm cache rm` clears it, run from inside a project directory (it refuses anywhere without a package.json)",
 		},
 		{
 			Path: path.Join(home, "Library/Caches/node/corepack"), Category: "Package cache",
@@ -393,12 +394,10 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 	targets = append(targets, pnpmStores(t, facts, m, home)...)
 	targets = append(targets, nvmTargets(t, facts, m, home)...)
 	targets = append(targets, yarnMeasured(t, facts, m, home)...)
-	if m != nil {
-		ev = append(ev, m.Notes...)
-	}
+	ev = detect.RebaseScoped(ev, m)
 	for i := range targets {
 		targets[i].Bucket = classify.BucketDeveloper
-		targets[i].Evidence = append(append([]string(nil), ev...), targets[i].Evidence...)
+		targets[i].Evidence = append(detect.ScopedFor(ev, m, targets[i].Path), targets[i].Evidence...)
 	}
 
 	claims, tools := detect.Claims(t, Name, targets)
@@ -482,12 +481,20 @@ func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 		current := gen == live
 		note := "superseded store generation; `pnpm store prune` only touches the live one"
 		reclaim := classify.Regenerable
-		if current {
+		switch {
+		case current:
 			note = "the live store generation, as `pnpm store path` reports it"
 			reclaim = classify.ToolManaged
-		} else if live == "" {
+		case live == "":
 			note = "pnpm could not be asked which generation is live"
 			reclaim = classify.ToolManaged
+		case newerGeneration(gen, live):
+			// The pnpm on the PATH answered for itself. A newer
+			// pnpm — one corepack runs for a project whose
+			// packageManager field asks for it — writes the newer
+			// generation, and nothing here can see that project.
+			note = "newer than the live " + path.Base(live) + "; a newer pnpm (corepack, a project's packageManager) may still use it — check before removing"
+			reclaim = classify.Unknown
 		}
 		out = append(out, detect.Target{
 			Path: gen, Category: "Package store", Owner: "pnpm", OwnerKeys: []string{"cli:pnpm"},
@@ -497,6 +504,23 @@ func pnpmStores(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 		})
 	}
 	return out
+}
+
+// newerGeneration reports whether a store generation directory ("v11") is a
+// later layout than the live one ("v10"). A name that is not "v<number>"
+// is never newer, which leaves it superseded as before.
+func newerGeneration(gen, live string) bool {
+	g, okG := generationNumber(path.Base(gen))
+	l, okL := generationNumber(path.Base(live))
+	return okG && okL && g > l
+}
+
+func generationNumber(name string) (int, bool) {
+	if !strings.HasPrefix(name, "v") {
+		return 0, false
+	}
+	n, err := strconv.Atoi(name[1:])
+	return n, err == nil
 }
 
 // generationPaths are the store generations to describe.
@@ -563,30 +587,34 @@ func nvmTargets(t *walk.Tree, f *Facts, m *detect.Measure, home string) []detect
 }
 
 // evidence are the why-panel lines every node claim carries.
-func evidence(f *Facts) []string {
+func evidence(f *Facts) []detect.Scoped {
 	if f == nil {
-		return []string{"the node detector did not answer; the paths come from the static catalog"}
+		return []detect.Scoped{{Text: "the node detector did not answer; the paths come from the static catalog"}}
 	}
-	var out []string
+	var out []detect.Scoped
 	if f.NpmCache != "" {
-		out = append(out, "`npm config get cache` → "+f.NpmCache)
+		out = append(out, detect.Scoped{Path: f.NpmCache, Text: "`npm config get cache` → " + f.NpmCache})
 	}
 	if f.PnpmStore != "" {
-		out = append(out, "`pnpm store path` → "+f.PnpmStore+", which is the live store generation")
+		// The answer names the live generation, which is what every
+		// generation beside it and the store root are described by.
+		out = append(out, detect.Scoped{Path: path.Dir(path.Dir(f.PnpmStore)),
+			Text: "`pnpm store path` → " + f.PnpmStore + ", which is the live store generation"})
 	}
 	if f.YarnVersion != "" {
 		question := "`yarn cache dir`"
 		if f.Berry() {
 			question = "`yarn config get cacheFolder`"
 		}
-		out = append(out, fmt.Sprintf("`yarn --version` → %s, so %s → %s", f.YarnVersion, question, f.YarnCache))
+		out = append(out, detect.Scoped{Path: f.YarnCache,
+			Text: fmt.Sprintf("`yarn --version` → %s, so %s → %s", f.YarnVersion, question, f.YarnCache)})
 	}
 	if len(f.NvmAlias) > 0 {
-		out = append(out, "nvm alias "+strings.Join(f.NvmAlias, ", then ")+
-			", resolved against "+strings.Join(f.NodeVersions, " "))
+		out = append(out, detect.Scoped{Path: f.NvmDir, Text: "nvm alias " + strings.Join(f.NvmAlias, ", then ") +
+			", resolved against " + strings.Join(f.NodeVersions, " ")})
 	}
 	if f.NvmCurrent != "" {
-		out = append(out, "nvm's default node is "+f.NvmCurrent)
+		out = append(out, detect.Scoped{Path: f.NvmDir, Text: "nvm's default node is " + f.NvmCurrent})
 	}
 	return out
 }

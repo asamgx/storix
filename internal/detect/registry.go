@@ -411,7 +411,42 @@ func Classify(t *walk.Tree, outs []Outcome, cx classify.Context) ([]classify.Cla
 		}
 		statuses = append(statuses, st)
 	}
+	for i, out := range outs {
+		r, ok := out.Detector.(Refiner)
+		if !ok || out.Facts == nil || statuses[i].State == Disabled || statuses[i].State == Panic {
+			continue
+		}
+		claims = refineOne(r, t, out, cx, claims, &statuses[i])
+	}
 	return claims, summaries, statuses
+}
+
+// Refiner is a detector whose verdicts change what another detector's
+// claims mean. The apps inventory is the one: the ide detector knows which
+// directories are Cursor's, and only the inventory knows Cursor is gone.
+//
+// Refine runs after every detector has classified and may change the tag and
+// evidence of claims; it must not add, drop or move them.
+type Refiner interface {
+	Refine(t *walk.Tree, f Facts, cx classify.Context, claims []classify.Claim) []classify.Claim
+}
+
+// refineOne runs one Refine, keeping the claims as they were when it panics
+// or breaks the contract by changing how many there are.
+func refineOne(r Refiner, t *walk.Tree, out Outcome, cx classify.Context, claims []classify.Claim, st *Status) (res []classify.Claim) {
+	before := append([]classify.Claim(nil), claims...)
+	defer func() {
+		if p := recover(); p != nil {
+			res = before
+			st.State = Panic
+			st.Reason = fmt.Sprintf("panic while refining: %v", p)
+		}
+	}()
+	got := r.Refine(t, out.Facts, cx, claims)
+	if len(got) != len(before) {
+		return before
+	}
+	return got
 }
 
 // classifyOne runs one detector's Classify, converting a panic into a status

@@ -91,6 +91,12 @@ type Entry struct {
 	// the owner is installed: "why is this not an orphan" is as useful a
 	// question as the other one.
 	Keep []string `json:"keep,omitempty"`
+	// Kept are the owner's directories kept although the owner is gone.
+	Kept []Protection `json:"kept,omitempty"`
+	// ConfigLinks are the user's own configuration linked into the data.
+	ConfigLinks []ConfigLink `json:"configLinks,omitempty"`
+	// References are Brewfile entries and start-up file lines naming it.
+	References []Reference `json:"references,omitempty"`
 }
 
 // Sizes is a footprint split by bucket.
@@ -121,6 +127,8 @@ type ComponentRef struct {
 	Category string `json:"category,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Reclaim  string `json:"reclaim,omitempty"`
+	// Kept says why the directory is kept although its owner is gone.
+	Kept string `json:"kept,omitempty"`
 }
 
 // CaskRef is a cask whose application artifact is missing.
@@ -315,6 +323,9 @@ func entryOf(a *Analysis, fp Footprint) Entry {
 		LastWrite:   fp.Verdict.LastWrite,
 		Evidence:    fp.Verdict.Evidence,
 		Keep:        fp.Verdict.Keep,
+		Kept:        fp.Verdict.Protected,
+		ConfigLinks: fp.Verdict.Links,
+		References:  fp.Verdict.References,
 	}
 	for _, s := range fp.Sources {
 		e.Sources = appendUnique(e.Sources, s.String())
@@ -332,10 +343,16 @@ func entryOf(a *Analysis, fp Footprint) Entry {
 		}
 	}
 	for _, c := range fp.Components {
-		e.Components = append(e.Components, ComponentRef{
+		ref := ComponentRef{
 			Path: c.Path, Bytes: c.Bytes, Bucket: c.Bucket.ID(),
 			Category: c.Category, Source: c.Source, Reclaim: c.Reclaim.String(),
-		})
+		}
+		for _, pr := range fp.Verdict.Protected {
+			if pr.Path == c.Path {
+				ref.Kept = pr.Reason
+			}
+		}
+		e.Components = append(e.Components, ref)
 	}
 	return e
 }

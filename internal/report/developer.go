@@ -308,10 +308,21 @@ func (t *textReport) projects(projects []detect.Project) {
 	if len(projects) == 0 {
 		return
 	}
+	// A project with no build output has nothing to give back, and on a
+	// machine with dozens of repositories the rows of zeroes pushed the ones
+	// that matter off the screen. They are counted, not listed.
+	withArtifacts := make([]detect.Project, 0, len(projects))
+	for _, p := range projects {
+		if p.ArtifactBytes > 0 {
+			withArtifacts = append(withArtifacts, p)
+		}
+	}
+	clean := len(projects) - len(withArtifacts)
+
 	writeLine(t.w, "")
 	writeLine(t.w, t.st.title.Render("  projects"))
 
-	shown := projects
+	shown := withArtifacts
 	if t.o.Top > 0 && len(shown) > t.o.Top {
 		shown = shown[:t.o.Top]
 	}
@@ -325,8 +336,11 @@ func (t *textReport) projects(projects []detect.Project) {
 		)
 	}
 	tbl.render(t.w)
-	if hidden := len(projects) - len(shown); hidden > 0 {
+	if hidden := len(withArtifacts) - len(shown); hidden > 0 {
 		t.field("", fmt.Sprintf("and %d more projects, hidden by --top", hidden), t.st.note)
+	}
+	if clean > 0 {
+		t.field("", fmt.Sprintf("%d more %s no build output", clean, plural(clean, "project has", "projects have")), t.st.note)
 	}
 }
 

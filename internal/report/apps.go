@@ -275,7 +275,11 @@ func (a *appsReport) components(e apps.Entry) []string {
 	}
 	out := make([]string, 0, len(shown))
 	for _, c := range shown {
-		out = append(out, fmt.Sprintf("%s  %s  (%s)", a.u.Bytes(c.Bytes), c.Path, c.Bucket))
+		line := fmt.Sprintf("%s  %s  (%s)", a.u.Bytes(c.Bytes), c.Path, c.Bucket)
+		if c.Kept != "" {
+			line += " — kept"
+		}
+		out = append(out, line)
 	}
 	return out
 }

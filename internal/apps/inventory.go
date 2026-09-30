@@ -101,6 +101,15 @@ type Facts struct {
 	// scan happened to finish last.
 	CodesignCalls int           `json:"codesignCalls,omitempty"`
 	Degraded      []Degradation `json:"degraded,omitempty"`
+	// CLIs are the product command-line tools found on the PATH.
+	CLIs []FoundCLI `json:"clis,omitempty"`
+	// ConfigLinks are symbolic links into the user's own configuration,
+	// a dotfiles or stow repository, found where applications keep theirs.
+	ConfigLinks []ConfigLink `json:"configLinks,omitempty"`
+	// References are the lines of shell start-up files and Brewfiles that
+	// could name an application: cask and brew entries, and lines that
+	// mention a dot-directory under the home.
+	References []Reference `json:"references,omitempty"`
 }
 
 // Kind identifies the facts in the cache section and the detector registry.
