@@ -1,9 +1,9 @@
+ 0 Home  1 Ledger  2 Browse  3 Apps  4 Developer  5 Containers  6 Unaccounted  7 Plan 
 DEVELOPER  (what your toolchains keep, and what they would give back)                                                   
   node                                                                                                                  
   4 MB  tool    pnpm store v10  ~/Library/Caches/pnpm                                                                   
   reclaim   4 MB — pnpm store prune; 4 MB only through the tool, across the directories listed                          
             above                                                                                                       
-                                                                                                                        
                                                                                                                         
                                                                                                                         
                                                                                                                         

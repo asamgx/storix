@@ -195,8 +195,13 @@ never added into the ledger.
 ## Presentation
 
 ### TUI (Bubble Tea)
-Views, switched with tabs/keys:
+Views, switched with tabs/keys. A tab bar above every result view lists them with their keys
+and marks the one in front (D54); a finished scan lands on the dashboard (D53).
 
+0. **Home** — the dashboard: disk used and free, the reclaimable total by tier from the reclaim
+   plan, the five largest suggested items with their commands (enter opens one in Plan), what
+   needs attention (removed apps, dotfile edits, the Trash) and the scan's blind spots. It
+   formats numbers the scan and the plan already hold, and shares the one plan with Plan.
 1. **Ledger** — the 12 buckets as rows with proportional bars, bytes, percent, and
    reclaimable sub-bar. Enter drills into a bucket.
 2. **Browse** — ncdu-style directory table for any subtree: name, bar, size, files, owner

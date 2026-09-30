@@ -137,6 +137,12 @@ func press(r *run, s string) {
 }
 
 // waitFor waits for the screen to have shown s.
+// waitReady waits for a finished scan's landing view, the dashboard (D53).
+func waitReady(t *testing.T, tm *run) {
+	t.Helper()
+	waitFor(t, tm, "RECLAIMABLE")
+}
+
 func waitFor(t *testing.T, r *run, s string) {
 	t.Helper()
 	deadline := time.Now().Add(waitDuration)
@@ -190,11 +196,11 @@ func TestProgressViewCountsAndSwitchesToTheLedger(t *testing.T) {
 
 	result <- scanOutcome{res: fixtureResult(t)}
 	close(events)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 
 	final := finish(t, tm)
-	if final.view != viewLedger {
-		t.Errorf("the interface stayed on view %d, want the ledger", final.view)
+	if final.view != viewDashboard {
+		t.Errorf("the interface stayed on view %d, want the dashboard", final.view)
 	}
 	if final.progress.ticks < 5 {
 		t.Errorf("the progress view took %d updates, want every one of the 5 events", final.progress.ticks)
@@ -326,7 +332,7 @@ func TestUnaccountedViewShowsTheLedgerSections(t *testing.T) {
 	res := fixtureResult(t)
 	m := newTestModel(t, res)
 	tm := start(t, m)
-	waitFor(t, tm, "LEDGER")
+	waitReady(t, tm)
 
 	press(tm, "6")
 	waitFor(t, tm, "VOLUME")
@@ -389,8 +395,8 @@ func TestQuitDuringAScanCancelsItAndShowsThePartialTree(t *testing.T) {
 	waitFor(t, tm, "INCOMPLETE")
 
 	final := finish(t, tm)
-	if final.view != viewLedger {
-		t.Errorf("an interrupted scan ended on view %d, want the ledger", final.view)
+	if final.view != viewDashboard {
+		t.Errorf("an interrupted scan ended on view %d, want the dashboard", final.view)
 	}
 }
 

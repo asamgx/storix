@@ -26,8 +26,9 @@ type KeyMap struct {
 	Copy      key.Binding
 	Switch    key.Binding
 
-	// The seven result views, in the order of docs/03: the digits select
+	// The eight result views, in the order of docs/03: the digits select
 	// one directly and tab cycles through them.
+	Home       key.Binding
 	Ledger     key.Binding
 	Browse     key.Binding
 	Apps       key.Binding
@@ -68,6 +69,7 @@ func DefaultKeyMap() KeyMap {
 		Copy:      key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy path")),
 		Switch:    key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch view")),
 
+		Home:       key.NewBinding(key.WithKeys("0"), key.WithHelp("0", "home")),
 		Ledger:     key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "ledger")),
 		Browse:     key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "browse")),
 		Apps:       key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "apps")),
@@ -97,7 +99,7 @@ func (k KeyMap) FullHelp() [][]key.Binding {
 		{k.Open, k.Parent, k.Bundles, k.Filter, k.Escape},
 		{k.SortSize, k.SortName, k.SortMtime, k.SortCount, k.Apparent},
 		{k.Finder, k.Copy, k.Why, k.Switch},
-		{k.Ledger, k.Browse, k.Apps, k.Developer, k.Containers, k.Unacc, k.Plan},
+		{k.Home, k.Ledger, k.Browse, k.Apps, k.Developer, k.Containers, k.Unacc, k.Plan},
 		{k.Rescan, k.Help, k.Quit},
 	}
 }

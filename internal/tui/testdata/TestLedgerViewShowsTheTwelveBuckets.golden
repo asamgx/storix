@@ -1,3 +1,4 @@
+ 0 Home  1 Ledger  2 Browse  3 Apps  4 Developer  5 Containers  6 Unaccounted  7 Plan 
 LEDGER  every byte of used space, in one of twelve buckets                                                  14.8 MB used
   bucket                                       size      %            reclaim  via tool note
    1 macOS                 ░░░░░░░░░░░░░░   unknown   0.0%                              no APFS container owns the scan…
@@ -12,7 +13,6 @@ LEDGER  every byte of used space, in one of twelve buckets                      
   10 Purgeable             ░░░░░░░░░░░░░░   unknown   0.0%
   11 Other                 ░░░░░░░░░░░░░░       0 B   0.0%
   12 Unreadable / unaccou… ░░░░░░░░░░░░░░       0 B   0.0%                              nothing unaccounted
-
 
 
 

@@ -22,6 +22,7 @@ import (
 
 	"github.com/asamgx/storix/internal/cache"
 	"github.com/asamgx/storix/internal/mac"
+	"github.com/asamgx/storix/internal/reclaim"
 	"github.com/asamgx/storix/internal/report"
 	"github.com/asamgx/storix/internal/scan"
 	"github.com/asamgx/storix/internal/walk"
@@ -32,6 +33,7 @@ type view uint8
 
 const (
 	viewProgress view = iota
+	viewDashboard
 	viewLedger
 	viewBrowse
 	viewApps
@@ -43,9 +45,10 @@ const (
 )
 
 // resultViews are the views a finished scan can show, in the order of
-// docs/03: the digits 1 to 7 select one directly and tab cycles them.
+// docs/03: the digits 0 to 7 select one directly, in this order, and tab
+// cycles them. The tab bar is drawn from the same list.
 var resultViews = []view{
-	viewLedger, viewBrowse, viewApps, viewDeveloper, viewContainers, viewUnaccounted, viewPlan,
+	viewDashboard, viewLedger, viewBrowse, viewApps, viewDeveloper, viewContainers, viewUnaccounted, viewPlan,
 }
 
 // Model is the root model: it owns the scan session and routes keys to the
@@ -79,6 +82,7 @@ type Model struct {
 	cont     sectionModel
 	unacc    sectionModel
 	plan     planModel
+	dash     dashModel
 	why      whyModel
 
 	// input is the filter prompt, shared by every table that has one;
@@ -114,11 +118,12 @@ func New(ctx context.Context, cfg scan.Config, initial *scan.Result) *Model {
 		cont:     newContainers(),
 		unacc:    newUnaccounted(),
 		plan:     newPlan(),
+		dash:     newDashboard(),
 	}
 	m.browse = newBrowse(nil)
 	if initial != nil {
 		m.adopt(initial)
-		m.view = viewLedger
+		m.view = viewDashboard
 	}
 	return m
 }
@@ -187,7 +192,9 @@ func (m *Model) adopt(res *scan.Result) {
 	m.dev.setResult(res, o)
 	m.cont.setResult(res, o)
 	m.unacc.setResult(res, o)
-	m.plan.setResult(res)
+	p := reclaim.Build(res, reclaim.Options{})
+	m.plan.setPlan(res, p)
+	m.dash.setResult(res, p)
 	m.resize()
 }
 
@@ -305,7 +312,7 @@ func (m *Model) finish(msg scanDoneMsg) tea.Cmd {
 	m.adopt(msg.res)
 	m.status = m.doneStatus(msg.res)
 	if m.view == viewProgress {
-		m.view = viewLedger
+		m.view = viewDashboard
 	}
 	return nil
 }
@@ -368,6 +375,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		m.why.toggle()
 		m.resize()
 		return nil
+	case key.Matches(msg, m.keys.Home):
+		return m.show(viewDashboard)
 	case key.Matches(msg, m.keys.Ledger):
 		return m.show(viewLedger)
 	case key.Matches(msg, m.keys.Browse):
@@ -385,6 +394,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	}
 
 	switch m.view {
+	case viewDashboard:
+		return m.dashKey(msg)
 	case viewLedger:
 		return m.ledgerKey(msg)
 	case viewBrowse:
@@ -489,6 +500,35 @@ func (m *Model) appsKey(msg tea.KeyPressMsg) tea.Cmd {
 			a.setFilter("")
 			m.status = "filter cleared"
 		}
+	case key.Matches(msg, m.keys.Finder):
+		return m.reveal()
+	case key.Matches(msg, m.keys.Copy):
+		return m.copy()
+	}
+	return nil
+}
+
+// dashKey drives the dashboard: up and down move through the top wins,
+// enter opens the one under the cursor in the Plan view.
+func (m *Model) dashKey(msg tea.KeyPressMsg) tea.Cmd {
+	d := &m.dash
+	switch {
+	case key.Matches(msg, m.keys.Up):
+		d.move(-1)
+	case key.Matches(msg, m.keys.Down):
+		d.move(1)
+	case key.Matches(msg, m.keys.Top):
+		d.moveTo(0)
+	case key.Matches(msg, m.keys.Bottom):
+		d.moveTo(len(d.top) - 1)
+	case key.Matches(msg, m.keys.Open):
+		it, ok := d.selected()
+		if !ok {
+			return nil
+		}
+		m.plan.focus(it.ID)
+		m.view = viewPlan
+		m.status = "opened " + it.Title + " in the plan"
 	case key.Matches(msg, m.keys.Finder):
 		return m.reveal()
 	case key.Matches(msg, m.keys.Copy):
@@ -738,6 +778,8 @@ func (m *Model) selectedPath() (string, bool) {
 		return m.apps.selectedPath()
 	case viewPlan:
 		return m.plan.selectedPath()
+	case viewDashboard:
+		return m.dash.selectedPath()
 	case viewDeveloper, viewContainers, viewUnaccounted:
 		// A text view has no selection; acting on the Browse cursor
 		// behind it would reveal a path the reader cannot see.
@@ -763,6 +805,7 @@ func (m *Model) resize() {
 	m.browse.setSize(w, tableH)
 	m.apps.setSize(w, tableH)
 	m.plan.setSize(w, tableH)
+	m.dash.setSize(w, textH)
 	m.dev.setSize(w, textH)
 	m.cont.setSize(w, textH)
 	m.unacc.setSize(w, textH)
@@ -784,6 +827,12 @@ func (m *Model) bodyHeight() int {
 		h = max(h-whyBottomLines-1, 1)
 	}
 	if m.banner() != "" {
+		h--
+	}
+	// The tab bar is counted whenever a result exists, not only while it is
+	// drawn: the sizes are handed out once per resize, and a view reached
+	// from the help overlay must not come back one line too tall.
+	if m.result != nil {
 		h--
 	}
 	return max(h, 1)
@@ -812,10 +861,20 @@ func (m *Model) View() tea.View {
 // a reader who lands on the ledger is being shown totals that are a lower
 // bound, and that is exactly when they need telling.
 func (m *Model) bodyView() string {
-	if b := m.banner(); b != "" && m.view != viewProgress && m.view != viewHelp {
-		return b + "\n" + m.resultView()
+	if !m.showsTabs() {
+		return m.resultView()
 	}
-	return m.resultView()
+	head := tabBar(m.st, m.view, m.bodyWidth())
+	if b := m.banner(); b != "" {
+		head += "\n" + b
+	}
+	return head + "\n" + m.resultView()
+}
+
+// showsTabs reports whether the tab bar is drawn: over every result view,
+// never over the progress screen or the help overlay.
+func (m *Model) showsTabs() bool {
+	return m.result != nil && m.view != viewProgress && m.view != viewHelp
 }
 
 // banner is the warning an interrupted scan earns, empty otherwise.
@@ -845,6 +904,8 @@ func (m *Model) resultView() string {
 		return m.unacc.View(m.st)
 	case viewPlan:
 		return m.plan.View(m.st, m.cfg.Units)
+	case viewDashboard:
+		return m.dash.View(m.st, m.cfg.Units)
 	default:
 		return m.browseView()
 	}
@@ -910,6 +971,10 @@ func (m *Model) whyContent() whyContent {
 		}
 	case viewPlan:
 		if it, ok := m.plan.selected(); ok {
+			return planWhy(it, m.cfg.Units)
+		}
+	case viewDashboard:
+		if it, ok := m.dash.selected(); ok {
 			return planWhy(it, m.cfg.Units)
 		}
 	}
