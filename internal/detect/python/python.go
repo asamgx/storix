@@ -151,7 +151,7 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 		}
 		return sel(facts)
 	}
-	ev := evidence(facts)
+	ev := detect.RebaseScoped(evidence(facts), m)
 
 	pyenv := measured(get(func(f *Facts) string { return f.PyenvRoot }), path.Join(home, ".pyenv"))
 	// Which interpreters pyenv has built is something the walk has already
@@ -209,13 +209,9 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 	}
 	targets = append(targets, condaTargets(facts, m, home)...)
 	targets = append(targets, interpreters(facts, pyenv, installed)...)
-	if m != nil {
-		ev = append(ev, m.Notes...)
-	}
-
 	for i := range targets {
 		targets[i].Bucket = classify.BucketDeveloper
-		targets[i].Evidence = ev
+		targets[i].Evidence = detect.ScopedFor(ev, m, targets[i].Path)
 	}
 	claims, tools := detect.Claims(t, Name, targets)
 	if len(claims) == 0 {
@@ -293,22 +289,22 @@ func pyenvNote(f *Facts, installed int) string {
 }
 
 // evidence are the why-panel lines every Python claim carries.
-func evidence(f *Facts) []string {
+func evidence(f *Facts) []detect.Scoped {
 	if f == nil {
-		return []string{"the python detector did not answer; the paths come from the static catalog"}
+		return []detect.Scoped{{Text: "the python detector did not answer; the paths come from the static catalog"}}
 	}
-	var out []string
-	for _, q := range []struct{ cmd, answer string }{
-		{"pyenv root", f.PyenvRoot},
-		{"pyenv version-name", f.PyenvVersion},
-		{"uv cache dir", f.UvCache},
-		{"uv python dir", f.UvPython},
-		{"pip cache dir", f.PipCache},
-		{"poetry config cache-dir", f.PoetryCache},
-		{"conda info --base", f.CondaBase},
+	var out []detect.Scoped
+	for _, q := range []struct{ cmd, answer, scope string }{
+		{"pyenv root", f.PyenvRoot, f.PyenvRoot},
+		{"pyenv version-name", f.PyenvVersion, f.PyenvRoot},
+		{"uv cache dir", f.UvCache, f.UvCache},
+		{"uv python dir", f.UvPython, f.UvPython},
+		{"pip cache dir", f.PipCache, f.PipCache},
+		{"poetry config cache-dir", f.PoetryCache, f.PoetryCache},
+		{"conda info --base", f.CondaBase, f.CondaBase},
 	} {
 		if q.answer != "" {
-			out = append(out, "`"+q.cmd+"` → "+q.answer)
+			out = append(out, detect.Scoped{Path: q.scope, Text: "`" + q.cmd + "` → " + q.answer})
 		}
 	}
 	return out

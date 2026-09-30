@@ -66,7 +66,10 @@ var Locations = []Location{
 	{Dir: "~/Library/WebKit", Key: KeyBundleID, Category: "WebKit", Reclaim: classify.Regenerable, Depth: 1},
 	{Dir: "~/Library/Cookies", Key: KeyCookies, Category: "Cookies", Reclaim: classify.UserData, Depth: 1},
 	{Dir: "~/Library/Logs", Key: KeyNameOrID, Category: "Logs", Reclaim: classify.Regenerable, Depth: 1},
-	{Dir: "~/Library/Application Scripts", Key: KeyBundleID, Category: "Application Scripts", Reclaim: classify.UserData, Depth: 1},
+	// Application Scripts mirrors Containers and Group Containers, team-id
+	// prefixed group names included, so it is matched the way group
+	// containers are: "HUAQ24HBR6.dev.orbstack" is OrbStack's by its team.
+	{Dir: "~/Library/Application Scripts", Key: KeyGroupContainer, Category: "Application Scripts", Reclaim: classify.UserData, Depth: 1},
 	{Dir: "~/Library/LaunchAgents", Key: KeyLaunchItem, Category: "Launch item", Reclaim: classify.UserData, Depth: 1},
 	{Dir: "~/Library/Google", Key: KeyNameOrID, Category: "Application Support", Reclaim: classify.Regenerable, Depth: 1},
 	{Dir: "/Library/LaunchAgents", Key: KeyLaunchItem, Category: "Launch item", Reclaim: classify.UserData, Depth: 1},
@@ -149,12 +152,50 @@ var appleNames = map[string]bool{
 	"btserver":                true,
 	"siri":                    true,
 	"spotlight":               true,
+	// Seen as "unknown owner" on the reference machine: daemons, agents
+	// and frameworks of macOS that keep a cache or a support folder under
+	// their own short name.
+	"geoservices":                  true,
+	"passkit":                      true,
+	"gamekit":                      true,
+	"networkserviceproxy":          true,
+	"askpermissiond":               true,
+	"familycircled":                true,
+	"familycircle":                 true,
+	"mbuseragent":                  true,
+	"icloudmailagent":              true,
+	"mobilemeaccounts":             true,
+	"contextstoreagent":            true,
+	"corespotlightd":               true,
+	"diagnostics_agent":            true,
+	"diagnosticreports":            true,
+	"diskimages":                   true,
+	"icdd":                         true,
+	"sharedfilelistd":              true,
+	"contactsd":                    true,
+	"homeenergyd":                  true,
+	"livefsd":                      true,
+	"locationaccessstored":         true,
+	"tipsd":                        true,
+	"pbs":                          true,
+	"sesstorage":                   true,
+	"adpwebview":                   true,
+	"differentialprivacy":          true,
+	"energykit":                    true,
+	"fileprovider":                 true,
+	"privacypreservingmeasurement": true,
+	"siritts":                      true,
+	"sirittsservice":               true,
+	".siritodayviewextension":      true,
+	"coresimulator":                true,
 }
 
 // appleNamePrefixes are name families macOS owns.
 var appleNamePrefixes = []string{
 	"com.apple.", "group.com.apple.", "group.is.workflow.", "group.tvappservices.",
-	"is.workflow.", "tvappservices.", "group.apple.",
+	"is.workflow.", "tvappservices.", "group.apple.", "systemgroup.com.apple.",
+	// Apple Account profile pictures, cached one file per account.
+	"AAProfilePicture_",
 }
 
 // IsAppleName reports whether a candidate name belongs to macOS. Group

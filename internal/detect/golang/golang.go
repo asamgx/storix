@@ -133,14 +133,11 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 			Explain: "binaries `go install` wrote; reinstalling rebuilds them",
 		},
 	}
-	ev := evidence(facts)
-	if m != nil {
-		ev = append(ev, m.Notes...)
-	}
+	ev := detect.RebaseScoped(evidence(facts), m)
 	for i := range targets {
 		targets[i].Bucket = classify.BucketDeveloper
 		targets[i].OwnerKeys = []string{"cli:go"}
-		targets[i].Evidence = ev
+		targets[i].Evidence = detect.ScopedFor(ev, m, targets[i].Path)
 	}
 
 	claims, tools := detect.Claims(t, Name, targets)
@@ -151,14 +148,14 @@ func (*Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) ([]
 }
 
 // evidence are the why-panel lines every Go claim carries.
-func evidence(f *Facts) []string {
+func evidence(f *Facts) []detect.Scoped {
 	if f == nil {
-		return []string{"the go detector did not answer; the paths come from the static catalog"}
+		return []detect.Scoped{{Text: "the go detector did not answer; the paths come from the static catalog"}}
 	}
-	var out []string
+	var out []detect.Scoped
 	for i, v := range []string{f.GoCache, f.GoModCache, f.GoPath, f.GoRoot} {
 		if v != "" {
-			out = append(out, "`go env "+envVars[i]+"` → "+v)
+			out = append(out, detect.Scoped{Path: v, Text: "`go env " + envVars[i] + "` → " + v})
 		}
 	}
 	return out

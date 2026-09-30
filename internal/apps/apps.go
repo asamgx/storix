@@ -194,6 +194,11 @@ func (d *Detector) Probe(ctx context.Context, env detect.Env) (detect.Facts, err
 	p.bundles(ctx)
 	p.groupContainers()
 	p.teamIDs(ctx)
+	// What follows adds evidence and never decides a verdict, so it runs
+	// last and does not degrade the probe when it cannot read something.
+	p.clis()
+	p.configLinks()
+	p.references()
 
 	// A probe that learned nothing at all is reporting a machine with no
 	// applications to inventory, which is an answer rather than a failure:
@@ -227,6 +232,110 @@ func (d *Detector) Classify(t *walk.Tree, f detect.Facts, cx classify.Context) (
 		return nil, detect.Summary{}
 	}
 	return a.Claims(), detect.Summary{}
+}
+
+// followsApp are the detectors whose claims describe an application's data
+// rather than a tool's. The ide detector knows ~/.cursor and Application
+// Support/Cursor are Cursor's, and claims them ahead of this package; when
+// Cursor is gone its claim still said "tool-managed", so the ledger showed
+// the leftovers of three removed editors as in use. Container and toolchain
+// detectors are not listed: ~/.docker belongs to whichever docker CLI is
+// installed, whatever became of Docker Desktop.
+var followsApp = map[string]bool{"ide": true}
+
+// Refine marks the claims an editor detector won as orphaned when the
+// application they belong to is gone.
+//
+// It runs after every detector has classified, because only then are both
+// sides known: the ide detector's claim on the directory and this package's
+// verdict on its owner. The verdict has already been through every keep
+// signal and every incomplete-evidence check, so a claim is only changed
+// when the owner was found reclaimable, and never on a directory a command-
+// line tool of the same product still reads, nor on a symbolic link — the
+// link is how the user's own configuration reaches the application, and it
+// frees nothing.
+func (d *Detector) Refine(t *walk.Tree, f detect.Facts, cx classify.Context, claims []classify.Claim) []classify.Claim {
+	a := d.Analyze(t, f, cx)
+	if a == nil {
+		return claims
+	}
+	gone := a.goneOwnerKeys()
+	if len(gone) == 0 {
+		return claims
+	}
+	protected := a.protectedNodes()
+	for i := range claims {
+		cl := &claims[i]
+		if cl.Source.Kind != classify.SourceDetector || !followsApp[cl.Source.ID] || cl.Node == nil {
+			continue
+		}
+		if cl.Reclaim == classify.Orphaned || cl.Node.Kind == walk.KindSymlink {
+			continue
+		}
+		label, ok := firstGone(gone, cl.OwnerKeys)
+		if !ok {
+			continue
+		}
+		// The evidence slice may be shared with other claims of the same
+		// detector, so it is copied before anything is added to it.
+		ev := append([]string(nil), cl.Evidence...)
+		if reason, kept := protected[cl.Node]; kept {
+			ev = append(ev, "kept: "+reason)
+			cl.Evidence = ev
+			continue
+		}
+		ev = append(ev, label+" is no longer installed, so what the "+cl.Source.ID+
+			" detector found here is left behind (apps verdict)")
+		cl.Reclaim, cl.Evidence = classify.Orphaned, ev
+	}
+	return claims
+}
+
+// goneOwnerKeys maps the identifying keys of every owner whose verdict is
+// reclaimable to its label. A key an installed owner also answers to is left
+// out: two owners sharing an identifier is exactly when a guess would free
+// data that is in use.
+func (a *Analysis) goneOwnerKeys() map[string]string {
+	gone := make(map[string]string)
+	inUse := make(map[string]bool)
+	for _, key := range a.OwnerKeys() {
+		o, v := a.Owners[key], a.Verdicts[key]
+		if v == nil {
+			continue
+		}
+		keys := []string{key}
+		if o.Owner.Slug != "" {
+			keys = append(keys, "product:"+o.Owner.Slug)
+		}
+		for _, id := range o.IDs {
+			keys = append(keys, "app:"+id)
+		}
+		for _, k := range keys {
+			if !strings.HasPrefix(k, "app:") && !strings.HasPrefix(k, "product:") {
+				continue
+			}
+			k = strings.ToLower(k)
+			if v.State.Reclaimable() {
+				gone[k] = o.Owner.Label
+			} else {
+				inUse[k] = true
+			}
+		}
+	}
+	for k := range inUse {
+		delete(gone, k)
+	}
+	return gone
+}
+
+// firstGone finds the removed owner a claim's keys name.
+func firstGone(gone map[string]string, keys []string) (string, bool) {
+	for _, k := range keys {
+		if label, ok := gone[strings.ToLower(k)]; ok {
+			return label, true
+		}
+	}
+	return "", false
 }
 
 // Analyze runs the attribution over a tree and a set of facts, filling in the

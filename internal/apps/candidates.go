@@ -3,6 +3,7 @@ package apps
 import (
 	"io"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -187,6 +188,7 @@ func Analyze(t *walk.Tree, f *Facts, cx classify.Context, opts Options) *Analysi
 		res.addProductIdentity()
 	}
 	a.verdicts(opts)
+	a.attachConfig(f)
 	return a
 }
 
@@ -275,6 +277,15 @@ func (a *Analysis) OwnerKeys() []string {
 	return out
 }
 
+// uuidName matches a directory named by a bare UUID, as extensions and
+// sandboxed helpers leave under Application Scripts.
+var uuidName = regexp.MustCompile(`^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$`)
+
+// isUUIDName reports whether a name is a bare UUID. Such a name carries no
+// identifier or product to attribute it by, so the analysis leaves it to the
+// catalog rather than listing dozens of them as unknown owners.
+func isUUIDName(name string) bool { return uuidName.MatchString(name) }
+
 // collectCandidates walks the location table and returns every direct child
 // that is worth asking about, plus the children of publisher folders.
 func collectCandidates(t *walk.Tree, p Paths) []Candidate {
@@ -284,7 +295,7 @@ func collectCandidates(t *walk.Tree, p Paths) []Candidate {
 		for _, n := range childrenOf(t, dir) {
 			raw := n.Name
 			name := NormalizeName(loc.Key, raw)
-			if name == "" || IsAppleName(name) {
+			if name == "" || IsAppleName(name) || isUUIDName(name) {
 				continue
 			}
 			display := path.Join(dir, raw)

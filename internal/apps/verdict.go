@@ -67,6 +67,14 @@ type Verdict struct {
 	Keep []string
 	// LastWrite is the most recent modification across the owner's data.
 	LastWrite time.Time
+	// Protected are directories kept although the owner is gone, because
+	// a command-line tool of the same product still reads them.
+	Protected []Protection
+	// Links are the user's own configuration linked into the owner's data.
+	Links []ConfigLink
+	// References are start-up file lines and Brewfile entries that still
+	// name the owner.
+	References []Reference
 }
 
 // DefaultRecentWindow is how recently an owner's data must have been written

@@ -183,3 +183,26 @@ func TestReclaimSharesCountEachByteAtItsDeepestRow(t *testing.T) {
 		t.Errorf("reclaimShares = %d free, %d via tool; want 37 and 70", free, viaTool)
 	}
 }
+
+// TestProjectsWithoutArtifactsAreCountedNotListed: on the reference machine
+// fifteen of twenty-two project rows read "0 bytes build artifacts" and
+// pushed the ones worth acting on apart. They are summed into one line.
+func TestProjectsWithoutArtifactsAreCountedNotListed(t *testing.T) {
+	r := fakeScan()
+	sum := r.Summaries["projects"]
+	for _, name := range []string{"clean-one", "clean-two"} {
+		sum.Projects = append(sum.Projects, detect.Project{Root: "/Users/u/code/" + name, VCS: true})
+	}
+	r.Summaries["projects"] = sum
+
+	got := renderDeveloper(t, r)
+	if strings.Contains(got, "/Users/u/code/clean-one") {
+		t.Errorf("a project with no build output is listed:\n%s", got)
+	}
+	if !strings.Contains(got, "2 more projects have no build output") {
+		t.Errorf("the projects without build output are not counted:\n%s", got)
+	}
+	if !strings.Contains(got, "/Users/u/code/storix") {
+		t.Errorf("the project with build artifacts is missing:\n%s", got)
+	}
+}

@@ -119,6 +119,7 @@ func (a *Analysis) caskClaims() []classify.Claim {
 // dataClaims puts each resolved candidate in bucket 3.
 func (a *Analysis) dataClaims() []classify.Claim {
 	out := make([]classify.Claim, 0, len(a.Candidates))
+	protected := a.protectedNodes()
 	for i, c := range a.Candidates {
 		if c.Node == nil {
 			continue
@@ -155,8 +156,13 @@ func (a *Analysis) dataClaims() []classify.Claim {
 		if v != nil && v.State != StateInstalled {
 			label += " (" + v.State.String() + ")"
 		}
+		reclaim := a.reclaimFor(c, m, v)
+		if reason, ok := protected[c.Node]; ok && reclaim == classify.Orphaned {
+			reclaim = classify.UserData
+			ev = append(ev, "kept: "+reason)
+		}
 		out = append(out, a.claim(c.Node, classify.BucketAppData, category, label,
-			a.ownerKeys(m.Owner.Key, "", ""), a.reclaimFor(c, m, v),
+			a.ownerKeys(m.Owner.Key, "", ""), reclaim,
 			m.Confidence, m.Rule, ev))
 	}
 	return out

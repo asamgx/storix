@@ -68,6 +68,22 @@ type Product struct {
 	// that shares its vendor: Antigravity is not Chrome, Atlas is not
 	// ChatGPT, however much of "com.google" or "com.openai" they share.
 	Distinct bool
+	// CLIs are command-line tools the product ships that can outlive its
+	// application, and the directories they keep their state in.
+	CLIs []ProductCLI
+}
+
+// ProductCLI is a command-line tool of a product, and where it keeps state.
+//
+// Cursor's editor can be removed while cursor-agent stays: the CLI reads
+// ~/.cursor/cli-config.json, so ~/.cursor is not a leftover while the CLI is
+// installed, even though every other trace of the editor is.
+type ProductCLI struct {
+	// Name is the executable looked up on the PATH.
+	Name string
+	// Uses are "~"-relative directories the CLI reads, kept while it is
+	// installed.
+	Uses []string
 }
 
 // Products is the alias table, seeded from a real machine's corpus. Rows are
@@ -83,7 +99,8 @@ var Products = []Product{
 	{Slug: "vscode", Label: "VS Code", BundleIDs: []string{"com.microsoft.VSCode", "com.microsoft.VSCode.ShipIt"},
 		Vendor: "com.microsoft", Names: []string{"Code", "Visual Studio Code"}, Casks: []string{"visual-studio-code"}},
 	{Slug: "cursor", Label: "Cursor", BundleIDs: []string{"com.todesktop.230313mzl4w4u92"},
-		Names: []string{"Cursor", ".cursor"}, Casks: []string{"cursor"}, Distinct: true},
+		Names: []string{"Cursor", ".cursor"}, Casks: []string{"cursor"}, Distinct: true,
+		CLIs: []ProductCLI{{Name: "cursor-agent", Uses: []string{"~/.cursor"}}}},
 	{Slug: "zed", Label: "Zed", BundleIDs: []string{"dev.zed.Zed"}, Vendor: "dev.zed", Names: []string{"Zed"}, Casks: []string{"zed"}},
 	{Slug: "sublime", Label: "Sublime Text", BundleIDs: []string{"com.sublimetext.4", "com.sublimetext.3"},
 		Vendor: "com.sublimetext", Names: []string{"Sublime Text"}, Casks: []string{"sublime-text"}},
@@ -227,6 +244,7 @@ type productIndex struct {
 	byID    map[string]*Product
 	byName  map[string]*Product
 	byCask  map[string]*Product
+	bySlug  map[string]*Product
 	byTeam  map[string][]*Product
 	globs   []productGlob
 	nonApp  map[string]bool
@@ -248,6 +266,7 @@ func newProductIndex(ps []Product) (*productIndex, error) {
 		byID:   make(map[string]*Product, len(ps)*3),
 		byName: make(map[string]*Product, len(ps)*3),
 		byCask: make(map[string]*Product, len(ps)),
+		bySlug: make(map[string]*Product, len(ps)),
 		byTeam: make(map[string][]*Product, len(ps)),
 		nonApp: make(map[string]bool, len(nonAppNames)),
 	}
@@ -267,6 +286,7 @@ func newProductIndex(ps []Product) (*productIndex, error) {
 			return nil, fmt.Errorf("apps: duplicate product slug %q", p.Slug)
 		}
 		seenSlug[p.Slug] = true
+		ix.bySlug[p.Slug] = p
 		if p.Kind == 0 {
 			p.Kind = KindApp
 		}
@@ -382,6 +402,12 @@ func (ix *productIndex) LookupName(name string) (*Product, bool) {
 // LookupCask finds the product a cask token installs.
 func (ix *productIndex) LookupCask(token string) (*Product, bool) {
 	p, ok := ix.byCask[token]
+	return p, ok
+}
+
+// LookupSlug finds a product by its stable key.
+func (ix *productIndex) LookupSlug(slug string) (*Product, bool) {
+	p, ok := ix.bySlug[slug]
 	return p, ok
 }
 

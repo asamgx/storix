@@ -320,3 +320,28 @@ func TestVerdictForeignCopyIsNotCalledAnUpdate(t *testing.T) {
 		t.Errorf("evidence does not say where the copy is: %v", v.Evidence)
 	}
 }
+
+// TestApplicationScriptsAreMatchedLikeGroupContainers: the folder mirrors
+// Containers and Group Containers, so its names carry the same wrappers. With
+// it matched as a plain identifier, LocalSend's
+// "--AppIdentifierPrefix-localsend.shared_group" and dozens of bare-UUID
+// extension folders were listed as unknown owners.
+func TestApplicationScriptsAreMatchedLikeGroupContainers(t *testing.T) {
+	t.Parallel()
+	scripts := "Users/andrewsam/Library/Application Scripts/"
+	vf := newVerdictFixture(t,
+		scripts+"--AppIdentifierPrefix-localsend.shared_group",
+		scripts+"00DB19A1-F877-491A-B2F7-EA3E38BFAED3")
+	a := vf.analyze(t, &Facts{}, Options{})
+
+	for _, key := range a.OwnerKeys() {
+		o := a.Owners[key]
+		if strings.Contains(o.Owner.Label, "00DB19A1") {
+			t.Errorf("a bare-UUID folder became an owner: %s", key)
+		}
+		if strings.Contains(o.Owner.Label, "AppIdentifierPrefix") {
+			t.Errorf("the group wrapper was not stripped: owner %s labelled %q", key, o.Owner.Label)
+		}
+	}
+	verdictByLabel(t, a, "LocalSend")
+}

@@ -130,6 +130,10 @@ func TestIsAppleName(t *testing.T) {
 		"com.apple.Safari", "group.com.apple.notes", "group.is.workflow.shortcuts",
 		"243LU875E5.groups.com.apple.podcasts", "74J34U3R6X.com.apple.iWork",
 		"CloudDocs", "MobileSync", "App Store",
+		// Listed as unknown owners on the reference machine.
+		"GeoServices", "PassKit", "askpermissiond", "networkserviceproxy",
+		"systemgroup.com.apple.icloud.searchpartyd.sharedsettings",
+		"AAProfilePicture_95A6B128-9303-4D4C-8A54-7B7FBBEC186B.png",
 	}
 	for _, name := range apple {
 		if !IsAppleName(name) {
